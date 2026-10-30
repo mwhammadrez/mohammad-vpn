@@ -14,6 +14,7 @@ import ir.mohammad.vpn.MainActivity
 import ir.mohammad.vpn.R
 import ir.mohammad.vpn.core.AwgConfig
 import ir.mohammad.vpn.core.GeoAssets
+import ir.mohammad.vpn.core.TransportTuning
 import ir.mohammad.vpn.core.TunPlan
 import ir.mohammad.vpn.core.XrayConfig
 import ir.mohammad.vpn.data.LogStore
@@ -244,6 +245,7 @@ class MohammadVpnService : VpnService() {
                 ipv6 = plan.ipv6Address.isNotEmpty(),
                 geo = geoReady,
                 fakeDns = true,
+                tuning = currentTuning(),
             )
         } catch (t: Throwable) {
             LogStore.add("E", TAG, "xray config render failed: ${t.javaClass.simpleName}: ${t.message}")
@@ -355,6 +357,24 @@ class MohammadVpnService : VpnService() {
             }
         }
         return false
+    }
+
+    /** Transport hardening chosen in the UI; applied on every connect. */
+    private fun currentTuning(): TransportTuning {
+        val prefs = getSharedPreferences("mohammad", MODE_PRIVATE)
+        val tuning = TransportTuning(
+            fragment = prefs.getBoolean("fragment", false),
+            fragmentPackets = prefs.getString("fragmentMode", "tlshello") ?: "tlshello",
+            mux = prefs.getBoolean("mux", false),
+        )
+        if (tuning.fragment || tuning.mux) {
+            LogStore.add(
+                "I", TAG,
+                "transport tuning: fragment=${if (tuning.fragment) tuning.fragmentPackets else "off"} " +
+                    "mux=${if (tuning.mux) "on" else "off"}",
+            )
+        }
+        return tuning
     }
 
     private fun ensureGeoAssetsAsync() {

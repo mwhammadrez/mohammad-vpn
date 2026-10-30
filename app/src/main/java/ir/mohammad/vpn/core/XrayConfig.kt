@@ -42,6 +42,39 @@ object XrayConfig {
         "domain:home.arpa",
     )
 
+    /**
+     * Applies transport hardening to the outbound copy.
+     *
+     * `finalmask` is Xray's post-handshake camouflage layer; `fragment` splits the
+     * first writes (or the TLS ClientHello) so a middlebox cannot match the
+     * handshake against a known pattern.
+     */
+    private fun applyTuning(outbound: JSONObject, tuning: TransportTuning) {
+        if (tuning.fragment) {
+            val fragment = JSONObject()
+                .put("packets", tuning.fragmentPackets)
+                .put("lengths", JSONArray(tuning.fragmentLengths))
+                .put("delays", JSONArray(tuning.fragmentDelays))
+                .put("maxSplit", tuning.fragmentMaxSplit)
+            val stream = outbound.optJSONObject("streamSettings")
+                ?: JSONObject().also { outbound.put("streamSettings", it) }
+            val mask = stream.optJSONObject("finalmask")
+                ?: JSONObject().also { stream.put("finalmask", it) }
+            val tcp = mask.optJSONArray("tcp") ?: JSONArray().also { mask.put("tcp", it) }
+            tcp.put(JSONObject().put("type", "fragment").put("settings", fragment))
+        }
+        if (tuning.mux) {
+            outbound.put(
+                "mux",
+                JSONObject()
+                    .put("enabled", true)
+                    .put("concurrency", tuning.muxConcurrency)
+                    .put("xudpConcurrency", tuning.muxXudpConcurrency)
+                    .put("xudpProxyUDP443", tuning.muxXudpProxyUDP443),
+            )
+        }
+    }
+
     fun render(
         profile: Profile,
         mtu: Int,
@@ -50,8 +83,10 @@ object XrayConfig {
         ipv6: Boolean = true,
         geo: Boolean = false,
         fakeDns: Boolean = true,
+        tuning: TransportTuning = TransportTuning(),
     ): String {
         val outbound = JSONObject(profile.xray.toString()).apply { put("tag", "proxy") }
+        applyTuning(outbound, tuning)
 
         val sniffOverride = JSONArray().put("http").put("tls")
         if (fakeDns) sniffOverride.put("fakedns")

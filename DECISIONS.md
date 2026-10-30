@@ -202,3 +202,17 @@ The design mock shows invented servers, speeds and totals. The implementation bi
 live state: session timer to `Connected`, speed tiles to a 1 s delta of the core's traffic counters,
 totals to the same counters, and the profile list to the decrypted bundle. Nothing is simulated; when
 the tunnel is down the dial shows zero segments and the sparklines flatten.
+
+## D-37 — DPI evasion is applied at render time, off by default
+**Date:** 2026-10-30
+`TransportTuning` (pure data) is injected into the outbound by `XrayConfig.applyTuning`:
+`finalmask.tcp[] = {type:"fragment", settings:{packets, lengths, delays, maxSplit}}` and
+`outbound.mux = {enabled, concurrency, xudpConcurrency, xudpProxyUDP443}`.
+
+Defaults are inert so an untouched install behaves exactly as before. The toggle lives in the UI and
+in `SharedPreferences`; a change takes effect on the next connect, which the app states in the card.
+
+Rationale: fragmenting the first writes defeats pattern-based middleboxes without any server change.
+Mux reduces handshake count on lossy links. ECH, REALITY and XHTTP were deliberately **not** added:
+they require the server to present the matching configuration, and shipping a client-side switch that
+cannot work would be a lie in the UI.

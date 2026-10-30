@@ -212,3 +212,9 @@ Data path is now the one mature clients use:
 - Profile list with radio selection, ping badge, self-test tile, console-style log.
 - Edge-to-edge, dark window background (no white launch flash), system bars inset-aware.
 - Fonts bundled under OFL; `licenses/` added.
+
+**2026-10-30 · v0.9.0 — DPI evasion card**
+- `TransportTuning` + `XrayConfig.applyTuning`: `finalmask` fragment (`tlshello` / `1-3`) and `mux`.
+- UI card with toggles and mode chips; values persisted and applied on next connect.
+- 6 renderer tests (`TransportTuningTest`), written first.
+- Not added, with reasons: ECH / REALITY / XHTTP need server-side configuration; Aether is a separate core; hev-socks5-tunnel is a C library.

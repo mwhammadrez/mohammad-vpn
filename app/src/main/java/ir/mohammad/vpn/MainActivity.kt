@@ -146,7 +146,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun prefs() = getSharedPreferences("mohammad", Context.MODE_PRIVATE)
+    internal fun prefs() = getSharedPreferences("mohammad", Context.MODE_PRIVATE)
 
     /**
      * Records the carrier egress IP while disconnected. The self-test compares it
@@ -231,6 +231,9 @@ fun MohammadApp() {
     var testRunning by remember { mutableStateOf(false) }
     var testReport by remember { mutableStateOf<String?>(null) }
     var crash by remember { mutableStateOf(activity.lastCrash) }
+    var fragmentOn by remember { mutableStateOf(activity.prefs().getBoolean("fragment", false)) }
+    var fragmentMode by remember { mutableStateOf(activity.prefs().getString("fragmentMode", "tlshello") ?: "tlshello") }
+    var muxOn by remember { mutableStateOf(activity.prefs().getBoolean("mux", false)) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Tunnel.profiles) { selected = Tunnel.selected }
@@ -245,6 +248,23 @@ fun MohammadApp() {
         pingBusy = pingBusy,
         testRunning = testRunning,
         testReport = testReport,
+        fragmentOn = fragmentOn,
+        fragmentMode = fragmentMode,
+        muxOn = muxOn,
+        onFragment = {
+            fragmentOn = it
+            activity.prefs().edit().putBoolean("fragment", it).apply()
+            if (state is TunnelState.Connected) LogStore.add("I", "APP", "fragment change applies on next connect")
+        },
+        onFragmentMode = {
+            fragmentMode = it
+            activity.prefs().edit().putString("fragmentMode", it).apply()
+        },
+        onMux = {
+            muxOn = it
+            activity.prefs().edit().putBoolean("mux", it).apply()
+            if (state is TunnelState.Connected) LogStore.add("I", "APP", "mux change applies on next connect")
+        },
         crashReport = crash,
         onDismissCrash = { crash = null },
         onToggle = {

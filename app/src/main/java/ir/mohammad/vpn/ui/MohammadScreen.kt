@@ -76,6 +76,12 @@ fun MohammadScreen(
     pingBusy: Boolean,
     testRunning: Boolean,
     testReport: String?,
+    fragmentOn: Boolean = false,
+    fragmentMode: String = "tlshello",
+    muxOn: Boolean = false,
+    onFragment: (Boolean) -> Unit = {},
+    onFragmentMode: (String) -> Unit = {},
+    onMux: (Boolean) -> Unit = {},
     crashReport: String? = null,
     onDismissCrash: () -> Unit = {},
     onToggle: () -> Unit,
@@ -117,6 +123,7 @@ fun MohammadScreen(
                 Bento(down, up, traffic)
                 Nodes(profiles, selected, state, onSelect)
                 Actions(pingMs, pingBusy, testRunning, onPing, onSelfTest)
+                Evasion(fragmentOn, fragmentMode, muxOn, onFragment, onFragmentMode, onMux)
                 if (testReport != null) Report(testReport)
                 Console(logs)
             }
@@ -615,6 +622,77 @@ private fun GhostButton(text: String, enabled: Boolean, onClick: () -> Unit, mod
             letterSpacing = 1.6.sp,
             color = if (enabled) Palette.Mint else Palette.TextMuted,
         )
+    }
+}
+
+@Composable
+private fun Evasion(
+    fragmentOn: Boolean,
+    fragmentMode: String,
+    muxOn: Boolean,
+    onFragment: (Boolean) -> Unit,
+    onFragmentMode: (String) -> Unit,
+    onMux: (Boolean) -> Unit,
+) {
+    Glass(shape = 18.dp, border = if (fragmentOn || muxOn) Palette.BorderEmerald else Palette.BorderSubtle) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("DPI EVASION", fontFamily = ChakraSemi, fontSize = 10.sp, letterSpacing = 1.4.sp, color = Palette.TextSecondary)
+                Spacer(Modifier.weight(1f))
+                Text("NEXT CONNECT", fontFamily = Chakra, fontSize = 9.sp, color = Palette.TextMuted)
+            }
+            ToggleRow("FRAGMENT", "split the handshake", fragmentOn, onFragment)
+            if (fragmentOn) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("tlshello", "1-3").forEach { mode ->
+                        val active = fragmentMode == mode
+                        Box(
+                            Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (active) Palette.Mint.copy(alpha = 0.16f) else Color(0x0DFFFFFF))
+                                .border(1.dp, if (active) Palette.Mint.copy(alpha = 0.6f) else Palette.BorderSubtle, RoundedCornerShape(8.dp))
+                                .clickable { onFragmentMode(mode) }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                        ) {
+                            Text(
+                                mode.uppercase(),
+                                fontFamily = ChakraSemi,
+                                fontSize = 9.sp,
+                                letterSpacing = 1.2.sp,
+                                color = if (active) Palette.Mint else Palette.TextMuted,
+                            )
+                        }
+                    }
+                }
+            }
+            ToggleRow("MUX", "multiplex streams", muxOn, onMux)
+        }
+    }
+}
+
+@Composable
+private fun ToggleRow(label: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(label, fontFamily = ChakraSemi, fontSize = 11.sp, letterSpacing = 1.2.sp, color = Palette.TextPrimary)
+            Text(hint, fontFamily = Chakra, fontSize = 9.sp, color = Palette.TextMuted)
+        }
+        Box(
+            Modifier
+                .size(width = 40.dp, height = 22.dp)
+                .clip(RoundedCornerShape(50))
+                .background(if (checked) Palette.Mint.copy(alpha = 0.85f) else Color(0x1FFFFFFF))
+                .clickable { onChange(!checked) },
+            contentAlignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart,
+        ) {
+            Box(
+                Modifier
+                    .padding(horizontal = 3.dp)
+                    .size(16.dp)
+                    .clip(CircleShape)
+                    .background(if (checked) Palette.BgDeep else Palette.TextSecondary),
+            )
+        }
     }
 }
 
