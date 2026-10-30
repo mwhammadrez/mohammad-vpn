@@ -1,0 +1,19 @@
+# secrets & operator material (never commit)
+operator/*.json
+operator/*.enc
+operator/*.key
+.env
+.env.*
+!.env.example
+local.properties
+# build outputs
+build/
+*/build/
+.gradle/
+*.iml
+.idea/
+captures/
+*.apk
+*.aar
+docs-pack-*.zip
+phase1-spec.zip

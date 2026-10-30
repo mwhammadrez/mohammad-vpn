@@ -1,0 +1,37 @@
+#!/usr/bin/env python3
+"""Encrypt operator/bundle.source.json into app/src/main/assets/operator/bundle.enc.
+
+Format: MAGIC(4) "MHB1" | salt(16) | iv(12) | AES-256-GCM ciphertext||tag
+Key: PBKDF2-HMAC-SHA256(password, salt, 210000, 32)
+Password comes from $MOHAMMAD_OPERATOR_BUNDLE_PASSWORD.
+"""
+import os, sys, json
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+
+SRC = "operator/bundle.source.json"
+DST = "app/src/main/assets/operator/bundle.enc"
+MAGIC = b"MHB1"
+
+def main() -> int:
+    pw = os.environ.get("MOHAMMAD_OPERATOR_BUNDLE_PASSWORD", "")
+    if len(pw) < 8:
+        print("MOHAMMAD_OPERATOR_BUNDLE_PASSWORD missing or too short", file=sys.stderr)
+        return 2
+    if not os.path.exists(SRC):
+        print(f"{SRC} not found", file=sys.stderr)
+        return 2
+    data = open(SRC, "rb").read()
+    json.loads(data)  # fail fast on invalid JSON
+    salt, iv = os.urandom(16), os.urandom(12)
+    key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=210000).derive(pw.encode())
+    ct = AESGCM(key).encrypt(iv, data, None)
+    os.makedirs(os.path.dirname(DST), exist_ok=True)
+    with open(DST, "wb") as f:
+        f.write(MAGIC + salt + iv + ct)
+    print(f"wrote {DST} ({os.path.getsize(DST)} bytes)")
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())

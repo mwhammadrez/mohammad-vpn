@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Fails if banned markers or empty catch blocks appear in committed sources.
+set -uo pipefail
+cd "$(dirname "$0")/.."
+PATTERN='TODO|FIXME|XXX|HACK|lorem ipsum'
+HITS=$(grep -rnE "$PATTERN" \
+  --include='*.kt' --include='*.kts' --include='*.xml' --include='*.go' --include='*.sh' \
+  . 2>/dev/null \
+  | grep -vE '^\./(build|app/build|core-go/artifacts|third_party|\.gradle)/' \
+  | grep -vE 'check-no-placeholders' || true)
+EMPTY_CATCH=$(grep -rnE 'catch \([^)]*\) \{\s*\}' --include='*.kt' --include='*.go' . 2>/dev/null \
+  | grep -vE '^\./(build|app/build|\.gradle)/' || true)
+STATUS=0
+if [ -n "$HITS" ]; then echo "Banned markers found:"; echo "$HITS"; STATUS=1; fi
+if [ -n "$EMPTY_CATCH" ]; then echo "Empty catch blocks found:"; echo "$EMPTY_CATCH"; STATUS=1; fi
+if [ $STATUS -eq 0 ]; then echo "No banned markers found"; fi
+exit $STATUS

@@ -1,0 +1,1 @@
+d75958f03e7c1a1a8aedf70dd2ac577006e7897d4a9c3648ae10a15fbfd15a56  app/libs/mohammad-core.aar
