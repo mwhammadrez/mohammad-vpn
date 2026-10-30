@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -135,15 +136,19 @@ fun MohammadScreen(
 @Composable
 private fun Backdrop(state: TunnelState) {
     val accent = statusColor(state)
-    Canvas(Modifier.fillMaxSize()) {
-        drawRect(
-            brush = Brush.radialGradient(
-                colors = listOf(accent.copy(alpha = 0.10f), Color.Transparent),
-                center = Offset(size.width * 0.5f, size.height * 0.22f),
-                radius = size.minDimension * 0.75f,
-            ),
-        )
-    }
+    // drawWithCache builds the shader once per size/accent instead of on every frame.
+    Canvas(
+        Modifier
+            .fillMaxSize()
+            .drawWithCache {
+                val brush = Brush.radialGradient(
+                    colors = listOf(accent.copy(alpha = 0.10f), Color.Transparent),
+                    center = Offset(size.width * 0.5f, size.height * 0.22f),
+                    radius = size.minDimension * 0.75f,
+                )
+                onDrawBehind { drawRect(brush) }
+            },
+    ) {}
 }
 
 @Composable
@@ -752,7 +757,9 @@ private fun CrashCard(report: String, onDismiss: () -> Unit) {
 
 @Composable
 private fun Console(logs: List<LogEntry>) {
-    val tail = logs.takeLast(40)
+    // Rebuilding 40 rows costs layout work on every log line; 12 is enough to see
+    // what happened and keeps the frame budget.
+    val tail = remember(logs.size) { logs.takeLast(12) }
     Glass(shape = 18.dp) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -784,6 +791,10 @@ private fun Console(logs: List<LogEntry>) {
 
 /* ----------------------------------------------------------------- helpers */
 
+private val glassBrush = Brush.verticalGradient(
+    listOf(Color(0xCC0E1311), Color(0xCC0A0E0C)),
+)
+
 @Composable
 private fun Glass(
     modifier: Modifier = Modifier,
@@ -795,11 +806,7 @@ private fun Glass(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(shape))
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xCC0E1311), Color(0xCC0A0E0C)),
-                ),
-            )
+            .background(glassBrush)
             .border(1.dp, border, RoundedCornerShape(shape)),
     ) { content() }
 }

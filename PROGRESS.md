@@ -252,3 +252,12 @@ Data path is now the one mature clients use:
   domestic names get real addresses and never leave the country; the direct rule still precedes the
   proxy catch-all; QUIC/443 remains the first block rule.
 - 85 tests, 0 failures; `IranRoutingTest` (5) pins the Iranian behaviour.
+
+**2026-10-30 · v0.10.1 — performance pass**
+- Compose compiler reports enabled (`composeCompiler.reportsDestination`); all composables are
+  restartable+skippable, so the cost was draw-side.
+- Backdrop shader cached with `drawWithCache`; glass gradient hoisted to one value; console capped at
+  12 rows memoised by `logs.size`.
+- R8 + resource shrinking enabled for the debug build (D-39): APK 20 MB → 15 MB, DEX 1.39 MB.
+- gomobile classes verified unrenamed in `mapping.txt` (JNI safety).
+- FPS itself is unmeasured: no device. These are structural fixes with measurable proxies.

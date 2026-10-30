@@ -225,3 +225,20 @@ it already caught two defects that no unit test would have (invisible LED segmen
 digits). The screenshots in `docs/screenshots/` are generated from the same code the APK ships.
 Limitation: Robolectric does not exercise the VPN service or the native bridge, so behavioural parity
 is still device-only.
+
+## D-39 — R8 runs on the debug build
+**Date:** 2026-10-30
+`debug` now has `isMinifyEnabled` and `isShrinkResources` with
+`proguard-android-optimize.txt`. The debug key is unchanged; only code quality changes.
+`proguard-rules.pro` keeps `libmohammad.**` and `go.**` because gomobile resolves JNI symbols by
+class name. Verified with `mapping.txt`: every gomobile class maps to itself (`X -> X`), so nothing
+was renamed. Result: APK 20 MB → 15 MB, DEX 1.39 MB, 10 618 methods.
+
+## D-40 — Draw work is cached, not recomputed per frame
+**Date:** 2026-10-30
+The backdrop produced a new radial `Brush` on every frame; `Glass` produced a new vertical gradient on
+every composition; the console rebuilt 40 text rows per log line. All three were replaced:
+`drawWithCache` builds the shader once per size, the glass brush is a single top-level value, and the
+console renders 12 rows from a `remember(logs.size)` slice.
+The Compose compiler report was checked first: with Kotlin 2.0 strong skipping every composable in the
+app is already skippable, so recomposition was **not** the bottleneck — allocation and overdraw were.

@@ -20,8 +20,8 @@ android {
         applicationId = "ir.mohammad.vpn"
         minSdk = 26
         targetSdk = 36
-        versionCode = 24
-        versionName = "0.10.0"
+        versionCode = 25
+        versionName = "0.10.1"
         val escapedPassword = operatorPassword
             .replace("\\", "\\\\")
             .replace("\"", "\\\"")
@@ -30,6 +30,13 @@ android {
     }
 
     buildFeatures { compose = true; buildConfig = true }
+
+    composeCompiler {
+        // Reports show which composables can skip recomposition; anything that cannot
+        // is a jank source because every state change redraws it.
+        reportsDestination = layout.buildDirectory.dir("compose-reports")
+        metricsDestination = layout.buildDirectory.dir("compose-metrics")
+    }
 
     testOptions {
         unitTests {
@@ -52,7 +59,9 @@ android {
 
     buildTypes {
         debug {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // A debuggable build runs Compose without ART optimisations; the UI is
             // noticeably sluggish on device. Keep the debug key, drop the flag.
             isDebuggable = false
