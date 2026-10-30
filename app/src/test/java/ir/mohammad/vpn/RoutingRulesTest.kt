@@ -17,7 +17,7 @@ class RoutingRulesTest {
     }
 
     private fun render(): JSONObject = JSONObject(
-        XrayConfig.render(profile(), "10.0.0.1", 1500, listOf("1.1.1.1"), logLevel = "warning", ipv6 = true),
+        XrayConfig.render(profile(), 1500, listOf("1.1.1.1"), logLevel = "warning", ipv6 = true),
     )
 
     @Test
@@ -45,10 +45,26 @@ class RoutingRulesTest {
     }
 
     @Test
-    fun dnsObjectMatchesTunDns() {
+    fun fakeDnsComesFirstThenOperatorServers() {
         val dns = render().getJSONObject("dns")
         val servers = dns.getJSONArray("servers")
-        assertEquals("1.1.1.1", servers.getString(0))
+        assertEquals("fakedns", servers.getString(0))
+        assertEquals("1.1.1.1", servers.getString(1))
+    }
+
+    @Test
+    fun socksInboundSniffsFakeDns() {
+        val inbound = render().getJSONArray("inbounds").getJSONObject(0)
+        assertEquals("socks", inbound.getString("protocol"))
+        val override = inbound.getJSONObject("sniffing").getJSONArray("destOverride")
+        val values = (0 until override.length()).map { override.getString(it) }
+        assertTrue("fakedns must be sniffed for domain routing", values.contains("fakedns"))
+    }
+
+    @Test
+    fun fakednsPoolIsDocumented() {
+        val pool = render().getJSONObject("fakedns").getString("ipPool")
+        assertEquals("198.18.0.0/15", pool)
     }
 
     @Test
@@ -68,7 +84,7 @@ class RoutingRulesTest {
     @Test
     fun geoModeBlocksAdsAndRoutesIranDirect() {
         val json = JSONObject(
-            XrayConfig.render(profile(), "10.0.0.1", 1500, listOf("1.1.1.1"), logLevel = "warning", ipv6 = false, geo = true),
+            XrayConfig.render(profile(), 1500, listOf("1.1.1.1"), logLevel = "warning", ipv6 = false, geo = true),
         )
         val rules = json.getJSONObject("routing").getJSONArray("rules")
         val tags = (0 until rules.length()).map { rules.getJSONObject(it).optString("outboundTag") }

@@ -157,3 +157,17 @@ Report facts: connect 487 ms total (tun 183, core 304), egress flipped to the se
 - Geo rules hardened: `domain:ir` (TLD suffix, always available) replaces `geosite:category-ir`, which is missing from several datasets and is a startup hazard.
 - `policy.levels` added to match the reference template's handshake/connIdle/uplinkOnly/downlinkOnly values.
 - Tests 41 green; lint/assemble/placeholder green.
+
+**2026-10-30 · v0.7.0 — tun2socks → SOCKS architecture (reference parity)**
+
+Data path is now the one mature clients use:
+`TUN fd → tun2socks (gVisor netstack) → 127.0.0.1:10808 socks → Xray outbound`.
+
+- New Go bridge `libmohammad.TunBridge` on `xjasonlyu/tun2socks v2.7.0` (commit `8dda19e8`), MIT-compatible, pinned; it duplicates nothing itself — the service keeps the `ParcelFileDescriptor` and passes the fd number, the bridge opens its own device view over it.
+- `XrayController.Start` now accepts `tunFd == 0` (SOCKS-only mode); the native `tun` inbound is no longer used by the app.
+- `XrayConfig`: `socks` 127.0.0.1:10808 + `http` 127.0.0.1:10809 inbounds, sniffing `http,tls,fakedns`, FakeDNS `198.18.0.0/15`, `dns.servers` starts with `fakedns`, rule order = block udp:443 → block ads → direct private → direct IR → proxy.
+- Bridge runs on the tunnel worker after the core starts; failures return `CoreStartFailed` and tear everything down.
+- Tests 41 → 43 (socks inbound, fakedns-first, sniffing, pool); all green. lint/assemble/placeholder green.
+- APK grew 45 MB → 50 MB (gVisor netstack, arm64 `.so` 37.9 → 43.3 MB after strip).
+
+`NOT VERIFIED`: runtime behaviour on a device; the new path has never carried traffic on hardware.

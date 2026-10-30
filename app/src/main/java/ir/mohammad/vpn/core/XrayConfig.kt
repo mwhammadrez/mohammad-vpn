@@ -7,12 +7,21 @@ import org.json.JSONObject
 /**
  * Renders the runtime JSON handed to Xray-core.
  *
- * The TUN inbound reads the file descriptor from the XRAY_TUN_FD environment
- * variable, which the Go bridge sets right before starting the core.
+ * Architecture: the TUN descriptor is consumed by the userspace tun2socks bridge
+ * (`TunBridge`), which forwards TCP/UDP to the local SOCKS inbound below. Xray
+ * never sees the descriptor itself.
+ *
+ *   TUN fd -> tun2socks -> 127.0.0.1:10808 (socks) -> outbound
  */
 object XrayConfig {
 
-    const val TUN_NAME = "xray0"
+    const val SOCKS_PORT = 10808
+    const val HTTP_PORT = 10809
+    const val LOOPBACK = "127.0.0.1"
+
+    /** Documented FakeDNS pool; must not collide with real destinations. */
+    const val FAKE_DNS_POOL = "198.18.0.0/15"
+    const val FAKE_DNS_POOL_SIZE = 65535
 
     /** Private address space that must never leave through the proxy. */
     private val DIRECT_CIDRS = listOf(
@@ -36,78 +45,45 @@ object XrayConfig {
 
     fun render(
         profile: Profile,
-        tunAddress: String,
         mtu: Int,
         dnsServers: List<String>,
         logLevel: String = "warning",
         ipv6: Boolean = true,
         geo: Boolean = false,
+        fakeDns: Boolean = true,
     ): String {
         val outbound = JSONObject(profile.xray.toString()).apply { put("tag", "proxy") }
 
-        val inbound = JSONObject()
-            .put("tag", "tun-in")
-            .put("protocol", "tun")
+        val sniffOverride = JSONArray().put("http").put("tls")
+        if (fakeDns) sniffOverride.put("fakedns")
+
+        val socks = JSONObject()
+            .put("tag", "socks")
+            .put("listen", LOOPBACK)
+            .put("port", SOCKS_PORT)
+            .put("protocol", "socks")
             .put(
                 "settings",
                 JSONObject()
-                    .put("name", TUN_NAME)
-                    .put("mtu", mtu)
-                    .put("gateway", JSONArray().put("$tunAddress/30"))
-                    .put("dns", JSONArray(dnsServers)),
+                    .put("auth", "noauth")
+                    .put("udp", true)
+                    .put("userLevel", 0),
             )
             .put(
                 "sniffing",
-                JSONObject()
-                    .put("enabled", true)
-                    .put("destOverride", JSONArray().put("http").put("tls").put("quic")),
+                JSONObject().put("enabled", true).put("destOverride", sniffOverride),
             )
 
-        val rules = JSONArray()
-        if (geo) {
-            // Same shape as a mature client's default preset: ads and QUIC are
-            // blocked, private space and the home country stay direct.
-            rules.put(
-                JSONObject()
-                    .put("type", "field")
-                    .put("outboundTag", "block")
-                    .put("domain", JSONArray().put("geosite:category-ads-all")),
-            )
-            rules.put(
-                JSONObject()
-                    .put("type", "field")
-                    .put("outboundTag", "block")
-                    .put("network", "udp")
-                    .put("port", "443"),
-            )
-            rules.put(
-                JSONObject()
-                    .put("type", "field")
-                    .put("outboundTag", "direct")
-                    .put("ip", JSONArray().put("geoip:private"))
-                    .put("domain", JSONArray().put("geosite:private")),
-            )
-            rules.put(
-                JSONObject()
-                    .put("type", "field")
-                    .put("outboundTag", "direct")
-                    .put("domain", JSONArray().put("domain:ir"))
-                    .put("ip", JSONArray().put("geoip:ir")),
-            )
-        } else {
-            rules.put(
-                JSONObject()
-                    .put("type", "field")
-                    .put("outboundTag", "direct")
-                    .put("ip", JSONArray(DIRECT_CIDRS))
-                    .put("domain", JSONArray(DIRECT_DOMAINS)),
-            )
-        }
+        val http = JSONObject()
+            .put("tag", "http")
+            .put("listen", LOOPBACK)
+            .put("port", HTTP_PORT)
+            .put("protocol", "http")
+            .put("settings", JSONObject().put("userLevel", 0))
 
-        val catchAll = JSONObject()
-            .put("type", "field")
-            .put("network", "tcp,udp")
-            .put("outboundTag", "proxy")
+        val dnsServersJson = JSONArray()
+        if (fakeDns) dnsServersJson.put("fakedns")
+        dnsServers.forEach { dnsServersJson.put(it) }
 
         val root = JSONObject()
             .put("log", JSONObject().put("loglevel", logLevel))
@@ -136,10 +112,67 @@ object XrayConfig {
             .put(
                 "dns",
                 JSONObject()
-                    .put("servers", JSONArray(dnsServers))
+                    .put("servers", dnsServersJson)
                     .put("queryStrategy", if (ipv6) "UseIP" else "UseIPv4"),
             )
-            .put("inbounds", JSONArray().put(inbound))
+
+        if (fakeDns) {
+            root.put(
+                "fakedns",
+                JSONObject()
+                    .put("ipPool", FAKE_DNS_POOL)
+                    .put("poolSize", FAKE_DNS_POOL_SIZE),
+            )
+        }
+
+        val rules = JSONArray()
+        // Reference priority: block QUIC first, then ads, then direct, then proxy.
+        rules.put(
+            JSONObject()
+                .put("type", "field")
+                .put("outboundTag", "block")
+                .put("network", "udp")
+                .put("port", "443"),
+        )
+        if (geo) {
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("outboundTag", "block")
+                    .put("domain", JSONArray().put("geosite:category-ads-all")),
+            )
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("outboundTag", "direct")
+                    .put("ip", JSONArray().put("geoip:private"))
+                    .put("domain", JSONArray().put("geosite:private")),
+            )
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("outboundTag", "direct")
+                    .put("domain", JSONArray().put("domain:ir"))
+                    .put("ip", JSONArray().put("geoip:ir")),
+            )
+        } else {
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("outboundTag", "direct")
+                    .put("ip", JSONArray(DIRECT_CIDRS))
+                    .put("domain", JSONArray(DIRECT_DOMAINS)),
+            )
+        }
+        rules.put(
+            JSONObject()
+                .put("type", "field")
+                .put("network", "tcp,udp")
+                .put("outboundTag", "proxy"),
+        )
+
+        return root
+            .put("inbounds", JSONArray().put(socks).put(http))
             .put(
                 "outbounds",
                 JSONArray()
@@ -150,10 +183,9 @@ object XrayConfig {
             .put(
                 "routing",
                 JSONObject()
-                    // Domain rules only work when Xray is allowed to resolve.
                     .put("domainStrategy", "IPIfNonMatch")
-                    .put("rules", rules.put(catchAll)),
+                    .put("rules", rules),
             )
-        return root.toString()
+            .toString()
     }
 }

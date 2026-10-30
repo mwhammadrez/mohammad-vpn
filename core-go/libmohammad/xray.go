@@ -156,18 +156,21 @@ func (c *XrayController) Start(configContent string, tunFd int64) (err error) {
 	if c.inst != nil {
 		return errors.New("core is already running")
 	}
-	if tunFd <= 0 {
+	// tunFd == 0 means SOCKS-only mode (the tun2socks bridge owns the fd).
+	if tunFd < 0 {
 		return errors.New("invalid tun fd")
 	}
 	if strings.TrimSpace(configContent) == "" {
 		return errors.New("empty config")
 	}
 
-	// The TUN inbound reads the descriptor from this environment variable.
-	if err := os.Setenv("XRAY_TUN_FD", strconv.FormatInt(tunFd, 10)); err != nil {
-		return err
+	if tunFd > 0 {
+		// Native tun-inbound mode: the inbound reads the descriptor from here.
+		if err := os.Setenv("XRAY_TUN_FD", strconv.FormatInt(tunFd, 10)); err != nil {
+			return err
+		}
+		c.emit(1, "tun fd "+strconv.FormatInt(tunFd, 10))
 	}
-	c.emit(1, "tun fd "+strconv.FormatInt(tunFd, 10))
 
 	log.RegisterHandler(logForwarder{emit: c.emit})
 

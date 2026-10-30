@@ -22,10 +22,11 @@ class ConfigRenderTest {
 
     @Test
     fun xrayConfigHasTunInboundAndProxyOutbound() {
-        val json = JSONObject(XrayConfig.render(vlessProfile(), "10.10.14.1", 1400, listOf("1.1.1.1")))
+        val json = JSONObject(XrayConfig.render(vlessProfile(), 1400, listOf("1.1.1.1")))
         val inbound = json.getJSONArray("inbounds").getJSONObject(0)
-        assertEquals("tun", inbound.getString("protocol"))
-        assertEquals(1400, inbound.getJSONObject("settings").getInt("mtu"))
+        assertEquals("socks", inbound.getString("protocol"))
+        assertEquals(10808, inbound.getInt("port"))
+        assertEquals("127.0.0.1", inbound.getString("listen"))
 
         val outbounds = json.getJSONArray("outbounds")
         assertEquals("proxy", outbounds.getJSONObject(0).getString("tag"))
@@ -65,7 +66,7 @@ class ConfigRenderTest {
 
     @Test
     fun renderedXrayConfigIsValidJson() {
-        val text = XrayConfig.render(vlessProfile(), "10.10.14.1", 1400, listOf("1.1.1.1", "8.8.8.8"))
+        val text = XrayConfig.render(vlessProfile(), 1400, listOf("1.1.1.1", "8.8.8.8"))
         assertTrue(text.startsWith("{"))
         JSONObject(text) // throws if malformed
     }

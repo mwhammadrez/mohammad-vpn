@@ -21,6 +21,7 @@ import ir.mohammad.vpn.data.Tunnel
 import ir.mohammad.vpn.data.TunnelError
 import ir.mohammad.vpn.data.TunnelState
 import libmohammad.AwgController
+import libmohammad.TunBridge
 import libmohammad.XrayController
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -49,6 +50,7 @@ class MohammadVpnService : VpnService() {
     private var tun: ParcelFileDescriptor? = null
     private var xray: XrayController? = null
     private var awg: AwgController? = null
+    private var bridge: TunBridge? = null
 
     private val lock = Any()
     private val worker = Executors.newSingleThreadExecutor()
@@ -204,12 +206,12 @@ class MohammadVpnService : VpnService() {
         val config = try {
             XrayConfig.render(
                 profile = profile,
-                tunAddress = plan.ipv4Address,
                 mtu = plan.mtu,
                 dnsServers = plan.dns,
                 logLevel = "warning",
                 ipv6 = plan.ipv6Address.isNotEmpty(),
                 geo = geoReady,
+                fakeDns = true,
             )
         } catch (t: Throwable) {
             LogStore.add("E", TAG, "xray config render failed: ${t.javaClass.simpleName}: ${t.message}")
@@ -482,6 +484,13 @@ class MohammadVpnService : VpnService() {
     }
 
     private fun closeResourcesLocked() {
+        bridge?.let {
+            val started = SystemClock.elapsedRealtime()
+            runCatching { it.stop() }
+                .onSuccess { LogStore.add("D", TAG, "bridge.stop ok in ${SystemClock.elapsedRealtime() - started} ms") }
+                .onFailure { e -> LogStore.add("E", TAG, "bridge.stop failed: ${e.message}") }
+        }
+        bridge = null
         xray?.let {
             val started = SystemClock.elapsedRealtime()
             runCatching { it.stop() }
