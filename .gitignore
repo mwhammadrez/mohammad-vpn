@@ -26,3 +26,6 @@ phase1-spec.zip
 captures/
 core-*/artifacts/*.jar
 third_party/anet/mobile/libs/
+app/src/main/assets/operator/bundle.enc
+operator/bundle.source.json
+*.apk
