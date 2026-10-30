@@ -261,3 +261,13 @@ Data path is now the one mature clients use:
 - R8 + resource shrinking enabled for the debug build (D-39): APK 20 MB → 15 MB, DEX 1.39 MB.
 - gomobile classes verified unrenamed in `mapping.txt` (JNI safety).
 - FPS itself is unmeasured: no device. These are structural fixes with measurable proxies.
+
+**2026-10-30 · v0.10.2 — performance and quality pass**
+- Dead `SDK_INT` branches removed (minSdk 26 makes them unreachable).
+- `mutableLongStateOf` for the session timer.
+- Adaptive launcher icon added (original mark).
+- `SharedPreferences.edit { }` at four call sites.
+- `RecompositionTest`: proves 0 idle recompositions and 0 body recompositions while the dial
+  animates — the measurable half of the smoothness claim.
+- Lint 19 → 15 findings; APK 15.0 → 14.97 MB; 87 tests green.
+- FPS / cold start / memory: NOT VERIFIED (no device). See `docs/PERF_QUALITY_REPORT.md`.

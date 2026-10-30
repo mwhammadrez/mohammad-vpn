@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -848,7 +849,7 @@ private fun human(bytes: Long): String = when {
 
 @Composable
 private fun sessionTimer(state: TunnelState): String {
-    var seconds by remember { mutableStateOf(0L) }
+    var seconds by remember { mutableLongStateOf(0L) }
     LaunchedEffect(state) {
         seconds = 0
         if (state is TunnelState.Connected) {

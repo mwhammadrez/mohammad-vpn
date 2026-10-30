@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.edit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import ir.mohammad.vpn.data.LogStore
@@ -178,7 +179,7 @@ class MainActivity : ComponentActivity() {
 
     fun selectProfile(profile: Profile) {
         Tunnel.selected = profile
-        prefs().edit().putString(KEY_SELECTED, profile.id).apply()
+        prefs().edit { putString(KEY_SELECTED, profile.id) }
         LogStore.add("I", "APP", "selected profile ${profile.id}")
     }
 
@@ -248,16 +249,16 @@ fun MohammadApp() {
         muxOn = muxOn,
         onFragment = {
             fragmentOn = it
-            activity.prefs().edit().putBoolean("fragment", it).apply()
+            activity.prefs().edit { putBoolean("fragment", it) }
             if (state is TunnelState.Connected) LogStore.add("I", "APP", "fragment change applies on next connect")
         },
         onFragmentMode = {
             fragmentMode = it
-            activity.prefs().edit().putString("fragmentMode", it).apply()
+            activity.prefs().edit { putString("fragmentMode", it) }
         },
         onMux = {
             muxOn = it
-            activity.prefs().edit().putBoolean("mux", it).apply()
+            activity.prefs().edit { putBoolean("mux", it) }
             if (state is TunnelState.Connected) LogStore.add("I", "APP", "mux change applies on next connect")
         },
         crashReport = crash,

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Original mark: a power glyph inside a segmented ring, mint on deep green. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54,26 L54,50"
+        android:strokeColor="#34F5C5"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M40.5,34.5 A21,21 0 1,0 67.5,34.5"
+        android:strokeColor="#34F5C5"
+        android:strokeWidth="6"
+        android:strokeLineCap="round" />
+</vector>
