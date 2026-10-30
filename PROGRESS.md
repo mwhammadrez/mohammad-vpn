@@ -104,3 +104,14 @@ NOT VERIFIED: AmneziaWG runtime (no AWG server profile and no device), general d
 - Wrote `docs/VERIFICATION_REPORT.md`, `README.md`.
 
 Remaining open items are listed in `docs/VERIFICATION_REPORT.md` §"Known limitations" and `DECISIONS.md` D-19.
+
+---
+
+**2026-10-30 · v0.4.0 — connection parity hardening**
+
+- Phase A audit: `docs/CONNECTION_PARITY_AUDIT.md` (19 PARITY / 12 PARTIAL / 22 GAP / 5 N/A).
+- Phase B fixes: `TunPlan` (IPv4 pool + IPv6 `fc00::1/126` + `::/0`), MTU 1500 default, Xray `dns` object with `queryStrategy`, `IPIfNonMatch`, private-CIDR/suffix `direct` rule, `stats`+`policy`, log level `warning`, `setUnderlyingNetworks`, traffic counters (`QueryTraffic` + 2 s poll + UI line).
+- Tests: 16 → 32 (all green). Two existing assertions realigned to intentional behaviour changes (MTU default 1500; catch-all rule is now last).
+- Gates: clean ✅ · testDebugUnitTest 32/32 ✅ · lintDebug ✅ · assembleDebug ✅ · check-no-placeholders ✅.
+- Device gates: `installDebug` → `DeviceException: No connected devices!`; `adb devices` → empty list. Recorded as `NOT VERIFIED`.
+- Report: `docs/CONNECTION_PARITY_REPORT.md` — verdict **PARITY PARTIAL**.

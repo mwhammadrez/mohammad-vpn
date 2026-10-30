@@ -112,3 +112,19 @@ Also accepted: IPv4-only TUN, no IPv6 route, and no `domain`/`usecase` layer.
 ## D-20 — Watchdog semantics and its limit
 **Date:** 2026-10-30
 The 5 s watchdog treats "core handle is null" as death. `IsRunning` on both bridges is a handle check, so a hung-but-alive core is not detected. A true liveness probe (packet counter delta or a cheap in-tunnel HTTP request) is deferred; it needs a device to calibrate false positives.
+
+## D-21 — IPv6 is enabled by default with a ULA address
+**Date:** 2026-10-30 · **Source:** parity audit A1.3/A1.5/A2.3
+The tunnel now carries IPv6 (`fc00::1/126`, route `::/0`) so AAAA traffic cannot escape on IPv6-capable carriers. `XrayConfig` sets `dns.queryStrategy` to `UseIP` when IPv6 is on and `UseIPv4` otherwise. `TunPlan.build(ipv6 = false)` exists for operators who must stay IPv4-only. Device verification is pending (no device available).
+
+## D-22 — Direct routing is literal, not geo-based
+**Date:** 2026-10-30
+Private address space is expressed as literal CIDRs (10/8, 172.16/12, 192.168/16, 127/8, 169.254/16, fc00::/7, fe80::/10) plus four local suffixes, instead of `geoip:private` / `geosite:private`. Reason: those selectors require `geoip.dat`/`geosite.dat` (~15 MB) to be present, and a missing data file makes Xray refuse to start. Literal rules are deterministic, testable, and add no assets. Adopting geo selectors requires shipping the data files first (audit A3.4).
+
+## D-23 — Default MTU raised to 1500
+**Date:** 2026-10-30
+Audit A1.1 found 1400 while mature clients default to 1500. The bundle may still override per deployment (clamped 1200–1500). `BundleParseTest` was updated from 1400 to 1500 — an intentional behaviour change, not a weakened test.
+
+## D-24 — Traffic counters read from the core, not from Android
+**Date:** 2026-10-30
+`XrayController.QueryTraffic()` reads `outbound>>>proxy>>>traffic>>>uplink|downlink` from Xray's stats manager (enabled by `stats {}` + `policy.system`). The service polls every 2 s while connected. Android's `TrafficStats` was rejected because it measures the whole UID, including retries and the engine's own handshake, which would overstate tunnel traffic.
