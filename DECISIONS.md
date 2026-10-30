@@ -128,3 +128,13 @@ Audit A1.1 found 1400 while mature clients default to 1500. The bundle may still
 ## D-24 — Traffic counters read from the core, not from Android
 **Date:** 2026-10-30
 `XrayController.QueryTraffic()` reads `outbound>>>proxy>>>traffic>>>uplink|downlink` from Xray's stats manager (enabled by `stats {}` + `policy.system`). The service polls every 2 s while connected. Android's `TrafficStats` was rejected because it measures the whole UID, including retries and the engine's own handshake, which would overstate tunnel traffic.
+
+## D-25 — Geo rule sets are downloaded, not bundled
+**Date:** 2026-10-30 · **Source:** parity request ("behave like a mature client by default")
+`geosite.dat` (11.3 MB) + `geoip.dat` (16.5 MB) would push the APK past the 45 MB it already costs and past the 50 MB distribution limit. They are therefore downloaded once into `filesDir/xray` on first use (URLs configurable per bundle via `geoAssets`, default: Loyalsoldier `latest`), and `XRAY_LOCATION_ASSET` is pointed at that directory from the Go bridge (`SetAssetDir`).
+**Fallback:** when the files are absent or the download fails, the renderer emits literal private-CIDR/suffix rules instead of `geoip:`/`geosite:` selectors — a missing data file would otherwise make Xray refuse to start.
+**Consequence:** the default preset (ads blocked, QUIC/443 UDP blocked, private + Iran direct, rest proxied) only becomes active after the first successful download.
+
+## D-26 — Default MTU is 1500 again
+**Date:** 2026-10-30
+The operator bundle's `defaultMtu: 1400` was removed so the parity default (1500) applies. MTU remains overridable per bundle (clamped 1200–1500) and is reported in the self-test.

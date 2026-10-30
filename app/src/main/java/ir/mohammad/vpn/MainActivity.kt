@@ -118,6 +118,11 @@ class MainActivity : ComponentActivity() {
                 Tunnel.defaultMtu = bundle.mtu
                 Tunnel.ipv6Enabled = bundle.tunIpv6
                 Tunnel.tunIndex = bundle.tunAddressIndex
+                Tunnel.geositeUrl = bundle.geositeUrl
+                Tunnel.geoipUrl = bundle.geoipUrl
+                if (!ir.mohammad.vpn.core.GeoAssets.isReady(applicationContext)) {
+                    LogStore.add("I", "GEO", "rule sets not cached; will download in background")
+                }
                 val savedId = prefs().getString(KEY_SELECTED, null)
                 Tunnel.selected = bundle.profiles.firstOrNull { it.id == savedId }
                     ?: bundle.profiles.firstOrNull { it.id == bundle.defaultProfileId }

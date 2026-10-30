@@ -12,6 +12,7 @@ import android.os.SystemClock
 import ir.mohammad.vpn.MainActivity
 import ir.mohammad.vpn.R
 import ir.mohammad.vpn.core.AwgConfig
+import ir.mohammad.vpn.core.GeoAssets
 import ir.mohammad.vpn.core.TunPlan
 import ir.mohammad.vpn.core.XrayConfig
 import ir.mohammad.vpn.data.LogStore
@@ -197,6 +198,8 @@ class MohammadVpnService : VpnService() {
 
     private fun startXray(profile: Profile, descriptor: ParcelFileDescriptor, plan: TunPlan): StartResult {
         val renderStart = SystemClock.elapsedRealtime()
+        val geoReady = GeoAssets.isReady(this)
+        if (!geoReady) ensureGeoAssetsAsync()
         val config = try {
             XrayConfig.render(
                 profile = profile,
@@ -205,6 +208,7 @@ class MohammadVpnService : VpnService() {
                 dnsServers = plan.dns,
                 logLevel = "warning",
                 ipv6 = plan.ipv6Address.isNotEmpty(),
+                geo = geoReady,
             )
         } catch (t: Throwable) {
             LogStore.add("E", TAG, "xray config render failed: ${t.javaClass.simpleName}: ${t.message}")
@@ -219,6 +223,7 @@ class MohammadVpnService : VpnService() {
         val core = XrayController { level, message ->
             LogStore.add(mapLevel(level.toInt(), message), "XRAY", message.trim())
         }
+        GeoAssets.path(this)?.let { core.setAssetDir(it) }
         runCatching { core.setLogLevel(0L) }
             .onFailure { LogStore.add("W", TAG, "setLogLevel unavailable: ${it.message}") }
 
@@ -268,6 +273,19 @@ class MohammadVpnService : VpnService() {
             )
             runCatching { core.stop() }
             StartResult.FAILED
+        }
+    }
+
+    private fun ensureGeoAssetsAsync() {
+        val geosite = Tunnel.geositeUrl
+        val geoip = Tunnel.geoipUrl
+        if (geosite.isBlank() || geoip.isBlank()) return
+        submit {
+            kotlinx.coroutines.runBlocking {
+                runCatching { GeoAssets.ensure(applicationContext, geosite, geoip) }
+                    .onSuccess { ready -> LogStore.add("I", "GEO", "rule sets ready=$ready") }
+                    .onFailure { LogStore.add("W", "GEO", "download failed: ${it.message}") }
+            }
         }
     }
 

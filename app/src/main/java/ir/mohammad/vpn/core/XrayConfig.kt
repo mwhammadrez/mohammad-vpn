@@ -40,6 +40,7 @@ object XrayConfig {
         dnsServers: List<String>,
         logLevel: String = "warning",
         ipv6: Boolean = true,
+        geo: Boolean = false,
     ): String {
         val outbound = JSONObject(profile.xray.toString()).apply { put("tag", "proxy") }
 
@@ -61,11 +62,46 @@ object XrayConfig {
                     .put("destOverride", JSONArray().put("http").put("tls").put("quic")),
             )
 
-        val directRule = JSONObject()
-            .put("type", "field")
-            .put("outboundTag", "direct")
-            .put("ip", JSONArray(DIRECT_CIDRS))
-            .put("domain", JSONArray(DIRECT_DOMAINS))
+        val rules = JSONArray()
+        if (geo) {
+            // Same shape as a mature client's default preset: ads and QUIC are
+            // blocked, private space and the home country stay direct.
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("outboundTag", "block")
+                    .put("domain", JSONArray().put("geosite:category-ads-all")),
+            )
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("outboundTag", "block")
+                    .put("network", "udp")
+                    .put("port", "443"),
+            )
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("outboundTag", "direct")
+                    .put("ip", JSONArray().put("geoip:private"))
+                    .put("domain", JSONArray().put("geosite:private")),
+            )
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("outboundTag", "direct")
+                    .put("domain", JSONArray().put("geosite:category-ir"))
+                    .put("ip", JSONArray().put("geoip:ir")),
+            )
+        } else {
+            rules.put(
+                JSONObject()
+                    .put("type", "field")
+                    .put("outboundTag", "direct")
+                    .put("ip", JSONArray(DIRECT_CIDRS))
+                    .put("domain", JSONArray(DIRECT_DOMAINS)),
+            )
+        }
 
         val catchAll = JSONObject()
             .put("type", "field")
@@ -103,7 +139,7 @@ object XrayConfig {
                 JSONObject()
                     // Domain rules only work when Xray is allowed to resolve.
                     .put("domainStrategy", "IPIfNonMatch")
-                    .put("rules", JSONArray().put(directRule).put(catchAll)),
+                    .put("rules", rules.put(catchAll)),
             )
         return root.toString()
     }

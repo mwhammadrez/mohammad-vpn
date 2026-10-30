@@ -50,6 +50,12 @@ object Tunnel {
     @Volatile
     var ipv6Enabled: Boolean = false
 
+    @Volatile
+    var geositeUrl: String = ""
+
+    @Volatile
+    var geoipUrl: String = ""
+
     /** Stage timings for the most recent connect attempt: (stage, elapsed ms). */
     @Volatile
     var connectTimeline: List<Pair<String, Long>> = emptyList()

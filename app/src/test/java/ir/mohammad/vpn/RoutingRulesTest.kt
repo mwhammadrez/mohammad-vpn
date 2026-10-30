@@ -66,6 +66,47 @@ class RoutingRulesTest {
     }
 
     @Test
+    fun geoModeBlocksAdsAndRoutesIranDirect() {
+        val json = JSONObject(
+            XrayConfig.render(profile(), "10.0.0.1", 1500, listOf("1.1.1.1"), logLevel = "warning", ipv6 = false, geo = true),
+        )
+        val rules = json.getJSONObject("routing").getJSONArray("rules")
+        val tags = (0 until rules.length()).map { rules.getJSONObject(it).optString("outboundTag") }
+        assertEquals("block", tags.first())
+        assertTrue("expect a direct rule for iran/private", tags.count { it == "direct" } >= 2)
+        assertEquals("proxy", tags.last())
+
+        var iranFound = false
+        var adsFound = false
+        for (i in 0 until rules.length()) {
+            val rule = rules.getJSONObject(i)
+            val domains = rule.optJSONArray("domain") ?: continue
+            for (j in 0 until domains.length()) {
+                when (domains.getString(j)) {
+                    "geosite:category-ir" -> iranFound = true
+                    "geosite:category-ads-all" -> adsFound = true
+                }
+            }
+        }
+        assertTrue("iran rule missing", iranFound)
+        assertTrue("ads rule missing", adsFound)
+    }
+
+    @Test
+    fun withoutGeoAssetsNoGeositeSelectorsAreEmitted() {
+        val rules = render().getJSONObject("routing").getJSONArray("rules")
+        for (i in 0 until rules.length()) {
+            val domains = rules.getJSONObject(i).optJSONArray("domain") ?: continue
+            for (j in 0 until domains.length()) {
+                assertTrue(
+                    "geosite selector without assets would break startup: ${domains.getString(j)}",
+                    !domains.getString(j).startsWith("geosite:"),
+                )
+            }
+        }
+    }
+
+    @Test
     fun catchAllRuleRemainsLast() {
         val rules = render().getJSONObject("routing").getJSONArray("rules")
         val last = rules.getJSONObject(rules.length() - 1)

@@ -135,3 +135,10 @@ Device report analysis (realme RMX3709, Android 16, VLESS):
 - Added `connect.timeline` (stage → ms) to the self-test report so connect latency can be attributed.
 
 Tests 37 → 38. Gates green.
+
+**2026-10-30 · v0.6.0 — default-preset parity with a mature client**
+- `GeoAssets`: one-time download of geosite/geoip (28 MB total) into `filesDir/xray`, `XRAY_LOCATION_ASSET` wired through `XrayController.SetAssetDir`.
+- `XrayConfig(geo = true)`: ads blocked (`geosite:category-ads-all`), UDP/443 blocked, private + Iran (`geosite:category-ir`, `geoip:ir`) direct, catch-all proxy — the reference client's default shape.
+- Fallback: literal CIDR/suffix rules when the assets are missing, so startup never fails.
+- Bundle: `defaultMtu` removed (1500 default), `tunIpv6: false`.
+- Tests 38 → 41, all green. lint/assemble/placeholder gates green.

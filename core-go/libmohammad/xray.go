@@ -69,6 +69,14 @@ func (c *XrayController) emit(level int, msg string) {
 	}
 }
 
+// SetAssetDir tells Xray where geoip.dat / geosite.dat live.
+func (c *XrayController) SetAssetDir(dir string) {
+	if dir != "" {
+		os.Setenv("XRAY_LOCATION_ASSET", dir)
+		c.emit(1, "asset dir set")
+	}
+}
+
 // SetLogLevel sets the core log threshold: 0=debug, 1=info, 2=warning, 3=error.
 func (c *XrayController) SetLogLevel(level int64) {
 	levelMu.Lock()

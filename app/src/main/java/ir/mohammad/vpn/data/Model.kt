@@ -9,6 +9,12 @@ import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
 import javax.crypto.spec.SecretKeySpec
 
+/** Default rule-set sources; overridable per bundle. */
+const val DEFAULT_GEOSITE_URL =
+    "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+const val DEFAULT_GEOIP_URL =
+    "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
+
 /** A single operator-provided connection profile. */
 data class Profile(
     val id: String,
@@ -29,6 +35,8 @@ data class OperatorBundle(
     val mtu: Int,
     val tunIpv6: Boolean = false,
     val tunAddressIndex: Int = 0,
+    val geositeUrl: String = DEFAULT_GEOSITE_URL,
+    val geoipUrl: String = DEFAULT_GEOIP_URL,
 )
 
 class BundleException(message: String) : Exception(message)
@@ -149,8 +157,11 @@ object OperatorBundleLoader {
 
         val tunIpv6 = root.optBoolean("tunIpv6", false)
         val tunIndex = root.optInt("tunAddressIndex", 0).coerceAtLeast(0)
+        val geo = root.optJSONObject("geoAssets")
+        val geositeUrl = geo?.optString("geosite")?.takeIf { it.isNotBlank() } ?: DEFAULT_GEOSITE_URL
+        val geoipUrl = geo?.optString("geoip")?.takeIf { it.isNotBlank() } ?: DEFAULT_GEOIP_URL
 
-        return OperatorBundle(result, defaultId, dns, mtu, tunIpv6, tunIndex)
+        return OperatorBundle(result, defaultId, dns, mtu, tunIpv6, tunIndex, geositeUrl, geoipUrl)
     }
 
     /** Only the Xray-accepted subset is allowed for Hysteria2 (SPEC FR-29). */
