@@ -181,3 +181,24 @@ ADB-over-Wi-Fi keep working without an app bypass list. The reference client beh
 DNS is `8.8.8.8` only and the core exposes one loopback listener (`:10808`). The second resolver and
 the HTTP inbound were ours, not the reference client's; removing them matches the observed interface
 exactly and shrinks the loopback surface.
+
+## D-35 — Cyber-emerald design system
+**Date:** 2026-10-30
+The UI is rebuilt on a supplied design system: dark `#050807` canvas, glass panels
+(`#0E1311` at 82 % with a 1 dp hairline), mint `#34F5C5` for the connected/egress state, violet
+`#A78BFA` for upload, amber `#F59E0B` for transitions and rose for failure. Type is Orbitron for
+display, Chakra Petch for labels and metrics. Fonts are bundled under the SIL Open Font License
+(`licenses/OFL-*.txt`), so no network font fetching at runtime.
+
+Layout: header, hero card with a 60-tick / 28-segment rotary power dial, four bento telemetry tiles
+(live sparkline for up and down, cumulative totals with a ruler bar), a profile list with radio
+selection, and the connection log restyled as a console.
+
+The design is dark-only on purpose; the system light theme is ignored.
+
+## D-36 — UI keeps real data, not mock data
+**Date:** 2026-10-30
+The design mock shows invented servers, speeds and totals. The implementation binds every element to
+live state: session timer to `Connected`, speed tiles to a 1 s delta of the core's traffic counters,
+totals to the same counters, and the profile list to the decrypted bundle. Nothing is simulated; when
+the tunnel is down the dial shows zero segments and the sparklines flatten.

@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -61,6 +62,7 @@ import ir.mohammad.vpn.data.Tunnel
 import ir.mohammad.vpn.data.TunnelError
 import ir.mohammad.vpn.data.TunnelState
 import ir.mohammad.vpn.diagnostics.SelfTest
+import ir.mohammad.vpn.ui.MohammadScreen
 import ir.mohammad.vpn.vpn.MohammadVpnService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -91,6 +93,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         requestNotificationPermission()
         loadProfiles()
@@ -215,174 +218,64 @@ fun MohammadApp() {
     val activity = context as MainActivity
     val state by Tunnel.state.collectAsStateWithLifecycle()
     val logs by LogStore.entries.collectAsStateWithLifecycle()
-    val permissionDenied by Tunnel.permissionDenied.collectAsStateWithLifecycle()
     val traffic by Tunnel.traffic.collectAsStateWithLifecycle()
 
     var selected by remember { mutableStateOf(Tunnel.selected) }
-    var menuOpen by remember { mutableStateOf(false) }
-    var pingText by remember { mutableStateOf("") }
-    var pingEnabled by remember { mutableStateOf(true) }
+    var pingMs by remember { mutableStateOf<Long?>(null) }
+    var pingBusy by remember { mutableStateOf(false) }
     var testRunning by remember { mutableStateOf(false) }
     var testReport by remember { mutableStateOf<String?>(null) }
-    val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Tunnel.profiles) { selected = Tunnel.selected }
-    LaunchedEffect(logs.size) { if (logs.isNotEmpty()) listState.scrollToItem(logs.size - 1) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Mohammad") }) }) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(statusText(state), style = MaterialTheme.typography.headlineSmall)
-                    Spacer(Modifier.height(4.dp))
-                    Text(statusDetail(state, permissionDenied), style = MaterialTheme.typography.bodySmall)
-                    if (state is TunnelState.Connected) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            "↓ ${humanBytes(traffic.second)}   ↑ ${humanBytes(traffic.first)}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontFamily = FontFamily.Monospace,
-                        )
-                    }
+    MohammadScreen(
+        state = state,
+        traffic = traffic,
+        logs = logs,
+        profiles = Tunnel.profiles,
+        selected = selected,
+        pingMs = pingMs,
+        pingBusy = pingBusy,
+        testRunning = testRunning,
+        testReport = testReport,
+        onToggle = {
+            when (state) {
+                is TunnelState.Connected, is TunnelState.Connecting, is TunnelState.Disconnecting ->
+                    activity.requestDisconnect()
+                else -> activity.requestConnect()
+            }
+        },
+        onSelect = { profile ->
+            activity.selectProfile(profile)
+            selected = profile
+            pingMs = null
+        },
+        onPing = {
+            val profile = selected ?: return@MohammadScreen
+            pingBusy = true
+            pingMs = null
+            scope.launch {
+                val ms = measure(profile, 5_000)
+                pingMs = ms
+                if (ms < 0) LogStore.add("W", "APP", "ping failed or timed out")
+                pingBusy = false
+            }
+        },
+        onSelfTest = {
+            testRunning = true
+            testReport = null
+            scope.launch {
+                testReport = runCatching { SelfTest.run(context.applicationContext) }
+                    .getOrElse { "self-test failed: ${it.javaClass.simpleName}: ${it.message}" }
+                testRunning = false
+                runCatching {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Mohammad self-test", testReport ?: ""))
                 }
             }
-
-            val connected = state is TunnelState.Connected
-            val busy = state is TunnelState.Connecting || state is TunnelState.Disconnecting
-            Button(
-                onClick = {
-                    when {
-                        connected || busy -> activity.requestDisconnect()
-                        else -> activity.requestConnect()
-                    }
-                },
-                enabled = !(state is TunnelState.Disconnecting) && (selected != null || connected),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(buttonText(state))
-            }
-
-            Box {
-                OutlinedButton(
-                    onClick = { menuOpen = true },
-                    enabled = !connected && !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(selected?.let { "${it.name} · ${it.protocol}" } ?: "Select a profile to connect.")
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    Tunnel.profiles.forEach { profile ->
-                        DropdownMenuItem(
-                            text = { Text("${profile.name} · ${profile.protocol} · ${profile.core}") },
-                            onClick = {
-                                activity.selectProfile(profile)
-                                selected = profile
-                                menuOpen = false
-                            },
-                        )
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        val profile = selected ?: return@OutlinedButton
-                        pingEnabled = false
-                        pingText = "Pinging…"
-                        scope.launch {
-                            val ms = measure(profile, 5_000)
-                            pingText = if (ms >= 0) "Ping: $ms ms" else "Ping failed"
-                            if (ms < 0) LogStore.add("W", "APP", "ping failed or timed out")
-                            pingEnabled = true
-                        }
-                    },
-                    enabled = pingEnabled && selected != null && !busy,
-                ) { Text("Test ping") }
-                Text(pingText, style = MaterialTheme.typography.bodyMedium)
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        testRunning = true
-                        testReport = null
-                        scope.launch {
-                            testReport = runCatching { SelfTest.run(context.applicationContext) }
-                                .getOrElse { "self-test failed: ${it.javaClass.simpleName}: ${it.message}" }
-                            testRunning = false
-                        }
-                    },
-                    enabled = !testRunning,
-                ) { Text(if (testRunning) "Running…" else "Run self-test") }
-
-                testReport?.let { report ->
-                    TextButton(onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("Mohammad self-test", report))
-                    }) { Text("Copy report") }
-                    TextButton(onClick = {
-                        val share = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_SUBJECT, "Mohammad self-test")
-                            putExtra(Intent.EXTRA_TEXT, report)
-                        }
-                        context.startActivity(Intent.createChooser(share, "Share self-test"))
-                    }) { Text("Share") }
-                }
-            }
-
-            if (testReport != null) {
-                Text(
-                    "Report ready (contains your public IP). Use Copy or Share, then send it to the operator.",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Connection log (${logs.size})", fontWeight = FontWeight.SemiBold)
-                Row {
-                    TextButton(onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setPrimaryClip(ClipData.newPlainText("Mohammad log", LogStore.dump()))
-                        LogStore.add("I", "APP", "log copied to clipboard")
-                    }) { Text("Copy") }
-                    TextButton(onClick = { LogStore.clear() }) { Text("Clear log") }
-                }
-            }
-
-            Card(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize().padding(12.dp)) {
-                    items(logs) { entry ->
-                        Text(
-                            text = "${entry.time} ${entry.level}/${entry.tag}  ${entry.message}",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                        )
-                    }
-                }
-            }
-        }
-    }
+        },
+    )
 }
 
 private suspend fun measure(profile: Profile, timeoutMs: Int): Long = withContext(Dispatchers.IO) {

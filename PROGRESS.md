@@ -204,3 +204,11 @@ Data path is now the one mature clients use:
 - `setUnderlyingNetworks(null)` on network loss, rebind on restore.
 - `TunPlanTest` rewritten: asserts no default route, excluded ranges, public coverage, no duplicates.
 - Device verification of 0.7.4: **NOT VERIFIED**.
+
+**2026-10-30 · v0.8.0 — cyber-emerald UI**
+- New Compose design system (`ui/theme/Theme.kt`, `ui/MohammadScreen.kt`): dark canvas, glass panels, Orbitron/Chakra Petch.
+- Rotary power dial with 60 ticks and a 28-segment LED ring driven by tunnel state.
+- Bento telemetry: live up/down sparklines (1 s deltas), cumulative totals with ruler bars.
+- Profile list with radio selection, ping badge, self-test tile, console-style log.
+- Edge-to-edge, dark window background (no white launch flash), system bars inset-aware.
+- Fonts bundled under OFL; `licenses/` added.
