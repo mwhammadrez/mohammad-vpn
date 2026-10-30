@@ -232,10 +232,32 @@ class MohammadVpnService : VpnService() {
 
         val coreStart = SystemClock.elapsedRealtime()
         return try {
-            LogStore.add("D", TAG, "xray.start(fd=${descriptor.fd})")
-            core.start(config, descriptor.fd.toLong())
+            // SOCKS-only mode: the descriptor belongs to the bridge, never to the core.
+            LogStore.add("D", TAG, "xray.start(socks-only, port=${XrayConfig.SOCKS_PORT})")
+            core.start(config, 0L)
             synchronized(lock) { xray = core }
             LogStore.add("I", TAG, "xray started in ${SystemClock.elapsedRealtime() - coreStart} ms")
+
+            val listenStart = SystemClock.elapsedRealtime()
+            if (!awaitSocks(XrayConfig.SOCKS_PORT, 2_000)) {
+                throw IllegalStateException(
+                    "socks inbound not accepting on 127.0.0.1:${XrayConfig.SOCKS_PORT} after 2000 ms",
+                )
+            }
+            LogStore.add(
+                "D", TAG,
+                "socks inbound accepting in ${SystemClock.elapsedRealtime() - listenStart} ms",
+            )
+
+            val bridgeStart = SystemClock.elapsedRealtime()
+            val b = TunBridge()
+            b.start(descriptor.fd.toLong(), plan.mtu.toLong(), "socks5://127.0.0.1:${XrayConfig.SOCKS_PORT}")
+            synchronized(lock) { bridge = b }
+            LogStore.add(
+                "I", TAG,
+                "tun2socks up in ${SystemClock.elapsedRealtime() - bridgeStart} ms " +
+                    "(fd=${descriptor.fd}, mtu=${plan.mtu})",
+            )
             StartResult.OK
         } catch (t: Throwable) {
             LogStore.add(
@@ -243,6 +265,10 @@ class MohammadVpnService : VpnService() {
                 "xray start failed after ${SystemClock.elapsedRealtime() - coreStart} ms: " +
                     "${t.javaClass.simpleName}: ${t.message}",
             )
+            synchronized(lock) {
+                bridge?.let { runCatching { it.stop() } }
+                bridge = null
+            }
             runCatching { core.stop() }
             StartResult.FAILED
         }
@@ -277,6 +303,26 @@ class MohammadVpnService : VpnService() {
             runCatching { core.stop() }
             StartResult.FAILED
         }
+    }
+
+    /** Waits until the core's SOCKS inbound accepts connections. */
+    private fun awaitSocks(port: Int, timeoutMs: Long): Boolean {
+        val deadline = SystemClock.elapsedRealtime() + timeoutMs
+        while (SystemClock.elapsedRealtime() < deadline) {
+            try {
+                java.net.Socket().use { socket ->
+                    socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 150)
+                    return true
+                }
+            } catch (_: Exception) {
+                try {
+                    Thread.sleep(40)
+                } catch (_: InterruptedException) {
+                    return false
+                }
+            }
+        }
+        return false
     }
 
     private fun ensureGeoAssetsAsync() {

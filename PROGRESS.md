@@ -179,3 +179,8 @@ Data path is now the one mature clients use:
 - Host tests: `go test ./libmohammad/` → 3/3 PASS (original fd survives stop, double stop is a no-op, failed start leaks nothing).
 - Gradle gates: testDebugUnitTest ✅ · lintDebug ✅ · assembleDebug ✅ · check-no-placeholders ✅.
 - Behavioural parity remains **UNKNOWN**; nothing was run on a device.
+
+**2026-10-30 · v0.7.2 — wire the bridge into the connect path**
+- Device log from 0.7.1 showed `xray started in 117 ms` but no `tun2socks up`, and egress unchanged (`no-tunnel`). Cause: `startXray` still passed the descriptor to the core while the renderer had already dropped the tun inbound — nothing read the TUN device.
+- `startXray` now starts the core in SOCKS-only mode (`start(config, 0)`), waits up to 2 s for `127.0.0.1:10808` to accept, then starts `TunBridge` on the duplicated descriptor.
+- Failure path stops the bridge (if created) and the core; Java remains the sole owner of the original fd.
