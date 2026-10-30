@@ -16,6 +16,7 @@ enum class TunnelError {
     InvalidProfile,
     NetworkUnavailable,
     PingFailed,
+    ConfigUnhealthy,
 }
 
 sealed interface TunnelState {

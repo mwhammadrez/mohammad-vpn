@@ -48,7 +48,8 @@ class RoutingRulesTest {
     fun fakeDnsComesFirstThenOperatorServers() {
         val dns = render().getJSONObject("dns")
         val servers = dns.getJSONArray("servers")
-        assertEquals("fakedns", servers.getString(0))
+        // fakedns is now an object so a domestic resolver can be scoped to domain:ir.
+        assertEquals("fakedns", servers.getJSONObject(0).getString("address"))
         assertEquals("1.1.1.1", servers.getString(1))
     }
 

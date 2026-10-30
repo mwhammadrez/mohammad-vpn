@@ -77,8 +77,6 @@ fun MohammadScreen(
     selected: Profile?,
     pingMs: Long?,
     pingBusy: Boolean,
-    testRunning: Boolean,
-    testReport: String?,
     fragmentOn: Boolean = false,
     fragmentMode: String = "tlshello",
     muxOn: Boolean = false,
@@ -90,7 +88,6 @@ fun MohammadScreen(
     onToggle: () -> Unit,
     onSelect: (Profile) -> Unit,
     onPing: () -> Unit,
-    onSelfTest: () -> Unit,
 ) {
     MohammadTheme {
         val down = remember { mutableStateListOf<Float>() }
@@ -125,9 +122,8 @@ fun MohammadScreen(
                 Hero(state, selected, traffic, onToggle)
                 Bento(down, up, traffic)
                 Nodes(profiles, selected, state, onSelect)
-                Actions(pingMs, pingBusy, testRunning, onPing, onSelfTest)
+                Actions(pingMs, pingBusy, onPing)
                 Evasion(fragmentOn, fragmentMode, muxOn, onFragment, onFragmentMode, onMux)
-                if (testReport != null) Report(testReport)
                 Console(logs)
             }
         }
@@ -607,9 +603,7 @@ private fun Nodes(profiles: List<Profile>, selected: Profile?, state: TunnelStat
 private fun Actions(
     pingMs: Long?,
     pingBusy: Boolean,
-    testRunning: Boolean,
     onPing: () -> Unit,
-    onSelfTest: () -> Unit,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         GhostButton(
@@ -621,12 +615,6 @@ private fun Actions(
             },
             enabled = !pingBusy,
             onClick = onPing,
-            modifier = Modifier.weight(1f),
-        )
-        GhostButton(
-            text = if (testRunning) "RUNNING…" else "SELF-TEST",
-            enabled = !testRunning,
-            onClick = onSelfTest,
             modifier = Modifier.weight(1f),
         )
     }
@@ -763,21 +751,6 @@ private fun CrashCard(report: String, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun Report(report: String) {
-    Glass(shape = 18.dp) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text("SELF-TEST", fontFamily = ChakraSemi, fontSize = 10.sp, letterSpacing = 1.4.sp, color = Palette.TextSecondary)
-            Text(
-                summarize(report),
-                fontFamily = Chakra,
-                fontSize = 11.sp,
-                color = Palette.TextPrimary,
-            )
-        }
-    }
-}
-
-@Composable
 private fun Console(logs: List<LogEntry>) {
     val tail = logs.takeLast(40)
     Glass(shape = 18.dp) {
@@ -834,7 +807,8 @@ private fun Glass(
 private fun statusColor(state: TunnelState): Color = when (state) {
     is TunnelState.Connected -> Palette.Mint
     is TunnelState.Connecting, is TunnelState.Disconnecting -> Palette.Amber
-    is TunnelState.Failed -> Palette.Rose
+    // An unhealthy config keeps the dial amber: the app is not lying that it works.
+    is TunnelState.Failed -> if (state.reason == TunnelError.ConfigUnhealthy) Palette.Amber else Palette.Rose
     else -> Palette.TextMuted
 }
 
@@ -842,7 +816,7 @@ private fun statusLabel(state: TunnelState): String = when (state) {
     is TunnelState.Connected -> "CONNECTED"
     is TunnelState.Connecting -> "ENCRYPTING TUNNEL…"
     is TunnelState.Disconnecting -> "SHUTTING DOWN…"
-    is TunnelState.Failed -> "FAILED"
+    is TunnelState.Failed -> if (state.reason == TunnelError.ConfigUnhealthy) "CONFIG NOT ANSWERING" else "FAILED"
     else -> "DISCONNECTED"
 }
 
@@ -855,6 +829,7 @@ private fun errorText(reason: TunnelError): String = when (reason) {
     TunnelError.InvalidProfile -> "The profile is not valid"
     TunnelError.NetworkUnavailable -> "Waiting for the network"
     TunnelError.PingFailed -> "Ping failed"
+    TunnelError.ConfigUnhealthy -> "The tunnel is up but the config answers nothing"
 }
 
 private fun human(bytes: Long): String = when {
@@ -880,10 +855,4 @@ private fun sessionTimer(state: TunnelState): String {
     val m = (seconds % 3600) / 60
     val s = seconds % 60
     return String.format(Locale.US, "%02d:%02d:%02d", h, m, s)
-}
-
-private fun summarize(report: String): String {
-    fun pick(key: String): String =
-        Regex("\"$key\"\\s*:\\s*\"?([^,\"}]+)").find(report)?.groupValues?.get(1)?.trim() ?: "?"
-    return "egress ${pick("conclusion")} · dns ${pick("ok")} · down ${pick("deltaDownBytes")}"
 }

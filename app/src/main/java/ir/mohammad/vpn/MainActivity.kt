@@ -62,7 +62,6 @@ import ir.mohammad.vpn.data.Tunnel
 import ir.mohammad.vpn.data.TunnelError
 import ir.mohammad.vpn.data.TunnelState
 import ir.mohammad.vpn.diagnostics.CrashRecorder
-import ir.mohammad.vpn.diagnostics.SelfTest
 import ir.mohammad.vpn.ui.MohammadScreen
 import ir.mohammad.vpn.vpn.MohammadVpnService
 import kotlinx.coroutines.Dispatchers
@@ -228,8 +227,6 @@ fun MohammadApp() {
     var selected by remember { mutableStateOf(Tunnel.selected) }
     var pingMs by remember { mutableStateOf<Long?>(null) }
     var pingBusy by remember { mutableStateOf(false) }
-    var testRunning by remember { mutableStateOf(false) }
-    var testReport by remember { mutableStateOf<String?>(null) }
     var crash by remember { mutableStateOf(activity.lastCrash) }
     var fragmentOn by remember { mutableStateOf(activity.prefs().getBoolean("fragment", false)) }
     var fragmentMode by remember { mutableStateOf(activity.prefs().getString("fragmentMode", "tlshello") ?: "tlshello") }
@@ -246,8 +243,6 @@ fun MohammadApp() {
         selected = selected,
         pingMs = pingMs,
         pingBusy = pingBusy,
-        testRunning = testRunning,
-        testReport = testReport,
         fragmentOn = fragmentOn,
         fragmentMode = fragmentMode,
         muxOn = muxOn,
@@ -288,19 +283,6 @@ fun MohammadApp() {
                 pingMs = ms
                 if (ms < 0) LogStore.add("W", "APP", "ping failed or timed out")
                 pingBusy = false
-            }
-        },
-        onSelfTest = {
-            testRunning = true
-            testReport = null
-            scope.launch {
-                testReport = runCatching { SelfTest.run(context.applicationContext) }
-                    .getOrElse { "self-test failed: ${it.javaClass.simpleName}: ${it.message}" }
-                testRunning = false
-                runCatching {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText("Mohammad self-test", testReport ?: ""))
-                }
             }
         },
     )

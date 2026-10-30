@@ -44,12 +44,9 @@ class RenderTest {
                 selected = profile(),
                 pingMs = 61,
                 pingBusy = false,
-                testRunning = false,
-                testReport = null,
                 onToggle = {},
                 onSelect = {},
                 onPing = {},
-                onSelfTest = {},
             )
         }
         compose.mainClock.advanceTimeBy(64)

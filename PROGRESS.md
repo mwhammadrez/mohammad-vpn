@@ -240,3 +240,15 @@ Data path is now the one mature clients use:
   rather than on the phone.
 - `ServiceLifecycleTest` covers the disconnect path that was reported as closing the app; the native
   bridge is not exercised by Robolectric, so that specific crash still needs a device retest.
+
+**2026-10-30 · v0.10.0 — honest connect state, Iran routing, self-test removed**
+- Self-test removed at the operator's request (screen, activity wiring, tests, file).
+- **Green now means verified**: after the bridge is up, the service performs a SOCKS5 CONNECT to
+  `1.1.1.1:443` through the core, three attempts 800 ms apart. Only a successful answer promotes the
+  state to `Connected`. A live process with a broken config ends in `Failed(ConfigUnhealthy)`, which
+  renders amber ("CONFIG NOT ANSWERING"), not green.
+- `SocksProbe` now sends ATYP=1 for IPv4 literals instead of resolving the literal as a domain.
+- Iran parity: `domain:ir` is scoped to the phone's own resolver (`localhost`, `skipFallback`), so
+  domestic names get real addresses and never leave the country; the direct rule still precedes the
+  proxy catch-all; QUIC/443 remains the first block rule.
+- 85 tests, 0 failures; `IranRoutingTest` (5) pins the Iranian behaviour.

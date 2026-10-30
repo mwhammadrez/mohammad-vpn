@@ -31,11 +31,18 @@ object SocksProbe {
                     return false
                 }
 
-                val host = targetHost.toByteArray(Charsets.US_ASCII)
-                if (host.size > 255) return false
                 val request = java.io.ByteArrayOutputStream()
-                request.write(byteArrayOf(0x05, 0x01, 0x00, 0x03, host.size.toByte()))
-                request.write(host)
+                val literal = parseIpv4(targetHost)
+                if (literal != null) {
+                    // Address type 1: a literal address needs no resolution inside the core.
+                    request.write(byteArrayOf(0x05, 0x01, 0x00, 0x01))
+                    request.write(literal)
+                } else {
+                    val host = targetHost.toByteArray(Charsets.US_ASCII)
+                    if (host.size > 255) return false
+                    request.write(byteArrayOf(0x05, 0x01, 0x00, 0x03, host.size.toByte()))
+                    request.write(host)
+                }
                 request.write((targetPort ushr 8) and 0xFF)
                 request.write(targetPort and 0xFF)
                 out.write(request.toByteArray())
@@ -58,6 +65,19 @@ object SocksProbe {
                 true
             }
         }.getOrDefault(false)
+
+    /** Dotted-quad to four bytes, or null when the text is not an IPv4 literal. */
+    internal fun parseIpv4(text: String): ByteArray? {
+        val parts = text.split('.')
+        if (parts.size != 4) return null
+        val bytes = ByteArray(4)
+        parts.forEachIndexed { i, part ->
+            val value = part.toIntOrNull() ?: return null
+            if (value !in 0..255) return null
+            bytes[i] = value.toByte()
+        }
+        return bytes
+    }
 
     private fun readFully(input: java.io.InputStream, buffer: ByteArray): Boolean {
         var read = 0

@@ -52,11 +52,14 @@ class MohammadVpnService : VpnService() {
         /** Probe the data path at most this often (health ticks x interval). */
         const val PROBE_EVERY_TICKS = 6
         const val PROBE_FAILURES_TO_RECONNECT = 2
+        /** Literal address for the health probe: no DNS, no operator data in the config. */
+        const val HEALTH_TARGET = "1.1.1.1"
+        const val HEALTH_TARGET_PORT = 443
 
         const val TAG = "VPN"
     }
 
-    private enum class StartResult { OK, INVALID_PROFILE, FAILED }
+    private enum class StartResult { OK, INVALID_PROFILE, FAILED, UNHEALTHY }
 
     private var tun: ParcelFileDescriptor? = null
     private var xray: XrayController? = null
@@ -229,6 +232,7 @@ class MohammadVpnService : VpnService() {
             }
             StartResult.INVALID_PROFILE -> fail(TunnelError.InvalidProfile)
             StartResult.FAILED -> fail(TunnelError.CoreStartFailed)
+            StartResult.UNHEALTHY -> fail(TunnelError.ConfigUnhealthy)
         }
     }
 
@@ -292,6 +296,21 @@ class MohammadVpnService : VpnService() {
                 "tun2socks up in ${SystemClock.elapsedRealtime() - bridgeStart} ms " +
                     "(fd=${descriptor.fd}, mtu=${plan.mtu})",
             )
+
+            // Green means "the tunnel answers", not "the process started".
+            val healthStart = SystemClock.elapsedRealtime()
+            if (!awaitHealthy(profile)) {
+                LogStore.add(
+                    "E", TAG,
+                    "config unhealthy: no answer through the tunnel after " +
+                        "${SystemClock.elapsedRealtime() - healthStart} ms",
+                )
+                return StartResult.UNHEALTHY
+            }
+            LogStore.add(
+                "I", TAG,
+                "tunnel verified in ${SystemClock.elapsedRealtime() - healthStart} ms",
+            )
             StartResult.OK
         } catch (t: Throwable) {
             LogStore.add(
@@ -340,6 +359,27 @@ class MohammadVpnService : VpnService() {
     }
 
     /** Waits until the core's SOCKS inbound accepts connections. */
+    /**
+     * Proves the chain works end to end: a SOCKS CONNECT through the core to a
+     * literal address must be accepted. A live process is not a working config.
+     */
+    private fun awaitHealthy(profile: Profile, attempts: Int = 3, gapMs: Long = 800): Boolean {
+        repeat(attempts) { index ->
+            if (SocksProbe.probe(XrayConfig.SOCKS_PORT, HEALTH_TARGET, HEALTH_TARGET_PORT)) {
+                return true
+            }
+            LogStore.add("W", TAG, "health probe ${index + 1}/$attempts failed")
+            if (index < attempts - 1) {
+                try {
+                    Thread.sleep(gapMs)
+                } catch (_: InterruptedException) {
+                    return false
+                }
+            }
+        }
+        return false
+    }
+
     private fun awaitSocks(port: Int, timeoutMs: Long): Boolean {
         val deadline = SystemClock.elapsedRealtime() + timeoutMs
         while (SystemClock.elapsedRealtime() < deadline) {

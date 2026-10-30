@@ -109,7 +109,19 @@ object XrayConfig {
             )
 
         val dnsServersJson = JSONArray()
-        if (fakeDns) dnsServersJson.put("fakedns")
+        if (fakeDns) {
+            dnsServersJson.put(JSONObject().put("address", "fakedns"))
+        }
+        if (geo) {
+            // Domestic names resolve through the phone's own resolver, so .ir sites get
+            // their real addresses instead of a fake one and never leave the country.
+            dnsServersJson.put(
+                JSONObject()
+                    .put("address", "localhost")
+                    .put("domains", JSONArray().put("domain:ir"))
+                    .put("skipFallback", true),
+            )
+        }
         dnsServers.forEach { dnsServersJson.put(it) }
 
         val root = JSONObject()

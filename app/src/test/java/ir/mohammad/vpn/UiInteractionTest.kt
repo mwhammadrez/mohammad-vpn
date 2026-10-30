@@ -50,12 +50,9 @@ class UiInteractionTest {
                 selected = profile(),
                 pingMs = null,
                 pingBusy = false,
-                testRunning = false,
-                testReport = null,
                 onToggle = onToggle,
                 onSelect = onSelect,
                 onPing = {},
-                onSelfTest = {},
                 onFragment = onFragment,
                 onMux = onMux,
             )
