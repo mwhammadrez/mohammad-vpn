@@ -20,8 +20,8 @@ android {
         applicationId = "ir.mohammad.vpn"
         minSdk = 26
         targetSdk = 36
-        versionCode = 21
-        versionName = "0.9.1"
+        versionCode = 22
+        versionName = "0.9.2"
         val escapedPassword = operatorPassword
             .replace("\\", "\\\\")
             .replace("\"", "\\\"")
@@ -30,6 +30,16 @@ android {
     }
 
     buildFeatures { compose = true; buildConfig = true }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.systemProperty("robolectric.logging", "stdout")
+                it.systemProperty("roborazzi.test.record", "true")
+            }
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -69,5 +79,15 @@ dependencies {
     implementation(files("libs/mohammad-core.aar"))
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    // Declares a bare ComponentActivity so Compose can host a test composition.
+    // Debug-only, not exported, and never started by the app itself.
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi:1.36.0")
+    testImplementation("io.github.takahirom.roborazzi:roborazzi-compose:1.36.0")
     testImplementation("org.json:json:20240303")
 }

@@ -209,8 +209,8 @@ private fun Hero(state: TunnelState, profile: Profile?, traffic: Pair<Long, Long
                 )
                 Text(
                     sessionTimer(state),
-                    fontFamily = Orbitron,
-                    fontWeight = FontWeight.Bold,
+                    fontFamily = ChakraSemi,
+                    fontWeight = FontWeight.SemiBold,
                     fontSize = 30.sp,
                     color = Palette.TextPrimary,
                 )
@@ -262,21 +262,6 @@ private fun Pill(profile: Profile?) {
 private fun PowerDial(state: TunnelState, accent: Color, onClick: () -> Unit) {
     val connected = state is TunnelState.Connected
     val busy = state is TunnelState.Connecting || state is TunnelState.Disconnecting
-    // Continuous animation only while a transition is in flight; an idle dial must
-    // not schedule frames (it would force a 60 Hz redraw of the whole screen).
-    val spin = rememberInfiniteTransition(label = "dial")
-    val phase by spin.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(2_600, easing = LinearEasing)),
-        label = "phase",
-    )
-    val breathe by spin.animateFloat(
-        initialValue = 0.5f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1_800, easing = LinearEasing), RepeatMode.Reverse),
-        label = "breathe",
-    )
 
     Box(
         modifier = Modifier
@@ -285,85 +270,27 @@ private fun PowerDial(state: TunnelState, accent: Color, onClick: () -> Unit) {
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Canvas(Modifier.fillMaxSize()) {
-            // Read the animated values only during a transition: an idle dial must not
-            // schedule a redraw, otherwise the whole screen repaints at 60 Hz.
-            val phaseNow = if (busy) phase else 0f
-            val breatheNow = if (busy) breathe else 1f
-            val c = Offset(size.width / 2f, size.height / 2f)
-            val radius = size.minDimension / 2f
-
-            // 60 micro ticks
-            for (i in 0 until 60) {
-                val angle = Math.toRadians(i * 6.0)
-                val long = i % 5 == 0
-                val rOuter = radius * 0.99f
-                val rInner = radius * if (long) 0.90f else 0.94f
-                drawLine(
-                    color = if (connected) accent.copy(alpha = if (long) 0.9f else 0.45f)
-                    else Palette.TextMuted.copy(alpha = if (long) 0.7f else 0.3f),
-                    start = Offset(c.x + cos(angle).toFloat() * rInner, c.y + sin(angle).toFloat() * rInner),
-                    end = Offset(c.x + cos(angle).toFloat() * rOuter, c.y + sin(angle).toFloat() * rOuter),
-                    strokeWidth = if (long) 2f else 1f,
-                    cap = StrokeCap.Round,
-                )
-            }
-
-            // 28 segment LED ring
-            val segments = 28
-            val gap = 3.2f
-            val sweep = 360f / segments
-            val rLed = radius * 0.76f
-            val lit = if (connected) segments else 0
-            for (i in 0 until segments) {
-                val start = -90f + i * sweep
-                val on = i < lit
-                val alpha = when {
-                    on -> 1f
-                    busy && ((i + (phaseNow / sweep).toInt()) % 4 == 0) -> breatheNow
-                    else -> 0.16f
-                }
-                drawArc(
-                    color = accent.copy(alpha = alpha),
-                    startAngle = start,
-                    sweepAngle = sweep - gap,
-                    useCenter = false,
-                    topLeft = Offset(c.x - rLed, c.y - rLed),
-                    size = Size(rLed * 2, rLed * 2),
-                    style = Stroke(width = if (on) 6.dp.toPx() else 4.dp.toPx(), cap = StrokeCap.Round),
-                )
-                if (on) {
-                    drawArc(
-                        color = accent.copy(alpha = 0.22f),
-                        startAngle = start,
-                        sweepAngle = sweep - gap,
-                        useCenter = false,
-                        topLeft = Offset(c.x - rLed, c.y - rLed),
-                        size = Size(rLed * 2, rLed * 2),
-                        style = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round),
-                    )
-                }
-            }
-
-            // inner energy ring
-            val rIn = radius * 0.55f
-            drawCircle(
-                color = accent.copy(alpha = if (connected) 0.42f else 0.10f),
-                radius = rIn,
-                center = c,
-                style = Stroke(width = 1.4.dp.toPx()),
+        if (busy) {
+            // The transition exists only while a transition is in flight: an idle
+            // dial must not schedule frames at all.
+            val spin = rememberInfiniteTransition(label = "dial")
+            val phase by spin.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(2_600, easing = LinearEasing)),
+                label = "phase",
             )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    listOf(accent.copy(alpha = if (connected) 0.16f else 0.05f), Color.Transparent),
-                    center = c,
-                    radius = rIn,
-                ),
-                radius = rIn,
-                center = c,
+            val breathe by spin.animateFloat(
+                initialValue = 0.5f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(tween(1_800, easing = LinearEasing), RepeatMode.Reverse),
+                label = "breathe",
             )
+            DialCanvas(connected, busy, accent, phase, breathe)
+        } else {
+            DialCanvas(connected, false, accent, 0f, 1f)
         }
-        // power glyph
+
         Canvas(Modifier.size(30.dp)) {
             val stroke = 2.4.dp.toPx()
             drawArc(
@@ -381,6 +308,81 @@ private fun PowerDial(state: TunnelState, accent: Color, onClick: () -> Unit) {
                 cap = StrokeCap.Round,
             )
         }
+    }
+}
+
+@Composable
+private fun DialCanvas(connected: Boolean, busy: Boolean, accent: Color, phaseNow: Float, breatheNow: Float) {
+    Canvas(Modifier.fillMaxSize()) {
+        val c = Offset(size.width / 2f, size.height / 2f)
+        val radius = size.minDimension / 2f
+
+        for (i in 0 until 60) {
+            val angle = Math.toRadians(i * 6.0)
+            val long = i % 5 == 0
+            val rOuter = radius * 0.99f
+            val rInner = radius * if (long) 0.90f else 0.94f
+            drawLine(
+                color = if (connected) accent.copy(alpha = if (long) 0.9f else 0.45f)
+                else Palette.TextMuted.copy(alpha = if (long) 0.7f else 0.3f),
+                start = Offset(c.x + cos(angle).toFloat() * rInner, c.y + sin(angle).toFloat() * rInner),
+                end = Offset(c.x + cos(angle).toFloat() * rOuter, c.y + sin(angle).toFloat() * rOuter),
+                strokeWidth = if (long) 2f else 1f,
+                cap = StrokeCap.Round,
+            )
+        }
+
+        val segments = 28
+        val gap = 6.6f
+        val sweep = 360f / segments
+        val rLed = radius * 0.76f
+        val lit = if (connected) segments else 0
+        for (i in 0 until segments) {
+            val start = -90f + i * sweep
+            val on = i < lit
+            val alpha = when {
+                on -> 1f
+                busy && ((i + (phaseNow / sweep).toInt()) % 4 == 0) -> breatheNow
+                else -> 0.16f
+            }
+            drawArc(
+                color = accent.copy(alpha = alpha),
+                startAngle = start,
+                sweepAngle = sweep - gap,
+                useCenter = false,
+                topLeft = Offset(c.x - rLed, c.y - rLed),
+                size = Size(rLed * 2, rLed * 2),
+                style = Stroke(width = if (on) 6.dp.toPx() else 4.dp.toPx(), cap = StrokeCap.Round),
+            )
+            if (on) {
+                drawArc(
+                    color = accent.copy(alpha = 0.22f),
+                    startAngle = start,
+                    sweepAngle = sweep - gap,
+                    useCenter = false,
+                    topLeft = Offset(c.x - rLed, c.y - rLed),
+                    size = Size(rLed * 2, rLed * 2),
+                    style = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Round),
+                )
+            }
+        }
+
+        val rIn = radius * 0.55f
+        drawCircle(
+            color = accent.copy(alpha = if (connected) 0.42f else 0.10f),
+            radius = rIn,
+            center = c,
+            style = Stroke(width = 1.4.dp.toPx()),
+        )
+        drawCircle(
+            brush = Brush.radialGradient(
+                listOf(accent.copy(alpha = if (connected) 0.16f else 0.05f), Color.Transparent),
+                center = c,
+                radius = rIn,
+            ),
+            radius = rIn,
+            center = c,
+        )
     }
 }
 
@@ -413,7 +415,7 @@ private fun SpeedTile(label: String, samples: List<Float>, accent: Color, modifi
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     String.format(Locale.US, "%.1f", samples.lastOrNull() ?: 0f),
-                    fontFamily = Orbitron,
+                    fontFamily = ChakraSemi,
                     fontWeight = FontWeight.Bold,
                     fontSize = 19.sp,
                     color = Palette.TextPrimary,
@@ -434,7 +436,16 @@ private fun Sparkline(samples: List<Float>, accent: Color, modifier: Modifier) {
             val y = size.height * i / 3f
             drawLine(Palette.TextMuted.copy(alpha = 0.12f), Offset(0f, y), Offset(size.width, y), 1f)
         }
-        if (samples.size < 2) return@Canvas
+        if (samples.size < 2) {
+            drawLine(
+                color = accent.copy(alpha = 0.35f),
+                start = Offset(0f, size.height - 1f),
+                end = Offset(size.width, size.height - 1f),
+                strokeWidth = 1.6.dp.toPx(),
+                cap = StrokeCap.Round,
+            )
+            return@Canvas
+        }
         val step = size.width / (samples.size - 1)
         val path = Path()
         val fill = Path()
@@ -469,7 +480,7 @@ private fun TotalTile(label: String, bytes: Long, accent: Color, modifier: Modif
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     String.format(Locale.US, "%.2f", gb),
-                    fontFamily = Orbitron,
+                    fontFamily = ChakraSemi,
                     fontWeight = FontWeight.Bold,
                     fontSize = 21.sp,
                     color = Palette.TextPrimary,

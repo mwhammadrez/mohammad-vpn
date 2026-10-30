@@ -218,3 +218,14 @@ Data path is now the one mature clients use:
 - UI card with toggles and mode chips; values persisted and applied on next connect.
 - 6 renderer tests (`TransportTuningTest`), written first.
 - Not added, with reasons: ECH / REALITY / XHTTP need server-side configuration; Aether is a separate core; hev-socks5-tunnel is a C library.
+
+**2026-10-30 · v0.9.2 — the app renders on the JVM**
+- Robolectric 4.14.1 + Roborazzi 1.36.0 added as test-only dependencies; `RenderTest` drives the real
+  Compose tree at 411×891 dp and writes `docs/screenshots/render-{connected,disconnected}.png`.
+- `captureToImage` cannot work under Robolectric (its `forceRedraw` waits for a frame callback that
+  never arrives); Roborazzi draws the view directly instead.
+- Found while rendering: the LED ring read as a solid ring at 3.2° gaps → widened to 6.6° with a
+  thinner butt stroke, so the 28 segments are visible.
+- Found while rendering: Orbitron's slashed zero made the timer and every metric look broken at a
+  glance → numeric displays moved to Chakra Petch; Orbitron keeps the brand and section labels.
+- Empty sparklines now draw a flat baseline instead of looking like an empty box.

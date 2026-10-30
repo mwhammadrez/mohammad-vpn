@@ -216,3 +216,12 @@ Rationale: fragmenting the first writes defeats pattern-based middleboxes withou
 Mux reduces handshake count on lossy links. ECH, REALITY and XHTTP were deliberately **not** added:
 they require the server to present the matching configuration, and shipping a client-side switch that
 cannot work would be a lie in the UI.
+
+## D-38 — Rendering is verified on the JVM, not on a device
+**Date:** 2026-10-30
+`RenderTest` uses Robolectric with native graphics to build the real Compose tree and Roborazzi to
+write a PNG. This is the only way to see the UI without an attached device or a KVM-capable host, and
+it already caught two defects that no unit test would have (invisible LED segmentation, unreadable
+digits). The screenshots in `docs/screenshots/` are generated from the same code the APK ships.
+Limitation: Robolectric does not exercise the VPN service or the native bridge, so behavioural parity
+is still device-only.
