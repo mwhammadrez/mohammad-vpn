@@ -132,3 +132,9 @@ SPEC.md PLAN.md PROGRESS.md DECISIONS.md
 - AmneziaWG is wired end-to-end but has never been exercised against a real AWG server.
 - No unit tests for the service lifecycle (requires instrumentation).
 - Hysteria2 works only through the subset Xray-core accepts.
+
+## License
+
+Application code: Apache-2.0 (see `LICENSE`).
+Third-party components keep their own licences — Xray-core (MPL-2.0), amneziawg-go (MIT),
+tun2socks (MIT), gVisor (Apache-2.0). See `reference/THIRD_PARTY.md`.

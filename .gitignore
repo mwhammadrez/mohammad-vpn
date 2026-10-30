@@ -24,3 +24,5 @@ phase1-spec.zip
 .cxx/
 .env
 captures/
+core-*/artifacts/*.jar
+third_party/anet/mobile/libs/
