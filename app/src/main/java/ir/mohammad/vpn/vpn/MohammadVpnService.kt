@@ -686,18 +686,25 @@ class MohammadVpnService : VpnService() {
         generation++
         val started = SystemClock.elapsedRealtime()
         LogStore.add("I", TAG, "disconnect: $reason")
-        synchronized(lock) {
-            if (Tunnel.state.value !is TunnelState.Disconnecting) {
-                Tunnel.update(TunnelState.Disconnecting)
+        try {
+            synchronized(lock) {
+                if (Tunnel.state.value !is TunnelState.Disconnecting) {
+                    Tunnel.update(TunnelState.Disconnecting)
+                }
+                cancelConnectTimeout()
+                cancelHealthCheck()
+                cancelStatsPoll()
+                closeResourcesLocked()
+                Tunnel.update(TunnelState.Disconnected)
             }
-            cancelConnectTimeout()
-            cancelHealthCheck()
-            cancelStatsPoll()
-            closeResourcesLocked()
-            Tunnel.update(TunnelState.Disconnected)
+        } catch (t: Throwable) {
+            // A failure while tearing down must never take the process down.
+            LogStore.add("E", TAG, "disconnect failed: ${t.javaClass.simpleName}: ${t.message}")
+            runCatching { Tunnel.update(TunnelState.Disconnected) }
+        } finally {
+            LogStore.add("I", TAG, "disconnected in ${SystemClock.elapsedRealtime() - started} ms")
+            runCatching { stopForegroundCompat() }
         }
-        LogStore.add("I", TAG, "disconnected in ${SystemClock.elapsedRealtime() - started} ms")
-        stopForegroundCompat()
     }
 
     private fun closeAll() {
@@ -759,9 +766,11 @@ class MohammadVpnService : VpnService() {
             }
         }
         runCatching { netMonitor.stop() }
-        worker.shutdownNow()
-        io.shutdownNow()
-        scheduler.shutdownNow()
+        // shutdown(), never shutdownNow(): interrupting a thread that is inside a
+        // JNI/Go call aborts the process.
+        worker.shutdown()
+        io.shutdown()
+        scheduler.shutdown()
         super.onDestroy()
     }
 

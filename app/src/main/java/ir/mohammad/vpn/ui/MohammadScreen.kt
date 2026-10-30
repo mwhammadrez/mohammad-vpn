@@ -76,6 +76,8 @@ fun MohammadScreen(
     pingBusy: Boolean,
     testRunning: Boolean,
     testReport: String?,
+    crashReport: String? = null,
+    onDismissCrash: () -> Unit = {},
     onToggle: () -> Unit,
     onSelect: (Profile) -> Unit,
     onPing: () -> Unit,
@@ -110,6 +112,7 @@ fun MohammadScreen(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Header()
+                if (crashReport != null) CrashCard(crashReport, onDismissCrash)
                 Hero(state, selected, traffic, onToggle)
                 Bento(down, up, traffic)
                 Nodes(profiles, selected, state, onSelect)
@@ -612,6 +615,43 @@ private fun GhostButton(text: String, enabled: Boolean, onClick: () -> Unit, mod
             letterSpacing = 1.6.sp,
             color = if (enabled) Palette.Mint else Palette.TextMuted,
         )
+    }
+}
+
+@Composable
+private fun CrashCard(report: String, onDismiss: () -> Unit) {
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    Glass(shape = 16.dp, border = Palette.Rose.copy(alpha = 0.45f)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("LAST RUN CRASHED", fontFamily = ChakraSemi, fontSize = 10.sp, letterSpacing = 1.4.sp, color = Palette.Rose)
+            Text(
+                report.lineSequence().take(4).joinToString("\n"),
+                fontFamily = Chakra,
+                fontSize = 10.sp,
+                lineHeight = 14.sp,
+                color = Palette.TextSecondary,
+                maxLines = 5,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text(
+                    "COPY",
+                    fontFamily = ChakraSemi,
+                    fontSize = 10.sp,
+                    letterSpacing = 1.2.sp,
+                    color = Palette.Mint,
+                    modifier = Modifier.clickable { clipboard.setText(androidx.compose.ui.text.AnnotatedString(report)) },
+                )
+                Text(
+                    "DISMISS",
+                    fontFamily = ChakraSemi,
+                    fontSize = 10.sp,
+                    letterSpacing = 1.2.sp,
+                    color = Palette.TextMuted,
+                    modifier = Modifier.clickable(onClick = onDismiss),
+                )
+            }
+        }
     }
 }
 

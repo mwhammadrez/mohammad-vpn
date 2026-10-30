@@ -61,6 +61,7 @@ import ir.mohammad.vpn.data.Profile
 import ir.mohammad.vpn.data.Tunnel
 import ir.mohammad.vpn.data.TunnelError
 import ir.mohammad.vpn.data.TunnelState
+import ir.mohammad.vpn.diagnostics.CrashRecorder
 import ir.mohammad.vpn.diagnostics.SelfTest
 import ir.mohammad.vpn.ui.MohammadScreen
 import ir.mohammad.vpn.vpn.MohammadVpnService
@@ -72,6 +73,8 @@ import java.net.InetSocketAddress
 import java.net.Socket
 
 class MainActivity : ComponentActivity() {
+
+    internal var lastCrash: String? = null
 
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -95,6 +98,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        CrashRecorder.install(this)
+        lastCrash = CrashRecorder.take(this)
         requestNotificationPermission()
         loadProfiles()
         captureBaselineEgress()
@@ -225,6 +230,7 @@ fun MohammadApp() {
     var pingBusy by remember { mutableStateOf(false) }
     var testRunning by remember { mutableStateOf(false) }
     var testReport by remember { mutableStateOf<String?>(null) }
+    var crash by remember { mutableStateOf(activity.lastCrash) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(Tunnel.profiles) { selected = Tunnel.selected }
@@ -239,6 +245,8 @@ fun MohammadApp() {
         pingBusy = pingBusy,
         testRunning = testRunning,
         testReport = testReport,
+        crashReport = crash,
+        onDismissCrash = { crash = null },
         onToggle = {
             when (state) {
                 is TunnelState.Connected, is TunnelState.Connecting, is TunnelState.Disconnecting ->
