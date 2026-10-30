@@ -74,6 +74,7 @@ class MohammadVpnService : VpnService() {
     @Volatile private var waitingForNetwork = false
     @Volatile private var reconnecting = false
     private var healthTicks = 0
+    private var statsTicks = 0
     private var probeFailures = 0
 
     private var connectTimeout: ScheduledFuture<*>? = null
@@ -477,9 +478,13 @@ class MohammadVpnService : VpnService() {
         runCatching { core.queryTraffic() }
             .onSuccess { traffic -> Tunnel.updateTraffic(traffic.uplink, traffic.downlink) }
             .onFailure { LogStore.add("W", TAG, "stats query failed: ${it.message}") }
-        runCatching { core.statsDebug() }
-            .onSuccess { Tunnel.statsSnapshot = it }
-            .onFailure { Tunnel.statsSnapshot = "stats-debug-failed: ${it.message}" }
+        // The raw dump is only needed for diagnostics; rebuilding that string every
+        // two seconds costs a JNI round trip and allocations for nothing.
+        if (++statsTicks % 3 == 0) {
+            runCatching { core.statsDebug() }
+                .onSuccess { Tunnel.statsSnapshot = it }
+                .onFailure { Tunnel.statsSnapshot = "stats-debug-failed: ${it.message}" }
+        }
     }
 
     private fun checkHealth() {

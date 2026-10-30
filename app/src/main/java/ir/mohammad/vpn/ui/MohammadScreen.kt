@@ -126,24 +126,12 @@ fun MohammadScreen(
 @Composable
 private fun Backdrop(state: TunnelState) {
     val accent = statusColor(state)
-    val pulse = rememberInfiniteTransition(label = "glow")
-    val t by pulse.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.62f,
-        animationSpec = infiniteRepeatable(tween(3_600, easing = LinearEasing), RepeatMode.Reverse),
-        label = "glowAlpha",
-    )
     Canvas(Modifier.fillMaxSize()) {
         drawRect(
             brush = Brush.radialGradient(
-                colors = listOf(accent.copy(alpha = 0.16f * t), Color.Transparent),
-                center = Offset(size.width * 0.5f, size.height * 0.28f),
-                radius = size.minDimension * 0.85f,
-            ),
-        )
-        drawRect(
-            brush = Brush.verticalGradient(
-                listOf(Color.Transparent, Palette.BgDeep.copy(alpha = 0.9f)),
+                colors = listOf(accent.copy(alpha = 0.10f), Color.Transparent),
+                center = Offset(size.width * 0.5f, size.height * 0.22f),
+                radius = size.minDimension * 0.75f,
             ),
         )
     }
@@ -264,6 +252,8 @@ private fun Pill(profile: Profile?) {
 private fun PowerDial(state: TunnelState, accent: Color, onClick: () -> Unit) {
     val connected = state is TunnelState.Connected
     val busy = state is TunnelState.Connecting || state is TunnelState.Disconnecting
+    // Continuous animation only while a transition is in flight; an idle dial must
+    // not schedule frames (it would force a 60 Hz redraw of the whole screen).
     val spin = rememberInfiniteTransition(label = "dial")
     val phase by spin.animateFloat(
         initialValue = 0f,
@@ -286,6 +276,10 @@ private fun PowerDial(state: TunnelState, accent: Color, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
+            // Read the animated values only during a transition: an idle dial must not
+            // schedule a redraw, otherwise the whole screen repaints at 60 Hz.
+            val phaseNow = if (busy) phase else 0f
+            val breatheNow = if (busy) breathe else 1f
             val c = Offset(size.width / 2f, size.height / 2f)
             val radius = size.minDimension / 2f
 
@@ -316,7 +310,7 @@ private fun PowerDial(state: TunnelState, accent: Color, onClick: () -> Unit) {
                 val on = i < lit
                 val alpha = when {
                     on -> 1f
-                    busy && ((i + (phase / sweep).toInt()) % 4 == 0) -> breathe
+                    busy && ((i + (phaseNow / sweep).toInt()) % 4 == 0) -> breatheNow
                     else -> 0.16f
                 }
                 drawArc(
@@ -344,7 +338,7 @@ private fun PowerDial(state: TunnelState, accent: Color, onClick: () -> Unit) {
             // inner energy ring
             val rIn = radius * 0.55f
             drawCircle(
-                color = accent.copy(alpha = if (connected) 0.30f + 0.2f * breathe else 0.10f),
+                color = accent.copy(alpha = if (connected) 0.42f else 0.10f),
                 radius = rIn,
                 center = c,
                 style = Stroke(width = 1.4.dp.toPx()),

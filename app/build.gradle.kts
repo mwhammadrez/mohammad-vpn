@@ -20,8 +20,8 @@ android {
         applicationId = "ir.mohammad.vpn"
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
-        versionName = "0.8.1"
+        versionCode = 18
+        versionName = "0.8.2"
         val escapedPassword = operatorPassword
             .replace("\\", "\\\\")
             .replace("\"", "\\\"")
@@ -41,7 +41,12 @@ android {
     }
 
     buildTypes {
-        debug { isMinifyEnabled = false }
+        debug {
+            isMinifyEnabled = false
+            // A debuggable build runs Compose without ART optimisations; the UI is
+            // noticeably sluggish on device. Keep the debug key, drop the flag.
+            isDebuggable = false
+        }
         release { isMinifyEnabled = false }
     }
 }
