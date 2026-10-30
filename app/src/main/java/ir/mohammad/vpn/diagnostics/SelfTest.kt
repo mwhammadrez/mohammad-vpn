@@ -1,6 +1,9 @@
 package ir.mohammad.vpn.diagnostics
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Build
 import ir.mohammad.vpn.BuildConfig
 import ir.mohammad.vpn.data.LogStore
@@ -9,6 +12,7 @@ import ir.mohammad.vpn.data.TunnelState
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.URLConnection
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -35,6 +39,11 @@ object SelfTest {
 
     suspend fun run(context: Context): String = withContext(Dispatchers.IO) {
         val started = System.currentTimeMillis()
+        // The app excludes itself from its own VPN so the core can reach the server
+        // without looping. That also hides the tunnel from this self-test, which
+        // would then always report "no-tunnel". Bind the probe sockets to the VPN
+        // network explicitly so they traverse the tunnel.
+        val vpn = vpnNetwork(context)
         LogStore.add("I", "TEST", "self-test started")
 
         val state = Tunnel.state.value
@@ -43,8 +52,12 @@ object SelfTest {
 
         val dns = listOf("example.com", "cloudflare.com", "wikipedia.org").map { resolve(it) }
 
-        val egress = fetchEgress("https://ifconfig.co/json", "ip")
-        val ipv6 = if (hasLocalIpv6()) fetchEgress("https://api6.ipify.org?format=json", "ip", forceIpv6 = true) else Egress(null, 0, "no local ipv6")
+        val egress = fetchEgress("https://ifconfig.co/json", "ip", vpn)
+        val ipv6 = if (hasLocalIpv6()) {
+            fetchEgress("https://api6.ipify.org?format=json", "ip", vpn, forceIpv6 = true)
+        } else {
+            Egress(null, 0, "no local ipv6")
+        }
         val verdict = EgressVerdict.of(
             baseline = Tunnel.baselineEgressIp,
             current = egress.ip,
@@ -54,7 +67,7 @@ object SelfTest {
 
         val statsBefore = Tunnel.statsSnapshot
         val trafficBefore = Tunnel.traffic.value
-        val download = download1MiB()
+        val download = download1MiB(vpn)
         kotlinx.coroutines.delay(3_000)
         val trafficAfter = Tunnel.traffic.value
         val delta = Traffic(
@@ -154,6 +167,21 @@ object SelfTest {
         report.toString(2)
     }
 
+    /** The VPN network, if the tunnel is up; null falls back to the default network. */
+    private fun vpnNetwork(context: Context): Network? = runCatching {
+        val manager = context.getSystemService(ConnectivityManager::class.java)
+        manager.allNetworks.firstOrNull { network ->
+            manager.getNetworkCapabilities(network)
+                ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+        }
+    }.getOrNull()
+
+    private fun open(url: String, network: Network?): URLConnection =
+        network?.openConnection(java.net.URL(url)) ?: java.net.URL(url).openConnection()
+
+    /** An IPv6 literal contains a colon and no dots; anything else is IPv4. */
+    internal fun isIpv6Literal(value: String): Boolean = value.contains(':') && !value.contains('.')
+
     private fun resolve(host: String): DnsResult {
         val started = System.nanoTime()
         return try {
@@ -164,11 +192,16 @@ object SelfTest {
         }
     }
 
-    private fun fetchEgress(url: String, field: String, forceIpv6: Boolean = false): Egress {
+    private fun fetchEgress(
+        url: String,
+        field: String,
+        network: Network?,
+        forceIpv6: Boolean = false,
+    ): Egress {
         val started = System.nanoTime()
         var connection: HttpURLConnection? = null
         return try {
-            connection = (URL(url).openConnection() as HttpURLConnection).apply {
+            connection = (open(url, network) as HttpURLConnection).apply {
                 connectTimeout = HTTP_TIMEOUT_MS
                 readTimeout = HTTP_TIMEOUT_MS
                 requestMethod = "GET"
@@ -176,8 +209,14 @@ object SelfTest {
                 setRequestProperty("Accept", "application/json")
             }
             val body = connection.inputStream.bufferedReader().use { it.readText() }
-            val ip = JSONObject(body).optString(field).takeIf { it.isNotBlank() }
-            Egress(ip, (System.nanoTime() - started) / 1_000_000, if (ip == null) "empty field" else null)
+            val reported = JSONObject(body).optString(field).takeIf { it.isNotBlank() }
+            if (forceIpv6 && reported != null && !isIpv6Literal(reported)) {
+                // A dual-stack host answered over IPv4: the result says nothing
+                // about IPv6 reachability, so refuse to report it as an address.
+                Egress(null, (System.nanoTime() - started) / 1_000_000, "answered over IPv4")
+            } else {
+                Egress(reported, (System.nanoTime() - started) / 1_000_000, if (reported == null) "empty field" else null)
+            }
         } catch (e: Exception) {
             Egress(null, (System.nanoTime() - started) / 1_000_000, e.javaClass.simpleName + ": " + e.message)
         } finally {
@@ -185,10 +224,10 @@ object SelfTest {
         }
     }
 
-    private fun download1MiB(): String {
+    private fun download1MiB(network: Network?): String {
         var connection: HttpURLConnection? = null
         return try {
-            connection = (URL("https://speed.cloudflare.com/__down?bytes=$DOWNLOAD_BYTES").openConnection() as HttpURLConnection).apply {
+            connection = (open("https://speed.cloudflare.com/__down?bytes=$DOWNLOAD_BYTES", network) as HttpURLConnection).apply {
                 connectTimeout = HTTP_TIMEOUT_MS
                 readTimeout = HTTP_TIMEOUT_MS
                 setRequestProperty("User-Agent", "Mohammad-SelfTest")
