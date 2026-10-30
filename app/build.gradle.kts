@@ -20,8 +20,8 @@ android {
         applicationId = "ir.mohammad.vpn"
         minSdk = 26
         targetSdk = 36
-        versionCode = 16
-        versionName = "0.8.0"
+        versionCode = 17
+        versionName = "0.8.1"
         val escapedPassword = operatorPassword
             .replace("\\", "\\\\")
             .replace("\"", "\\\"")
@@ -37,7 +37,7 @@ android {
     }
 
     packaging {
-        jniLibs { useLegacyPackaging = false }
+        jniLibs { useLegacyPackaging = true }
     }
 
     buildTypes {
