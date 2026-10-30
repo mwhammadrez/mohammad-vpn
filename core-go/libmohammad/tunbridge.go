@@ -6,11 +6,15 @@ import (
 	"strconv"
 	"sync"
 
+	"golang.org/x/sys/unix"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
 	"github.com/xjasonlyu/tun2socks/v2/core"
+	"github.com/xjasonlyu/tun2socks/v2/core/device"
 	"github.com/xjasonlyu/tun2socks/v2/core/device/fdbased"
 	"github.com/xjasonlyu/tun2socks/v2/proxy"
+	// Registers the "socks5://" scheme with proxy.Parse.
+	_ "github.com/xjasonlyu/tun2socks/v2/proxy/socks5"
 	"github.com/xjasonlyu/tun2socks/v2/tunnel"
 )
 
@@ -21,6 +25,7 @@ import (
 type TunBridge struct {
 	mu  sync.Mutex
 	stk *stack.Stack
+	dev device.Device
 }
 
 // NewTunBridge creates a bridge with no running stack.
@@ -45,13 +50,34 @@ func (b *TunBridge) Start(fd int64, mtu int64, proxyAddr string) (err error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			b.stk = nil
+			if b.stk != nil {
+				b.stk.Close()
+				b.stk.Wait()
+				b.stk = nil
+			}
+			if b.dev != nil {
+				b.dev.Close()
+				b.dev = nil
+			}
 			err = errors.New("tun2socks panic")
 		}
 	}()
 
-	dev, err := fdbased.Open(strconv.FormatInt(fd, 10), uint32(mtu), 0)
+	// The caller keeps ownership of fd. Duplicate it so that closing the
+	// bridge can never close the ParcelFileDescriptor owned by Java, and so a
+	// second close cannot hit a recycled descriptor number.
+	dupFd, err := unix.Dup(int(fd))
 	if err != nil {
+		return errors.New("tun fd dup failed: " + err.Error())
+	}
+	if err := unix.SetNonblock(dupFd, true); err != nil {
+		_ = unix.Close(dupFd)
+		return errors.New("tun fd nonblock failed: " + err.Error())
+	}
+
+	dev, err := fdbased.Open(strconv.Itoa(dupFd), uint32(mtu), 0)
+	if err != nil {
+		_ = unix.Close(dupFd)
 		return errors.New("device open failed: " + err.Error())
 	}
 
@@ -77,6 +103,7 @@ func (b *TunBridge) Start(fd int64, mtu int64, proxyAddr string) (err error) {
 	}
 
 	b.stk = stk
+	b.dev = dev
 	return nil
 }
 
@@ -98,6 +125,11 @@ func (b *TunBridge) Stop() (err error) {
 	b.stk.Close()
 	b.stk.Wait()
 	b.stk = nil
+	if b.dev != nil {
+		// Closes only the duplicated descriptor held by the device.
+		b.dev.Close()
+		b.dev = nil
+	}
 	return nil
 }
 

@@ -138,3 +138,12 @@ Audit A1.1 found 1400 while mature clients default to 1500. The bundle may still
 ## D-26 — Default MTU is 1500 again
 **Date:** 2026-10-30
 The operator bundle's `defaultMtu: 1400` was removed so the parity default (1500) applies. MTU remains overridable per bundle (clamped 1200–1500) and is reported in the self-test.
+
+## D-27 — Blank import of `proxy/socks5` (discovered during P0)
+**Date:** 2026-10-30 · **Scope:** prerequisite for P0's success-path test
+`tun2socks` registers proxy schemes from package `init` functions, so `proxy.Parse` returned `unknown protocol` for `socks5://127.0.0.1:10808` unless `proxy/socks5` is imported. The first version of `TunBridge` did not import it, meaning the bridge could never have started on a device — the defect was invisible until the host test exercised the success path.
+This was outside the literal P0 scope (fd ownership) but is required for P0's evidence to be meaningful, and it is a one-line, side-effect-free import. Recorded here rather than folded silently into the P0 commit.
+
+## D-28 — TUN descriptor ownership contract
+**Date:** 2026-10-30
+Java (`ParcelFileDescriptor`) is the single owner and closer of the VpnService descriptor. The Go bridge duplicates it with `unix.Dup` and owns only the duplicate; `TunBridge.Stop` closes the device (hence the duplicate) and is idempotent. No other component may close the original number. Enforced by three host tests in `core-go/libmohammad/tunbridge_test.go`.

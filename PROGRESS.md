@@ -171,3 +171,11 @@ Data path is now the one mature clients use:
 - APK grew 45 MB → 50 MB (gVisor netstack, arm64 `.so` 37.9 → 43.3 MB after strip).
 
 `NOT VERIFIED`: runtime behaviour on a device; the new path has never carried traffic on hardware.
+
+**2026-10-30 · v0.7.1 — P0: TUN fd duplication (double-close fix)**
+- `TunBridge.Start` now `unix.Dup`s the caller's descriptor, sets the duplicate non-blocking, and gives only the duplicate to `fdbased.Open`. Every failure branch closes the duplicate; the caller's fd is never touched.
+- `TunBridge.Stop` closes the device (duplicate) and is idempotent (`b.stk == nil` guard).
+- Prerequisite fixed: `proxy/socks5` blank import — without it `proxy.Parse("socks5://…")` returned `unknown protocol` and the bridge could never start (D-27).
+- Host tests: `go test ./libmohammad/` → 3/3 PASS (original fd survives stop, double stop is a no-op, failed start leaks nothing).
+- Gradle gates: testDebugUnitTest ✅ · lintDebug ✅ · assembleDebug ✅ · check-no-placeholders ✅.
+- Behavioural parity remains **UNKNOWN**; nothing was run on a device.

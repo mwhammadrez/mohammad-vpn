@@ -85,7 +85,7 @@ Mohammad's 0.7.0 now implements the same shape. Structural parity: **MATCH_STATI
 | Direct / block | routing rules → `direct`/`block` outbounds | **MATCH_STATIC** |
 | Proxy-only | HTTP inbound exists, no service | **MISSING** |
 
-## D04 — Descriptor ownership — **DEFECT FOUND**
+## D04 — Descriptor ownership — **FIXED in 0.7.1**
 
 Claim under audit: *"the bridge opens its own view on the same fd number while Java retains ownership."* This is **false** for 0.7.0.
 
@@ -107,15 +107,27 @@ Consequences:
 
 | ID | Item | Result |
 |---|---|---|
-| D04.1 | Duplication on adopt | **DIFFERENT_UNAPPROVED** — no dup |
-| D04.2 | Two owners of one fd | **DIFFERENT_UNAPPROVED** — `TunBridge.Stop()` closes fd N; `closeResourcesLocked()` then closes the `ParcelFileDescriptor` for the same N → **double close**, possible close of a reused descriptor |
-| D04.3 | Startup failure path | **DIFFERENT_UNAPPROVED** — `Start` failure after `fdbased.Open` closes the device (i.e. the app's fd) |
+| D04.1 | Duplication on adopt | **FIXED** — `unix.Dup` before `fdbased.Open`; the device owns only the duplicate |
+| D04.2 | Two owners of one fd | **FIXED** — `Stop()` closes the device (duplicate) only; `ParcelFileDescriptor.close()` remains the sole closer of the original |
+| D04.3 | Startup failure path | **FIXED** — duplicate closed on every failure branch; the caller's descriptor is never touched |
 | D04.4 | Repeated start/stop | **UNKNOWN** — stack is recreated, global `tunnel.T()` proxy is replaced |
 | D04.5 | Stop unblocks pending reads | **UNKNOWN** — `stack.Close()+Wait()` should, untested |
 
 The AmneziaWG bridge (`awg.go`) *does* `unix.Dup` + `SetNonblock`; the Xray/TunBridge path does not. This asymmetry is the bug.
 
-**Proposed fix (needs approval):** in `TunBridge.Start`, `dupFd, err := unix.Dup(int(fd))` and hand `dupFd` to `fdbased.Open`, closing only `dupFd` on stop; on any startup error close `dupFd` and never the caller's number. Host test: closing the bridge does not close the original; double stop is a no-op.
+**Fix applied (0.7.1):** `TunBridge.Start` duplicates with `unix.Dup`, sets the duplicate non-blocking, and hands the duplicate to `fdbased.Open`; `Stop` closes the device (the duplicate) and is idempotent; every failure branch closes the duplicate.
+
+Host evidence (`cd core-go && go test ./libmohammad/ -run 'TestStopDoesNotCloseCallerFD|TestDoubleStopIsIdempotent|TestStartFailureReleasesResources' -v`):
+
+```
+--- PASS: TestStopDoesNotCloseCallerFD (0.00s)
+--- PASS: TestDoubleStopIsIdempotent (0.00s)
+--- PASS: TestStartFailureReleasesResources (0.00s)
+PASS
+ok  	ir.mohammad.corego/libmohammad	0.018s
+```
+
+**Prerequisite defect found while writing the test:** `proxy.Parse("socks5://…")` failed with `proxy: unknown protocol`, because tun2socks registers protocols through package init. Without a blank import of `proxy/socks5` the bridge could never start — the success-path test skipped. The import was added; see `DECISIONS.md` D-27.
 
 ## D05 — TUN construction
 
