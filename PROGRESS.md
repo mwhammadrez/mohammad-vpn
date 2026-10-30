@@ -229,3 +229,14 @@ Data path is now the one mature clients use:
 - Found while rendering: Orbitron's slashed zero made the timer and every metric look broken at a
   glance → numeric displays moved to Chakra Petch; Orbitron keeps the brand and section labels.
 - Empty sparklines now draw a flat baseline instead of looking like an empty box.
+
+**2026-10-30 · v0.9.3 — behavioural test sweep**
+- New Robolectric suites: `ServiceLifecycleTest` (4), `UiInteractionTest` (7), `BundleLoadTest` (3),
+  `CrashRecorderTest` (2), `LaunchTest` (1), plus a compact-width render.
+- 83 tests total, 0 failures.
+- Bug found by the compact render: at 320 dp the session timer wrapped to two lines and the profile
+  pill truncated. The hero card is now size-aware (24 sp timer, 116 dp dial, tighter padding).
+- `BundleLoadTest` decrypts the bundle that actually ships, so a re-encryption mistake fails in CI
+  rather than on the phone.
+- `ServiceLifecycleTest` covers the disconnect path that was reported as closing the app; the native
+  bridge is not exercised by Robolectric, so that specific crash still needs a device retest.

@@ -12,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,6 +49,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -193,8 +196,13 @@ private fun Header() {
 private fun Hero(state: TunnelState, profile: Profile?, traffic: Pair<Long, Long>, onToggle: () -> Unit) {
     val accent = statusColor(state)
     Glass(shape = 26.dp, border = accent.copy(alpha = 0.28f)) {
+        BoxWithConstraints {
+            // A 320 dp phone cannot hold a 30 sp timer next to a 148 dp dial.
+            val compact = maxWidth < 340.dp
+            val timerSize = if (compact) 24.sp else 30.sp
+            val dialSize = if (compact) 116.dp else 148.dp
         Row(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(if (compact) 14.dp else 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -211,8 +219,10 @@ private fun Hero(state: TunnelState, profile: Profile?, traffic: Pair<Long, Long
                     sessionTimer(state),
                     fontFamily = ChakraSemi,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 30.sp,
+                    fontSize = timerSize,
                     color = Palette.TextPrimary,
+                    maxLines = 1,
+                    softWrap = false,
                 )
                 Text(
                     "↓ ${human(traffic.second)}   ↑ ${human(traffic.first)}",
@@ -229,7 +239,8 @@ private fun Hero(state: TunnelState, profile: Profile?, traffic: Pair<Long, Long
                     )
                 }
             }
-            PowerDial(state, accent, onToggle)
+            PowerDial(state, accent, onToggle, dialSize)
+        }
         }
     }
 }
@@ -259,14 +270,20 @@ private fun Pill(profile: Profile?) {
 }
 
 @Composable
-private fun PowerDial(state: TunnelState, accent: Color, onClick: () -> Unit) {
+private fun PowerDial(state: TunnelState, accent: Color, onClick: () -> Unit, dialSize: androidx.compose.ui.unit.Dp = 148.dp) {
     val connected = state is TunnelState.Connected
     val busy = state is TunnelState.Connecting || state is TunnelState.Disconnecting
 
+    val dialLabel = when {
+        connected -> "Disconnect"
+        busy -> "Connecting"
+        else -> "Connect"
+    }
     Box(
         modifier = Modifier
-            .size(148.dp)
+            .size(dialSize)
             .clip(CircleShape)
+            .semantics { contentDescription = dialLabel }
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
@@ -690,6 +707,7 @@ private fun ToggleRow(label: String, hint: String, checked: Boolean, onChange: (
         }
         Box(
             Modifier
+                .semantics { contentDescription = "$label ${if (checked) "on" else "off"}" }
                 .size(width = 40.dp, height = 22.dp)
                 .clip(RoundedCornerShape(50))
                 .background(if (checked) Palette.Mint.copy(alpha = 0.85f) else Color(0x1FFFFFFF))

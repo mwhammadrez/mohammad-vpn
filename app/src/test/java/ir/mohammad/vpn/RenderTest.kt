@@ -59,6 +59,11 @@ class RenderTest {
     @Test
     fun rendersConnected() = render(TunnelState.Connected, "connected")
 
+    /** Small phones and large fonts must not overflow or crash. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w320dp-h640dp-xhdpi")
+    fun rendersOnASmallScreen() = render(TunnelState.Connected, "compact")
+
     @Test
     fun rendersDisconnected() = render(TunnelState.Disconnected, "disconnected")
 }
