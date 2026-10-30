@@ -119,3 +119,9 @@ Remaining open items are listed in `docs/VERIFICATION_REPORT.md` §"Known limita
 **2026-10-30 · AWG test plan authored**
 - `docs/AWG_TEST_PLAN.md`: exact AWG profile schema, required/optional fields, redacted example, build/install commands, execution checklist with expected log lines, failure signatures, and what evidence to return.
 - Device verification **not** received: the operator's message contained the empty template only. Verdict stays `PARITY PARTIAL`.
+
+**2026-10-30 · v0.5.0 — in-app self-test (device evidence without adb)**
+- `diagnostics/SelfTest.kt`: captures carrier egress IP before connect, current egress while connected, DNS timings, 1 MiB core-counter delta, ping, IPv6 escape flag, redacted log tail; emits a JSON report with Copy/Share buttons.
+- `EgressVerdict` is pure and unit-tested (5 tests): changed/no-tunnel/inconclusive + IPv6 leak flag.
+- Tests 32 → 37, all green. lint/assemble/placeholder gates green.
+- Guide: `docs/SELF_TEST_GUIDE.md` (steps + field-to-row mapping).

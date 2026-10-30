@@ -34,6 +34,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,6 +60,7 @@ import ir.mohammad.vpn.data.Profile
 import ir.mohammad.vpn.data.Tunnel
 import ir.mohammad.vpn.data.TunnelError
 import ir.mohammad.vpn.data.TunnelState
+import ir.mohammad.vpn.diagnostics.SelfTest
 import ir.mohammad.vpn.vpn.MohammadVpnService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -91,6 +94,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         requestNotificationPermission()
         loadProfiles()
+        captureBaselineEgress()
         setContent { MohammadApp() }
     }
 
@@ -128,6 +132,35 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun prefs() = getSharedPreferences("mohammad", Context.MODE_PRIVATE)
+
+    /**
+     * Records the carrier egress IP while disconnected. The self-test compares it
+     * with the IP seen while connected, which is the only proof that traffic
+     * really leaves through the server.
+     */
+    private fun captureBaselineEgress() {
+        if (Tunnel.baselineEgressIp != null) return
+        lifecycleScope.launch {
+            val ip = withContext(Dispatchers.IO) {
+                runCatching {
+                    val connection = (java.net.URL("https://ifconfig.co/json").openConnection() as java.net.HttpURLConnection).apply {
+                        connectTimeout = 8_000
+                        readTimeout = 8_000
+                        setRequestProperty("User-Agent", "Mohammad-SelfTest")
+                    }
+                    val body = connection.inputStream.bufferedReader().use { it.readText() }
+                    connection.disconnect()
+                    org.json.JSONObject(body).optString("ip").takeIf { it.isNotBlank() }
+                }.getOrNull()
+            }
+            if (ip != null) {
+                Tunnel.baselineEgressIp = ip
+                LogStore.add("I", "TEST", "baseline egress captured")
+            } else {
+                LogStore.add("W", "TEST", "baseline egress unavailable")
+            }
+        }
+    }
 
     fun selectProfile(profile: Profile) {
         Tunnel.selected = profile
@@ -182,6 +215,8 @@ fun MohammadApp() {
     var menuOpen by remember { mutableStateOf(false) }
     var pingText by remember { mutableStateOf("") }
     var pingEnabled by remember { mutableStateOf(true) }
+    var testRunning by remember { mutableStateOf(false) }
+    var testReport by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
 
@@ -269,6 +304,47 @@ fun MohammadApp() {
                     enabled = pingEnabled && selected != null && !busy,
                 ) { Text("Test ping") }
                 Text(pingText, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        testRunning = true
+                        testReport = null
+                        scope.launch {
+                            testReport = runCatching { SelfTest.run(context.applicationContext) }
+                                .getOrElse { "self-test failed: ${it.javaClass.simpleName}: ${it.message}" }
+                            testRunning = false
+                        }
+                    },
+                    enabled = !testRunning,
+                ) { Text(if (testRunning) "Running…" else "Run self-test") }
+
+                testReport?.let { report ->
+                    TextButton(onClick = {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Mohammad self-test", report))
+                    }) { Text("Copy report") }
+                    TextButton(onClick = {
+                        val share = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "Mohammad self-test")
+                            putExtra(Intent.EXTRA_TEXT, report)
+                        }
+                        context.startActivity(Intent.createChooser(share, "Share self-test"))
+                    }) { Text("Share") }
+                }
+            }
+
+            if (testReport != null) {
+                Text(
+                    "Report ready (contains your public IP). Use Copy or Share, then send it to the operator.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
 
             Row(

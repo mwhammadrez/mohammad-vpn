@@ -50,6 +50,10 @@ object Tunnel {
     @Volatile
     var ipv6Enabled: Boolean = true
 
+    /** Carrier egress IP captured before the first connect; null until known. */
+    @Volatile
+    var baselineEgressIp: String? = null
+
     private val _traffic = MutableStateFlow(0L to 0L)
     val traffic: StateFlow<Pair<Long, Long>> = _traffic.asStateFlow()
 
