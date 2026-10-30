@@ -17,3 +17,10 @@ captures/
 *.aar
 docs-pack-*.zip
 phase1-spec.zip
+*.aab
+*.jks
+*.keystore
+.DS_Store
+.cxx/
+.env
+captures/
