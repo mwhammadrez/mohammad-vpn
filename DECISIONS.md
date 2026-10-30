@@ -147,3 +147,17 @@ This was outside the literal P0 scope (fd ownership) but is required for P0's ev
 ## D-28 — TUN descriptor ownership contract
 **Date:** 2026-10-30
 Java (`ParcelFileDescriptor`) is the single owner and closer of the VpnService descriptor. The Go bridge duplicates it with `unix.Dup` and owns only the duplicate; `TunBridge.Stop` closes the device (hence the duplicate) and is idempotent. No other component may close the original number. Enforced by three host tests in `core-go/libmohammad/tunbridge_test.go`.
+
+## D-29 — Handover policy is a pure decision object
+**Date:** 2026-10-30
+`HandoverPolicy` takes a `HandoverContext` snapshot and returns an action (`Ignore`, `HoldForNetwork`, `Resume`, `Exhausted`). It holds no Android types, so the entire handover matrix is unit-testable without a device. The service owns side effects (rebinding, teardown, scheduling) and never makes the decision itself.
+Rationale: the previous failure mode was untestable service glue; extracting the decision makes the interesting logic provable on the JVM.
+
+## D-30 — Data-path watchdog uses an end-to-end SOCKS probe
+**Date:** 2026-10-30
+`XrayController.isRunning` only proves the core process exists. After a handover the core stays alive while its outbound sockets are dead, so the old watchdog never fired. `SocksProbe` performs a SOCKS5 greeting plus `CONNECT` to the active profile's host through `127.0.0.1:10808`; success proves the chain answers end-to-end. Two consecutive failures (checked every 30 s) trigger the reconnect path.
+The probe target comes from memory and is never logged; failures log only a counter.
+
+## D-31 — Network loss never stops the service
+**Date:** 2026-10-30
+`scheduleRetry` previously called `stopSelf()` when offline, so a phone call killed the tunnel permanently. Now an offline retry sets `waitingForNetwork`, keeps the foreground service, and the `NetMonitor` collector resumes with a bounded attempt when connectivity returns. Only an exhausted retry budget stops the service.

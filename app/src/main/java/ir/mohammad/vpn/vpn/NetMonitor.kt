@@ -18,16 +18,22 @@ class NetMonitor(context: Context) {
     private val _online = MutableStateFlow(isCurrentlyOnline())
     val online: StateFlow<Boolean> = _online.asStateFlow()
 
+    private val _activeNetwork = MutableStateFlow(currentNetwork())
+    /** The network carrying traffic; emits on every handover, even online-to-online. */
+    val activeNetwork: StateFlow<Network?> = _activeNetwork.asStateFlow()
+
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             if (!_online.value) LogStore.add("I", "NET", "network available")
             _online.value = true
+            _activeNetwork.value = network
         }
 
         override fun onLost(network: Network) {
             val stillOnline = isCurrentlyOnline()
             if (_online.value && !stillOnline) LogStore.add("W", "NET", "network lost")
             _online.value = stillOnline
+            _activeNetwork.value = currentNetwork()
         }
 
         override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
@@ -36,6 +42,7 @@ class NetMonitor(context: Context) {
                 _online.value = true
                 LogStore.add("I", "NET", "network validated")
             }
+            if (validated) _activeNetwork.value = network
         }
     }
 

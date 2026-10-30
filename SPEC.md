@@ -258,3 +258,13 @@ A milestone is done when: all its ACs pass with real output; full regression sui
 ## 14. Open items (tracked in `DECISIONS.md`)
 
 O-1 signing key (none; debug only) · O-2 device availability (none) · O-3 release ABI expansion · O-4 Hysteria2 `obfs`/`bandwidth` (excluded) · O-5 Persian localization (structure only).
+
+## Handover behaviour (0.7.3)
+
+| Situation | Required behaviour |
+|---|---|
+| Network lost (call, tunnel switch, airplane mode) | Service stays alive; state becomes `Failed(NetworkUnavailable)`; retries are cancelled, not fired |
+| Network restored | Underlying network rebound; one bounded reconnect through `RetryPolicy`; generation and `userStopped` respected |
+| User disconnects during the outage | No reconnect on restoration |
+| Core alive but data path dead | SOCKS probe detects it; two consecutive failures trigger reconnect |
+| Retry budget exhausted | `RECONNECT_FAILED`; service stops instead of looping |

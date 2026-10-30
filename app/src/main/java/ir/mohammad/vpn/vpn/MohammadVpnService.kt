@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.Network
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -20,6 +21,11 @@ import ir.mohammad.vpn.data.Profile
 import ir.mohammad.vpn.data.Tunnel
 import ir.mohammad.vpn.data.TunnelError
 import ir.mohammad.vpn.data.TunnelState
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import libmohammad.AwgController
 import libmohammad.TunBridge
 import libmohammad.XrayController
@@ -42,6 +48,10 @@ class MohammadVpnService : VpnService() {
         const val CONNECT_TIMEOUT_MS = 15_000L
         const val HEALTH_INTERVAL_MS = 5_000L
 
+        /** Probe the data path at most this often (health ticks x interval). */
+        const val PROBE_EVERY_TICKS = 6
+        const val PROBE_FAILURES_TO_RECONNECT = 2
+
         const val TAG = "VPN"
     }
 
@@ -58,6 +68,14 @@ class MohammadVpnService : VpnService() {
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val retryPolicy = RetryPolicy()
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val handover = HandoverPolicy()
+    @Volatile private var retryFuture: ScheduledFuture<*>? = null
+    @Volatile private var waitingForNetwork = false
+    @Volatile private var reconnecting = false
+    private var healthTicks = 0
+    private var probeFailures = 0
+
     private var connectTimeout: ScheduledFuture<*>? = null
     private var healthCheck: ScheduledFuture<*>? = null
     private var statsPoll: ScheduledFuture<*>? = null
@@ -71,6 +89,16 @@ class MohammadVpnService : VpnService() {
     override fun onCreate() {
         super.onCreate()
         netMonitor = NetMonitor(this).also { it.start() }
+        scope.launch {
+            netMonitor.online.collect { online ->
+                if (online) onConnectivityRestored() else onConnectivityLost()
+            }
+        }
+        scope.launch {
+            netMonitor.activeNetwork.collect { network ->
+                if (network != null) rebindUnderlying(network)
+            }
+        }
         LogStore.add("D", TAG, "service created")
     }
 
@@ -190,6 +218,10 @@ class MohammadVpnService : VpnService() {
                 mark("core")
                 LogStore.add("I", TAG, "tunnel connected")
                 mark("connected")
+                if (reconnecting) {
+                    reconnecting = false
+                    LogStore.add("I", "NET", "RECONNECT_SUCCEEDED in ${SystemClock.elapsedRealtime() - t0} ms")
+                }
                 updateNotification("Connected", profile.name)
                 armHealthCheck()
                 armStatsPoll()
@@ -455,14 +487,146 @@ class MohammadVpnService : VpnService() {
         if (userStopped) return
         if (Tunnel.state.value !is TunnelState.Connected) return
         val alive = (xray?.isRunning ?: false) || (awg?.isRunning ?: false)
-        if (alive) return
+        if (!alive) {
+            LogStore.add("E", TAG, "engine stopped unexpectedly (watchdog)")
+            synchronized(lock) {
+                closeResourcesLocked()
+                Tunnel.update(TunnelState.Failed(TunnelError.CoreCrashed))
+            }
+            scheduleRetry("engine crashed")
+            return
+        }
+        checkDataPath()
+    }
 
-        LogStore.add("E", TAG, "engine stopped unexpectedly (watchdog)")
+    /**
+     * A live core process is not a live tunnel: after a handover Xray keeps running
+     * while its outbound sockets are dead. Probe the local SOCKS inbound end-to-end
+     * and reconnect when it stops answering.
+     */
+    private fun checkDataPath() {
+        if (!netMonitor.online.value) return
+        healthTicks++
+        if (healthTicks % PROBE_EVERY_TICKS != 0) return
+
+        val profile = Tunnel.selected ?: return
+        val ok = SocksProbe.probe(XrayConfig.SOCKS_PORT, profile.host, profile.port)
+        if (ok) {
+            probeFailures = 0
+            return
+        }
+        probeFailures++
+        LogStore.add("W", TAG, "data path probe failed ($probeFailures/$PROBE_FAILURES_TO_RECONNECT)")
+        if (probeFailures < PROBE_FAILURES_TO_RECONNECT) return
+
+        probeFailures = 0
+        LogStore.add("W", "NET", "RECONNECT_STARTED (dead outbound path)")
+        forceReconnect("dead outbound path")
+    }
+
+    private fun forceReconnect(reason: String) {
+        if (userStopped) return
+        reconnecting = true
         synchronized(lock) {
             closeResourcesLocked()
-            Tunnel.update(TunnelState.Failed(TunnelError.CoreCrashed))
+            Tunnel.update(TunnelState.Failed(TunnelError.NetworkUnavailable))
         }
-        scheduleRetry("engine crashed")
+        scheduleRetry(reason)
+    }
+
+    // ------------------------------------------------------------- handover
+
+    private fun onConnectivityLost() {
+        LogStore.add("W", "NET", "NETWORK_LOST")
+        retryFuture?.cancel(false)
+        retryFuture = null
+
+        val ctx = HandoverContext(
+            userStopped = userStopped,
+            generationMatches = true,
+            connected = Tunnel.state.value is TunnelState.Connected,
+            online = false,
+            attemptsUsed = attempt,
+        )
+        when (val action = handover.onEvent(HandoverEvent.NETWORK_LOST, ctx)) {
+            is HandoverAction.HoldForNetwork -> {
+                waitingForNetwork = true
+                LogStore.add("D", TAG, "holding tunnel open until the network returns")
+                updateNotification("Network lost", "Waiting for connectivity")
+                synchronized(lock) {
+                    if (Tunnel.state.value is TunnelState.Connected) {
+                        Tunnel.update(TunnelState.Failed(TunnelError.NetworkUnavailable))
+                    }
+                }
+            }
+            else -> Unit
+        }
+    }
+
+    private fun onConnectivityRestored() {
+        // The StateFlow replays its current value on subscribe; ignore it when there
+        // is no tunnel to resume.
+        if (tun == null && !waitingForNetwork && Tunnel.state.value is TunnelState.Disconnected) return
+        LogStore.add("I", "NET", "NETWORK_RESTORED")
+        waitingForNetwork = false
+        retryFuture?.cancel(false)
+        retryFuture = null
+
+        netMonitor.currentNetwork()?.let { rebindUnderlying(it) }
+
+        val gen = generation
+        val ctx = HandoverContext(
+            userStopped = userStopped,
+            generationMatches = gen == generation,
+            connected = tun != null || Tunnel.state.value is TunnelState.Connected,
+            online = true,
+            attemptsUsed = attempt,
+        )
+        when (val action = handover.onEvent(HandoverEvent.NETWORK_RESTORED, ctx)) {
+            is HandoverAction.Resume -> {
+                attempt = action.attempt
+                reconnecting = true
+                LogStore.add(
+                    "I", "NET",
+                    "RECONNECT_STARTED attempt=${action.attempt} in ${action.delayMs} ms",
+                )
+                updateNotification("Reconnecting…", "Attempt ${action.attempt}")
+                try {
+                    retryFuture = scheduler.schedule(
+                        { submit { resumeConnect(gen) } },
+                        action.delayMs,
+                        TimeUnit.MILLISECONDS,
+                    )
+                } catch (e: RejectedExecutionException) {
+                    LogStore.add("W", TAG, "scheduler rejected handover retry: ${e.message}")
+                }
+            }
+            HandoverAction.Exhausted -> {
+                reconnecting = false
+                LogStore.add("W", "NET", "RECONNECT_FAILED (attempt budget exhausted)")
+            }
+            else -> Unit
+        }
+    }
+
+    /** Tears down the stale path (if any) and reconnects on the current generation. */
+    private fun resumeConnect(gen: Int) {
+        if (isStale(gen)) {
+            LogStore.add("D", TAG, "handover reconnect aborted: stale generation")
+            reconnecting = false
+            return
+        }
+        synchronized(lock) {
+            closeResourcesLocked()
+            Tunnel.update(TunnelState.Failed(TunnelError.NetworkUnavailable))
+        }
+        connect(gen)
+    }
+
+    private fun rebindUnderlying(network: Network) {
+        runCatching { setUnderlyingNetworks(arrayOf(network)) }
+            .onSuccess { LogStore.add("D", TAG, "underlying network rebound") }
+            .onFailure { LogStore.add("W", TAG, "underlying network update failed: ${it.message}") }
     }
 
     private fun scheduleRetry(reason: String) {
@@ -474,9 +638,10 @@ class MohammadVpnService : VpnService() {
             return
         }
         if (!netMonitor.online.value) {
-            LogStore.add("W", TAG, "retry skipped while offline ($reason)")
-            stopForegroundCompat()
-            stopSelf()
+            // A phone call or a tunnel switch must not kill the service; hold and wait.
+            LogStore.add("W", TAG, "retry deferred until the network returns ($reason)")
+            waitingForNetwork = true
+            updateNotification("Waiting for network", "Will reconnect automatically")
             return
         }
         attempt++
@@ -485,13 +650,17 @@ class MohammadVpnService : VpnService() {
         LogStore.add("I", TAG, "retry $attempt/${retryPolicy.maxAttempts} in $delay ms ($reason)")
         updateNotification("Reconnecting…", "Attempt $attempt")
         try {
-            scheduler.schedule({ submit { connect(gen) } }, delay, TimeUnit.MILLISECONDS)
+            retryFuture = scheduler.schedule({ submit { connect(gen) } }, delay, TimeUnit.MILLISECONDS)
         } catch (e: RejectedExecutionException) {
             LogStore.add("W", TAG, "scheduler rejected retry: ${e.message}")
         }
     }
 
     private fun fail(reason: TunnelError) {
+        if (reconnecting) {
+            reconnecting = false
+            LogStore.add("W", "NET", "RECONNECT_FAILED ($reason)")
+        }
         cancelConnectTimeout()
         cancelHealthCheck()
         cancelStatsPoll()
@@ -574,6 +743,9 @@ class MohammadVpnService : VpnService() {
         cancelConnectTimeout()
         cancelHealthCheck()
         cancelStatsPoll()
+        retryFuture?.cancel(false)
+        retryFuture = null
+        scope.cancel()
         synchronized(lock) {
             closeResourcesLocked()
             if (Tunnel.state.value !is TunnelState.Disconnected) {

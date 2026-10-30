@@ -184,3 +184,13 @@ Data path is now the one mature clients use:
 - Device log from 0.7.1 showed `xray started in 117 ms` but no `tun2socks up`, and egress unchanged (`no-tunnel`). Cause: `startXray` still passed the descriptor to the core while the renderer had already dropped the tun inbound — nothing read the TUN device.
 - `startXray` now starts the core in SOCKS-only mode (`start(config, 0)`), waits up to 2 s for `127.0.0.1:10808` to accept, then starts `TunBridge` on the duplicated descriptor.
 - Failure path stops the bridge (if created) and the core; Java remains the sole owner of the original fd.
+
+**2026-10-30 · v0.7.3 — handover hardening (P0 scope: four defects)**
+- `setUnderlyingNetworks` now rebound on every active-network change via a new `NetMonitor.activeNetwork` flow (previously set once at interface build).
+- `HandoverPolicy` (pure) decides `Ignore` / `HoldForNetwork` / `Resume` / `Exhausted`; the service only executes.
+- Network loss no longer stops the service: retries are cancelled, state becomes `Failed(NetworkUnavailable)`, notification shows "Waiting for network".
+- `scheduleRetry` defers instead of `stopSelf()` when offline.
+- Watchdog now probes the data path (`SocksProbe`, SOCKS5 CONNECT through 10808): two consecutive failures every 30 s trigger reconnect. Process-alive is no longer treated as path-alive.
+- Log events: `NETWORK_LOST`, `NETWORK_RESTORED`, `RECONNECT_STARTED`, `RECONNECT_SUCCEEDED`, `RECONNECT_FAILED`.
+- Tests: 7 `HandoverPolicyTest` + 5 `SocksProbeTest` written first (8 failed for the right reasons), now green; 55 unit tests total.
+- Device verification: **NOT VERIFIED** — no device attached.
