@@ -115,3 +115,7 @@ Remaining open items are listed in `docs/VERIFICATION_REPORT.md` §"Known limita
 - Gates: clean ✅ · testDebugUnitTest 32/32 ✅ · lintDebug ✅ · assembleDebug ✅ · check-no-placeholders ✅.
 - Device gates: `installDebug` → `DeviceException: No connected devices!`; `adb devices` → empty list. Recorded as `NOT VERIFIED`.
 - Report: `docs/CONNECTION_PARITY_REPORT.md` — verdict **PARITY PARTIAL**.
+
+**2026-10-30 · AWG test plan authored**
+- `docs/AWG_TEST_PLAN.md`: exact AWG profile schema, required/optional fields, redacted example, build/install commands, execution checklist with expected log lines, failure signatures, and what evidence to return.
+- Device verification **not** received: the operator's message contained the empty template only. Verdict stays `PARITY PARTIAL`.
