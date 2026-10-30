@@ -1,3 +1,5 @@
+> Full project handbook: `docs/HANDBOOK.txt`
+
 # Project status — 2026-10-30
 
 Single source of truth for what is done, what is verified, and what is still open.

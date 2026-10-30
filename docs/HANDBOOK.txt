@@ -1,0 +1,554 @@
+================================================================================
+  MOHAMMAD VPN  —  کتابچهٔ کامل پروژه (صفر تا صد)
+  ir.mohammad.vpn
+  آخرین به‌روزرسانی: 2026-10-30  ·  نسخه: 0.10.1 (versionCode 25)
+================================================================================
+
+این فایل تنها مرجع کامل پروژه است. اگر سشن جدیدی باز شد و هیچ چیز به یاد نداشت،
+فقط همین فایل و ریپوی گیت‌هاب کافی است تا کار از همان‌جا ادامه پیدا کند.
+
+ریپو:      https://github.com/mwhammadrez/mohammad-vpn
+شاخه:      main
+لایسنس:    Apache-2.0 (کد اپ) — وابستگی‌ها لایسنس خودشان را دارند
+وضعیت:     خصوصی (قابل عمومی شدن؛ اسکن راز انجام شده)
+
+
+================================================================================
+1) این برنامه چیست
+================================================================================
+
+یک کلاینت VPN اندروید که دو هستهٔ متفاوت را در یک اپ دارد:
+
+  • Xray-core   (VLESS / VMess / Trojan / Shadowsocks / SOCKS / HTTP)
+  • AmneziaWG   (WireGuard با مبهم‌سازی)
+
+کاربر فقط یک دکمه دارد: Connect. کانفیگ از یک «باندل اپراتور» رمزنگاری‌شده
+می‌آید که داخل APK است و با رمزی که در زمان بیلد تزریق می‌شود باز می‌شود.
+کاربر نهایی کانفیگ وارد نمی‌کند، QR اسکن نمی‌کند، اشتراک اضافه نمی‌کند.
+
+هدف: یک اپ شخصی، سبک، با رفتار یک کلاینت بالغ Xray (از نظر مسیر داده)،
+و دیزاین اختصاصی cyber-emerald.
+
+
+================================================================================
+2) وضعیت فعلی — اعداد واقعی
+================================================================================
+
+  نسخه             0.10.1
+  versionCode      25
+  APK              15 MB  (debug, arm64-v8a, امضای دیباگ)
+  SHA-256          2f6869f991d54dad6238f8ece6b731d37dcd1c23ab35a7450fe410cfec7fc4bd
+  DEX              1.39 MB، 10,618 متد
+  کد Kotlin        3,284 خط در 17 فایل
+  کد Go            752 خط در 4 فایل
+  فایل‌های ریپو     112
+  کامیت‌ها          33
+  تست‌ها            85 (همه سبز)
+  تصمیم‌های ثبت‌شده  40 (D-01 .. D-40)
+
+  آنچه روی دستگاه تأیید شده:  مسیر داده (0.7.3) — خروجی 95.135.125.40،
+                              بازیابی 3.83 ثانیه بعد از حالت هواپیما
+  آنچه تأیید نشده:            0.10.x به‌عنوان یک کل، FPS، AWG با ترافیک واقعی
+
+
+================================================================================
+3) معماری — مسیر داده
+================================================================================
+
+  ┌──────────────────────────────────────────────────────────────┐
+  │ اپلیکیشن‌های گوشی                                           │
+  └───────────────────────────┬──────────────────────────────────┘
+                              │ بسته‌ها (TCP/UDP)
+  ┌───────────────────────────▼──────────────────────────────────┐
+  │ tun0  (VpnService)  — ساخته‌شده در MohammadVpnService        │
+  │ آدرس 10.10.10.1/30 ، MTU 1500 ، روت‌های split               │
+  └───────────────────────────┬──────────────────────────────────┘
+                              │ fd (ParcelFileDescriptor)
+  ┌───────────────────────────▼──────────────────────────────────┐
+  │ TunBridge  (Go، داخل libgojni.so)                            │
+  │ • unix.Dup(fd) → فقط کپی را مالک است                        │
+  │ • gVisor + tun2socks  → TCP/UDP را به SOCKS می‌دهد          │
+  └───────────────────────────┬──────────────────────────────────┘
+                              │ 127.0.0.1:10808 (SOCKS5)
+  ┌───────────────────────────▼──────────────────────────────────┐
+  │ Xray-core  (همان libgojni.so)                                │
+  │ • inbound: socks فقط (بدون tun — عمدی)                      │
+  │ • routing: block QUIC → block ads → direct ایران/خصوصی →    │
+  │            proxy (catch-all)                                 │
+  └───────────────────────────┬──────────────────────────────────┘
+                              │ VLESS/WS/… (از اپ مستثنی است)
+  ┌───────────────────────────▼──────────────────────────────────┐
+  │ سرور اپراتور                                                 │
+  └──────────────────────────────────────────────────────────────┘
+
+نکتهٔ حیاتی: اپ خودش را با addDisallowedApplication از VPN مستثنی می‌کند،
+وگرنه dial خودِ کور وارد تونل می‌شود و حلقه می‌سازد. به همین دلیل تست‌های
+سلامت باید صریحاً به شبکهٔ VPN بایند شوند.
+
+
+================================================================================
+4) نقشهٔ فایل‌ها — هر فایل چه می‌کند
+================================================================================
+
+app/src/main/java/ir/mohammad/vpn/
+  MainActivity.kt ............ نقطهٔ ورود UI. مجوز VPN، بارگذاری باندل،
+                               ثبت CrashRecorder، اتصال Compose به اکشن‌ها.
+  core/XrayConfig.kt ......... ساخت JSON کور. inbound/outbound/routing/dns/
+                               fakedns/transport tuning. خالص و تست‌پذیر.
+  core/TunPlan.kt ............ توصیف اینترفیس TUN: آدرس، MTU، روت‌های split، DNS.
+  core/TransportTuning.kt .... fragment و mux (فرار از DPI).
+  core/AwgConfig.kt .......... ساخت کانفیگ AmneziaWG.
+  core/GeoAssets.kt .......... دانلود/کش geoip.dat و geosite.dat در filesDir.
+  data/Model.kt .............. Profile، OperatorBundle، رمزگشایی باندل.
+  data/Tunnel.kt ............. وضعیت سراسری، ترافیک، LogStore + redact().
+  diagnostics/CrashRecorder.kt ثبت آخرین کرش در فایل برای نمایش بعدی.
+  diagnostics/EgressVerdict.kt قواعد حکم خروجی (tunnel / no-tunnel / leak).
+  ui/MohammadScreen.kt ....... کل صفحه: دیال، بنتو، پروفایل‌ها، DPI، کنسول.
+  ui/theme/Theme.kt .......... پالت، تایپوگرافی، فونت‌ها.
+  vpn/MohammadVpnService.kt .. سرویس VPN: چرخهٔ اتصال، گیت سلامت، handover.
+  vpn/NetMonitor.kt .......... رصد شبکه: online + activeNetwork.
+  vpn/HandoverPolicy.kt ...... تصمیم خالص روی قطع/وصل شبکه.
+  vpn/RetryPolicy.kt ......... backoff نمایی محدود.
+  vpn/SocksProbe.kt .......... دست‌دادن SOCKS5 واقعی برای اثبات سلامت مسیر.
+
+core-go/  (Go، با gomobile به AAR تبدیل می‌شود)
+  libmohammad/xray.go ........ XrayController: start(config, tunFd) / stop /
+                               queryTraffic / statsDebug / isRunning.
+  libmohammad/tunbridge.go ... TunBridge: dup fd، ساخت stack، Start/Stop.
+  libmohammad/awg.go ......... AwgController: تونل AmneziaWG.
+  libmohammad/tunbridge_test.go تست مالکیت fd (3 تست).
+
+core-xray/ , core-awg/ ....... ماژول‌های جدا برای بیلد مستقل کورها.
+third_party/anet/ ............ کپی وصله‌شدهٔ wlynxg/anet (Go 1.27 آن را می‌شکند).
+core-go/artifacts/ ........... AAR ساخته‌شده + CHECKSUMS.txt.
+app/libs/mohammad-core.aar ... همان AAR، مصرف‌شده توسط اپ.
+
+docs/ ........................ 13 سند فنی (فهرست در بخش 12).
+reference/ ................... تحلیل رفتاری خودمان (بدون کد شخص ثالث).
+licenses/ .................... OFL فونت‌ها.
+
+
+================================================================================
+5) چرخهٔ اتصال — گام به گام با لاگ واقعی
+================================================================================
+
+  1. کاربر Connect می‌زند
+     D/VPN onStartCommand action=…CONNECT startId=1
+
+  2. باندل بارگذاری شده، پروفایل انتخاب می‌شود
+     I/APP bundle loaded: 1 profile(s), mtu=1500, dns=1
+     I/VPN profile=… protocol=VLESS core=XRAY
+
+  3. پلن TUN ساخته می‌شود
+     I/VPN tun plan: mtu=1500 v4=10.10.10.1/30 v6=off dns=1
+
+  4. اینترفیس ساخته می‌شود
+     I/VPN tunnel up: fd=165 mtu=1500 addr=10.10.10.1/30
+
+  5. کانفیگ رندر می‌شود
+     D/VPN xray config rendered in 8 ms (3056 bytes, outbound=vless)
+
+  6. کور در حالت socks-only بالا می‌آید  ← کلید معماری
+     D/VPN xray.start(socks-only, port=10808)
+     I/VPN xray started in 117 ms
+
+  7. انتظار برای آماده شدن listener (حداکثر 2 ثانیه)
+     D/VPN socks inbound accepting in 12 ms
+
+  8. پل tun2socks روی fd کپی‌شده بالا می‌آید
+     I/VPN tun2socks up in 30 ms (fd=165, mtu=1500)
+
+  9. **گیت سلامت** — سبز فقط بعد از این
+     W/VPN health probe 1/3 failed         (اگر خراب باشد)
+     I/VPN tunnel verified in 220 ms       (اگر سالم باشد)
+     I/VPN tunnel connected
+
+  اگر گیت سلامت شکست بخورد:
+     E/VPN config unhealthy: no answer through the tunnel after 2400 ms
+     → وضعیت Failed(ConfigUnhealthy) → دیال نارنجی می‌ماند، سبز نمی‌شود.
+
+
+================================================================================
+6) کانفیگ Xray — جزئیات
+================================================================================
+
+  inbounds
+    socks  127.0.0.1:10808   noauth, udp=true, sniffing=http,tls,fakedns
+    (inbound نوع tun وجود ندارد — پل مالک fd است)
+
+  outbounds
+    proxy   (از پروفایل باندل: vless/vmess/trojan/ss/…)
+    direct  freedom
+    block   blackhole
+
+  dns
+    servers: [{address:fakedns}, {address:localhost, domains:[domain:ir],
+              skipFallback:true}, 8.8.8.8]
+    ↑ resolver خانگی فقط برای دامنه‌های ایرانی، تا آدرس واقعی بگیرند و
+      ترافیکشان از کشور بیرون نرود.
+
+  fakedns
+    ipPool 198.18.0.0/15 ، size 65535
+
+  routing (به ترتیب اولویت، اولین تطبیق برنده است)
+    1. block  network=udp port=443            ← QUIC
+    2. block  geosite:category-ads-all        (فقط وقتی geo موجود است)
+    3. direct geoip:private + geosite:private
+    4. direct domain:ir + geoip:ir            ← ایران
+    5. proxy  tcp,udp                          ← بقیه
+
+    اگر geo موجود نباشد (fallback بدون دیتاست):
+    direct  ip=[10/8,172.16/12,192.168/16,127/8,169.254/16,fc00::/7,fe80::/10]
+            domain=[domain:ir, domain:localhost, domain:local, domain:lan,
+                    domain:home.arpa]
+
+  transport tuning (کارت DPI EVASION در UI)
+    fragment → streamSettings.finalmask.tcp[] = {type:"fragment", settings:{
+                 packets:"tlshello" | "1-3", lengths:["100-200"],
+                 delays:["10-20"], maxSplit:"3-6"}}
+    mux      → outbound.mux = {enabled:true, concurrency:8,
+                               xudpConcurrency:16, xudpProxyUDP443:"reject"}
+    هر دو پیش‌فرض خاموش‌اند و روی اتصال بعدی اعمال می‌شوند.
+
+
+================================================================================
+7) پلن TUN و مسیرها
+================================================================================
+
+  آدرس      10.10.10.1/30   (ثابت — مطابق کلاینت مرجع)
+  MTU       1500             (از باندل؛ قابل تغییر به 1400)
+  IPv6      اختیاری، پیش‌فرض خاموش
+
+  روت‌ها: 45 روت split، بدون 0.0.0.0/0
+    همهٔ فضای عمومی IPv4 داخل تونل، به‌جز:
+      10.0.0.0/8  127.0.0.0/8  169.254.0.0/16
+      172.16.0.0/12  192.168.0.0/16  224.0.0.0/4
+
+  چرا: LAN، loopback، multicast و link-local هرگز وارد تونل نمی‌شوند.
+  پرینتر، کست، ADB-over-Wi-Fi و دستگاه‌های محلی کار می‌کنند بدون لیست bypass.
+
+
+================================================================================
+8) شبکه، قطعی و watchdog
+================================================================================
+
+  NetMonitor
+    online: StateFlow<Boolean>          — برای UI و تصمیم retry
+    activeNetwork: StateFlow<Network?>  — حتی سوئیچ Wi-Fi↔داده را می‌بیند
+
+  HandoverPolicy (خالص، تست‌شده)
+    NETWORK_LOST      → Ignore | HoldForNetwork (سرویس زنده می‌ماند)
+    NETWORK_RESTORED  → Ignore | Resume(attempt, delay) | Exhausted
+
+  رفتار سرویس
+    • قطع شبکه: retry لغو، وضعیت Failed(NetworkUnavailable)، نوتیفیکیشن
+      «Waiting for network» — هرگز stopSelf نمی‌شود
+    • بازگشت: rebind کردن setUnderlyingNetworks + یک تلاش محدود با backoff
+    • قطع توسط کاربر: userStopped=true → هیچ reconnect خودکاری
+
+  watchdog (هر 5 ثانیه)
+    • isRunning=false  → کرش کور → reconnect
+    • هر 30 ثانیه: SocksProbe به 1.1.1.1:443 از مسیر 10808
+      دو شکست متوالی → RECONNECT_STARTED
+
+  لاگ‌های رویداد: NETWORK_LOST / NETWORK_RESTORED / RECONNECT_STARTED /
+                 RECONNECT_SUCCEEDED / RECONNECT_FAILED
+
+
+================================================================================
+9) دیزاین — سیستم cyber-emerald
+================================================================================
+
+  پالت
+    پس‌زمینه      #050807
+    کارت شیشه‌ای  #0E1311 با آلفای 82% + حاشیهٔ 1dp سفید 7%
+    مینت (وصل)    #34F5C5
+    زمرد          #10B981 / #059669
+    بنفش (آپلود)  #A78BFA / #7C3AED
+    کهربایی       #F59E0B   (در حال اتصال / کانفیگ خراب)
+    رز            #F43F5E   (خطای واقعی)
+    متن           #F8FAFC / #94A3B8 / #64748B
+
+  تایپوگرافی
+    Orbitron     برند و تیترها (وزن متغیر)
+    Chakra Petch لیبل‌ها و اعداد (اعداد Orbitron صفر خط‌خورده دارند و
+                 خواندن تایمر را خراب می‌کرد — برای همین اعداد به Chakra رفت)
+    هر دو با لایسنس OFL داخل APK، بدون دانلود زمان اجرا.
+
+  اجزای صفحه (از بالا به پایین)
+    1. Header        منو، نقطهٔ مینت، «MOHAMMAD VPN»، نسخه
+    2. Hero          پیل پروفایل، وضعیت، تایمر جلسه، ترافیک، دیال
+       • دیال: 60 تیک محیطی + 28 سگمنت LED + حلقهٔ انرژی + آیکن پاور
+       • 28 سگمنت فقط در حالت Connected روشن‌اند
+       • انیمیشن فقط هنگام Connecting/Disconnecting (بیکار = صفر فریم)
+    3. Bento         اسپارکلاین دانلود/آپلود (دلتای 1 ثانیه) + مجموع با ریل
+    4. Profiles      انتخاب پروفایل با رادیو، نشان پروتکل/کور
+    5. Ping          دکمهٔ تست تأخیر
+    6. DPI Evasion   سوییچ FRAGMENT (+ حالت) و MUX
+    7. Console       آخرین 12 خط لاگ با رنگ‌بندی سطح
+
+  حالت‌های رنگ دیال
+    Connected                    → مینت، همهٔ سگمنت‌ها روشن
+    Connecting/Disconnecting     → کهربایی، سگمنت‌ها متحرک
+    Failed(ConfigUnhealthy)      → کهربایی، «CONFIG NOT ANSWERING»
+    Failed(بقیه)                 → رز
+    Disconnected                 → خاکستری، خاموش
+
+  دسترس‌پذیری
+    دیال: contentDescription = Connect | Disconnect | Connecting
+    سوییچ‌ها: contentDescription = "FRAGMENT on/off" و "MUX on/off"
+
+
+================================================================================
+10) باندل اپراتور و رمزنگاری
+================================================================================
+
+  فایل: app/src/main/assets/operator/bundle.enc
+  ساختار:  MAGIC "MHB1" (4) | salt (16) | iv (12) | AES-256-GCM ciphertext+tag
+  کلید:    PBKDF2-HMAC-SHA256(password, iterations=210_000, 32 بایت)
+  رمز:     از local.properties → BuildConfig.OPERATOR_PASSWORD (escape شده)
+
+  فرمت JSON داخل باندل
+    schemaVersion, defaultProfileId, defaultDnsServers, defaultMtu,
+    tunIpv6, tunAddressIndex, geositeUrl, geoipUrl, profiles[]
+
+  ابزار: scripts/encrypt-operator-bundle
+    MOHAMMAD_OPERATOR_BUNDLE_PASSWORD='…' python3 scripts/encrypt-operator-bundle
+
+  هشدار امنیتی: رمز داخل BuildConfig و بنابراین داخل APK است. هرکس APK را
+  داشته باشد، باندل را باز می‌کند. برای همین APK هرگز نباید عمومی شود.
+
+
+================================================================================
+11) بیلد — دستورات دقیق
+================================================================================
+
+  محیط
+    export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+    export ANDROID_HOME=$HOME/android-sdk
+    export PATH=$JAVA_HOME/bin:/usr/local/go/bin:$HOME/go/bin:$PATH
+
+  ساخت AAR هسته (فقط وقتی کد Go عوض شد)
+    cd core-go
+    GOFLAGS="-mod=mod" gomobile bind \
+      -target=android/arm64,android/amd64 -androidapi 26 \
+      -o artifacts/mohammad-core.aar ./libmohammad
+    cd .. && ./scripts/strip-aar.sh core-go/artifacts/mohammad-core.aar
+    cp core-go/artifacts/mohammad-core.aar app/libs/mohammad-core.aar
+
+  بیلد اپ
+    ./gradlew clean
+    ./gradlew testDebugUnitTest
+    ./gradlew lintDebug
+    ./gradlew assembleDebug
+    ./scripts/check-no-placeholders
+    خروجی: app/build/outputs/apk/debug/app-debug.apk
+
+  محدودیت‌های ماشین بیلد
+    3.8 GiB RAM → بیلد سریال، -Xmx1024m، org.gradle.parallel=false،
+    workers.max=1، kotlin.compiler.execution.strategy=in-process، swap 4 GiB.
+
+  امضا: فقط کلید دیباگ. هیچ keystore انتشار وجود ندارد.
+
+
+================================================================================
+12) تست — با چه ابزاری و چه چیزی
+================================================================================
+
+  چارچوب‌ها
+    Robolectric 4.14.1  اجرای فریم‌ورک اندروید در JVM (Activity/Service واقعی)
+    Roborazzi 1.36.0    رندر Compose به PNG
+    Compose UI Test     تپ و assert روی UI واقعی
+    JUnit 4             منطق خالص
+
+  دستور
+    ./gradlew testDebugUnitTest          → 85 تست
+    تصاویر: app/build/reports/render-*.png
+
+  سوئیت‌ها و آنچه اثبات می‌کنند
+    LaunchTest              باز شدن واقعی MainActivity تا RESUMED
+    ServiceLifecycleTest    سرویس واقعی: disconnect، disconnect دوباره،
+                            connect بدون پروفایل، destroy
+    UiInteractionTest       تپ روی دیال و سوییچ‌ها، انتخاب پروفایل
+    RenderTest              رندر 411×891dp و 320×640dp
+    BundleLoadTest          رمزگشایی باندل واقعی داخل APK
+    CrashRecorderTest       ثبت و مصرف کرش
+    IranRoutingTest         مسیر ایران، QUIC، DNS خانگی، ترتیب قواعد
+    HandoverPolicyTest      ماتریس قطع/وصل شبکه
+    SocksProbeTest          SOCKS5 واقعی روی سرور جعلی
+    TunPlanTest             روت‌های split، نبود default route
+    TransportTuningTest     fragment/mux و عدم تغییر پروفایل اصلی
+    RoutingRulesTest / ConfigRenderTest / RedactionTest / …
+
+  ابزارهای ساکن
+    detekt 1.23.8     java -jar detekt.jar --input app/src/main/java
+    mobsfscan 1.1.0   mobsfscan --no-fail app/src/main/java
+    go vet / staticcheck / govulncheck در core-go
+
+  محدودیت صریح
+    Robolectric کتابخانهٔ نیتیو را لود نمی‌کند → libgojni.so، tun2socks و
+    هر کرش داخل JNI تست نمی‌شود. شبکهٔ واقعی هم وجود ندارد.
+
+  اسناد مرتبط در docs/
+    TESTING_TOOLCHAIN.md، SECURITY_SCAN_REPORT.md، PARITY_CLOSURE.md،
+    ARCH_PARITY_AUDIT.md، PUBLISH_AUDIT.md، PUBLISH_REPORT.md، …
+
+================================================================================
+13) تاریخچهٔ نسخه‌ها — چه اتفاقی افتاد و چرا
+================================================================================
+
+  0.1.0  اولین اتصال. خطای «proxyman.InboundConfig is not registered» با
+         اضافه‌کردن main/distro/all و proxy/tun حل شد.
+  0.2.0  AmneziaWG اضافه شد (هرگز با ترافیک واقعی تست نشد).
+  0.3.0  سخت‌سازی + رفع ۴ ایراد از بازبینی مستقل.
+  0.4.0  برابری اتصال: IPv6، LAN مستقیم، DNS object، آمار.
+  0.5.0  self-test داخل اپ (بعداً در 0.10.0 حذف شد).
+  0.5.1  رفع شمارندهٔ ترافیک: GetFeature(stats.ManagerType()) — قبلاً همیشه صفر.
+  0.6.0  پریست geo.  0.6.1 دانلود geo از رشتهٔ تونل خارج شد (باعث قطعی می‌شد).
+  0.6.2  مقایسهٔ کانفیگ + domain:ir.
+  0.7.0  تغییر معماری به tun2socks → SOCKS.
+         ⚠️ نیمه‌کاره: کانفیگ و پل ساخته شد، ولی صدازنندهٔ Kotlin عوض نشد.
+  0.7.1  رفع مالکیت fd (unix.Dup) + کشف اینکه proxy/socks5 import نشده بود.
+  0.7.2  سیم‌کشی واقعی پل: core.start(config, 0) + انتظار پورت + bridge.start.
+         ✅ این نسخه روی دستگاه ترافیک رد کرد.
+  0.7.3  سخت‌سازی handover: HandoverPolicy، SocksProbe، نگه‌داشتن سرویس.
+  0.7.4  بستن ۶ اختلاف با کلاینت مرجع (MTU 1500، روت split، DNS تک، …).
+  0.8.0  بازطراحی کامل UI به cyber-emerald.
+  0.8.1  فشرده‌سازی .so برای کوچک‌شدن APK (۵۱→۲۴ مگ).
+  0.8.2  رفع هنگ: حذف انیمیشن‌های بیکار + isDebuggable=false + کاهش stats dump.
+  0.8.3  رفع بسته‌شدن اپ هنگام قطع: shutdownNow → shutdown + CrashRecorder.
+  0.9.0  کارت DPI EVASION: fragment و mux.
+  0.9.1  رفع دو باگ self-test (IPv6 اجباری نمی‌شد؛ تونل خودش را نمی‌دید).
+  0.9.2  تست رندر با Robolectric+Roborazzi؛ رفع سگمنت‌های دیال و فونت اعداد.
+  0.9.3  سویییت تست رفتاری: سرویس، UI، باندل، کرش؛ رفع چیدمان 320dp.
+  0.10.0 حذف self-test، گیت سلامت (سبز فقط بعد از تأیید)، DNS خانگی ایران.
+  0.10.1 R8 روی دیباگ (۲۰→۱۵ مگ)، کش draw، کنسول ۱۲ ردیف.
+
+
+================================================================================
+14) تصمیم‌های کلیدی (خلاصهٔ D-01 .. D-40)
+================================================================================
+
+  پین‌ها
+    Xray-core      v26.10.29   0afec66085a85191e9dd2a4a6646c7c9a94688d1  MPL-2.0
+    amneziawg-go   v3.1.20260828 b5928efb6ca19f0153958460c3d141f04abc5c2e MIT
+    tun2socks      v2.7.0       8dda19e8e4613e014f0b12f3e624fdff5e5f23b3  MIT
+    gVisor         v0.0.0-20260122175437-89a5d21be8f0                  Apache-2.0
+
+  معماری
+    D-17  هر دو هسته در یک libgojni.so (gomobile همیشه این نام را می‌دهد).
+    D-28  مالکیت fd: Java تنها مالک اصلی؛ Go فقط unix.Dup آن را دارد.
+    D-29  HandoverPolicy یک تصمیم‌گیر خالص است، بدون نوع اندروید.
+    D-30  watchdog با پروب end-to-end، نه با isRunning.
+    D-31  قطع شبکه هرگز stopSelf نمی‌کند.
+    D-36  UI با دادهٔ واقعی، نه دادهٔ نمایشی.
+
+  کانفیگ
+    D-22  CIDR صریح + domain:ir به‌جای geoip:private/geosite:category-ir
+          (دیتاست نبودن = کور بالا نمی‌آید).
+    D-23→D-32  MTU 1500 (قبلاً 1400؛ دلیل تغییر: معماری عوض شد).
+    D-33  روت‌های split به‌جای 0.0.0.0/0.
+    D-34  یک resolver، یک listener.
+    D-37  fragment/mux پیش‌فرض خاموش؛ ECH/REALITY/XHTTP عمداً نیست
+          (بدون کانفیگ سرور دروغ در UI می‌شد).
+
+  کیفیت
+    D-35  سیستم دیزاین cyber-emerald؛ فونت‌ها OFL.
+    D-38  رندر روی JVM (Robolectric+Roborazzi) به‌جای چشم‌انتظاری.
+    D-39  R8 روی بیلد دیباگ با keep برای gomobile.
+    D-40  کار draw کش می‌شود، recomposition مشکل نبود.
+
+  متن کامل با دلیل هر تصمیم: DECISIONS.md
+
+
+================================================================================
+15) مسائل باز و کار بعدی
+================================================================================
+
+  باید روی دستگاه تأیید شود
+    1. 0.10.1 به‌عنوان یک کل (نصب، اتصال، قطع، عدم بسته‌شدن).
+    2. گیت سلامت: با کانفیگ سالم باید «tunnel verified in … ms» بیاید؛
+       اگر نارنجی ماند، یعنی پروب جواب نگرفت.
+    3. FPS و روانی پس از تغییرات 0.10.1.
+
+  تأیید نشده
+    • AmneziaWG با ترافیک واقعی (هیچ سرور AWG داده نشده).
+    • اثر واقعی fragment/mux روی DPI ایران.
+    • IPv6 در عمل (سرور خروجی IPv6 ندارد).
+
+  بهبودهای شناخته‌شده
+    • baseline profile برای استارت سریع‌تر (نیاز به دستگاه).
+    • پروکسی per-app.
+    • نمایش سرعت در نوتیفیکیشن.
+    • استارت خودکار بعد از بوت.
+    • ping در خود لیست پروفایل‌ها.
+    • کانفیگ سرور روی TLS/REALITY — تنها چیزی که واقعاً DPI را می‌شکند.
+
+  بدهی فنی
+    • XrayConfig.render پارامتر mtu را نمی‌خواند (MTU مال TUN است).
+    • core-go/go.mod هنوز replace به /tmp دارد؛ بیلد روی ماشین دیگر
+      بدون fetch کردن سه مخزن کار نمی‌کند.
+    • APK دیباگ شامل ui-test-manifest است (فقط ComponentActivity خالی).
+
+
+================================================================================
+16) امنیت — چه چیزی هرگز نباید منتشر شود
+================================================================================
+
+  هرگز کامیت نشود
+    local.properties            رمز باندل اپراتور
+    operator/bundle.source.json UUID، آدرس سرور، نام پروفایل
+    app/src/main/assets/operator/bundle.enc   (در ریپو نیست)
+    *.apk                       (رمز داخل BuildConfig است)
+    *.jks / *.keystore
+
+  قبلاً رخ داده و پاک شده
+    • UUID واقعی در دو فایل تست و در REVIEW.md و اسناد audit.
+    • آدرس سرور در PROGRESS.md.
+    • bundle.enc در تاریخچه.
+    همه با git filter-branch از کل تاریخچه حذف شدند و force-push شد.
+
+  نتیجهٔ اسکن‌ها
+    govulncheck: 0 آسیب‌پذیری قابل‌دسترس
+    mobsfscan:   6 مورد INFO (CT، SafetyNet، root detection) — بی‌ربط
+    detekt:      0 خطای امنیتی
+    git grep برای راز: صفر
+
+  هشدار دائمی
+    توکن گیت‌هاب در چت چند بار فرستاده شد؛ باید باطل (revoke) شود.
+
+
+================================================================================
+17) اگر سشن جدیدی شروع شد — از اینجا ادامه بده
+================================================================================
+
+  1. کلون کن
+       git clone https://github.com/mwhammadrez/mohammad-vpn
+       cd mohammad-vpn
+
+  2. این فایل را بخوان (همین فایل)، بعد:
+       STATUS.md        وضعیت تأییدشده / تأییدنشده
+       DECISIONS.md     چرا هر تصمیم گرفته شد
+       PROGRESS.md      تاریخچهٔ دقیق هر نسخه
+
+  3. محیط بیلد را ست کن (بخش 11) و بزن:
+       ./gradlew testDebugUnitTest lintDebug assembleDebug
+
+  4. برای تست بدون دستگاه:
+       skills/android-headless-debug/SKILL.md  (در workspace، نسخهٔ ریپو:
+       docs/TESTING_TOOLCHAIN.md)
+
+  5. برای دیدن ظاهر بدون دستگاه: تست RenderTest را اجرا کن و
+     app/build/reports/render-connected.png را ببین.
+
+  6. قبل از هر تغییر: باندل و رمز را از اپراتور بگیر (بخش 10) و
+     هیچ‌وقت آن‌ها را کامیت نکن.
+
+  نکتهٔ آخر: بزرگ‌ترین درس این پروژه —
+  «کانفیگ درست» با «سیم‌کشی درست» یکی نیست. در 0.7.0 هر دو سر زنجیره
+  ساخته شد ولی وسطش وصل نبود، و هیچ تستی آن را نگرفت. بعد از هر تغییر
+  معماری، یک تست باید ثابت کند زنجیره کامل است، نه فقط اجزا.
+
+================================================================================
+  پایان — 2026-10-30
+================================================================================

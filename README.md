@@ -9,6 +9,8 @@ and **AmneziaWG** (WireGuard + obfuscation).
 
 ---
 
+> **New here? Read `docs/HANDBOOK.txt` first — it explains the whole project end to end.**
+
 ## Build
 
 Prerequisites (versions actually used and verified):
