@@ -113,6 +113,34 @@ func (c *XrayController) QueryTraffic() *Traffic {
 	return out
 }
 
+// StatsDebug lists every counter Xray currently tracks: "name=value" lines.
+// It exists to diagnose counter visibility, not for normal operation.
+func (c *XrayController) StatsDebug() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.inst == nil {
+		return "no-instance"
+	}
+	feature := c.inst.GetFeature(stats.ManagerType())
+	mgr, ok := feature.(stats.Manager)
+	if !ok || mgr == nil {
+		return "no-stats-manager"
+	}
+	var b strings.Builder
+	b.WriteString("manager-ok\n")
+	mgr.VisitCounters(func(name string, counter stats.Counter) bool {
+		if counter != nil {
+			b.WriteString(name)
+			b.WriteString("=")
+			b.WriteString(strconv.FormatInt(counter.Value(), 10))
+			b.WriteString("\n")
+		}
+		return true
+	})
+	return b.String()
+}
+
 // Start parses configContent and starts Xray with the given TUN descriptor.
 func (c *XrayController) Start(configContent string, tunFd int64) (err error) {
 	c.mu.Lock()

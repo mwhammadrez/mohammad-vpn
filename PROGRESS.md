@@ -142,3 +142,12 @@ Tests 37 → 38. Gates green.
 - Fallback: literal CIDR/suffix rules when the assets are missing, so startup never fails.
 - Bundle: `defaultMtu` removed (1500 default), `tunIpv6: false`.
 - Tests 38 → 41, all green. lint/assemble/placeholder gates green.
+
+**2026-10-30 · v0.6.1 — outcome of the 0.6.0 device report**
+
+Report facts: connect 487 ms total (tun 183, core 304), egress flipped to the server IP, DNS 50–60 ms, ping 57 ms — but `traffic` stayed 0 and the user saw a total outage after connecting.
+
+- **Fixed:** the 28 MB geo download ran on the *same single-thread worker* as the stats poll and the watchdog (`runBlocking` inside `submit`). For the whole download the poll never ran, so counters stayed 0 and a dead core could not be detected. Downloads now run on a dedicated executor.
+- **Added:** `XrayController.StatsDebug()` (`VisitCounters` dump) and its inclusion in the self-test report — the next report will show whether the counters exist at all.
+- **Reverted:** default MTU back to 1400 (the value that worked before 0.6.0).
+- Tests 41, lint/assemble/placeholder green.

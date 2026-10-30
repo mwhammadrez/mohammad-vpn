@@ -52,6 +52,7 @@ class MohammadVpnService : VpnService() {
 
     private val lock = Any()
     private val worker = Executors.newSingleThreadExecutor()
+    private val io = Executors.newSingleThreadExecutor()
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private val retryPolicy = RetryPolicy()
 
@@ -280,12 +281,18 @@ class MohammadVpnService : VpnService() {
         val geosite = Tunnel.geositeUrl
         val geoip = Tunnel.geoipUrl
         if (geosite.isBlank() || geoip.isBlank()) return
-        submit {
-            kotlinx.coroutines.runBlocking {
-                runCatching { GeoAssets.ensure(applicationContext, geosite, geoip) }
-                    .onSuccess { ready -> LogStore.add("I", "GEO", "rule sets ready=$ready") }
-                    .onFailure { LogStore.add("W", "GEO", "download failed: ${it.message}") }
+        // Never run this on the tunnel worker: the 28 MB download would starve
+        // the stats poll and the watchdog for its whole duration.
+        try {
+            io.execute {
+                kotlinx.coroutines.runBlocking {
+                    runCatching { GeoAssets.ensure(applicationContext, geosite, geoip) }
+                        .onSuccess { ready -> LogStore.add("I", "GEO", "rule sets ready=$ready") }
+                        .onFailure { LogStore.add("W", "GEO", "download failed: ${it.message}") }
+                }
             }
+        } catch (e: RejectedExecutionException) {
+            LogStore.add("W", TAG, "geo download rejected: ${e.message}")
         }
     }
 
@@ -391,6 +398,9 @@ class MohammadVpnService : VpnService() {
         runCatching { core.queryTraffic() }
             .onSuccess { traffic -> Tunnel.updateTraffic(traffic.uplink, traffic.downlink) }
             .onFailure { LogStore.add("W", TAG, "stats query failed: ${it.message}") }
+        runCatching { core.statsDebug() }
+            .onSuccess { Tunnel.statsSnapshot = it }
+            .onFailure { Tunnel.statsSnapshot = "stats-debug-failed: ${it.message}" }
     }
 
     private fun checkHealth() {
@@ -517,6 +527,7 @@ class MohammadVpnService : VpnService() {
         }
         runCatching { netMonitor.stop() }
         worker.shutdownNow()
+        io.shutdownNow()
         scheduler.shutdownNow()
         super.onDestroy()
     }

@@ -56,6 +56,10 @@ object Tunnel {
     @Volatile
     var geoipUrl: String = ""
 
+    /** Last raw stats dump from the core, for diagnostics. */
+    @Volatile
+    var statsSnapshot: String = ""
+
     /** Stage timings for the most recent connect attempt: (stage, elapsed ms). */
     @Volatile
     var connectTimeline: List<Pair<String, Long>> = emptyList()

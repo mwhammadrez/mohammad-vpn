@@ -52,6 +52,7 @@ object SelfTest {
             ipv4SameAsBaseline = Tunnel.baselineEgressIp != null && Tunnel.baselineEgressIp == egress.ip,
         )
 
+        val statsBefore = Tunnel.statsSnapshot
         val trafficBefore = Tunnel.traffic.value
         val download = download1MiB()
         kotlinx.coroutines.delay(3_000)
@@ -139,6 +140,12 @@ object SelfTest {
                         }),
                     )
                     .put("totalMs", Tunnel.connectTimeline.lastOrNull()?.second ?: JSONObject.NULL),
+            )
+            .put(
+                "stats",
+                JSONObject()
+                    .put("before", statsBefore)
+                    .put("after", Tunnel.statsSnapshot),
             )
             .put("pingMs", ping)
             .put("log", JSONArray(LogStore.dump().lines().takeLast(200)))
