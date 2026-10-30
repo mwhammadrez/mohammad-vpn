@@ -129,6 +129,17 @@ object SelfTest {
                     .put("deltaDownBytes", delta.deltaDown)
                     .put("downloadResult", download),
             )
+            .put(
+                "connect",
+                JSONObject()
+                    .put(
+                        "timeline",
+                        JSONArray(Tunnel.connectTimeline.map { (stage, ms) ->
+                            JSONObject().put("stage", stage).put("ms", ms)
+                        }),
+                    )
+                    .put("totalMs", Tunnel.connectTimeline.lastOrNull()?.second ?: JSONObject.NULL),
+            )
             .put("pingMs", ping)
             .put("log", JSONArray(LogStore.dump().lines().takeLast(200)))
 

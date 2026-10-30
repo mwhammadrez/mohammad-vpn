@@ -103,6 +103,12 @@ class MohammadVpnService : VpnService() {
     // ---------------------------------------------------------------- connect
 
     private fun connect(gen: Int) {
+        val t0 = SystemClock.elapsedRealtime()
+        Tunnel.connectTimeline = emptyList()
+        fun mark(stage: String) {
+            Tunnel.connectTimeline = Tunnel.connectTimeline + (stage to (SystemClock.elapsedRealtime() - t0))
+        }
+
         if (isStale(gen)) {
             LogStore.add("D", TAG, "connect aborted: stale generation")
             return
@@ -153,6 +159,7 @@ class MohammadVpnService : VpnService() {
         }
         synchronized(lock) { tun = descriptor }
         LogStore.add("I", TAG, "tunnel up: fd=${descriptor.fd} mtu=${plan.mtu} addr=${plan.ipv4Address}/${plan.ipv4Prefix}")
+        mark("tun")
 
         if (isStale(gen)) {
             LogStore.add("W", TAG, "connect abandoned after tunnel creation")
@@ -176,7 +183,9 @@ class MohammadVpnService : VpnService() {
                 cancelConnectTimeout()
                 attempt = 0
                 synchronized(lock) { Tunnel.update(TunnelState.Connected) }
+                mark("core")
                 LogStore.add("I", TAG, "tunnel connected")
+                mark("connected")
                 updateNotification("Connected", profile.name)
                 armHealthCheck()
                 armStatsPoll()

@@ -116,6 +116,8 @@ class MainActivity : ComponentActivity() {
                 Tunnel.profiles = bundle.profiles
                 Tunnel.defaultDns = bundle.dnsServers
                 Tunnel.defaultMtu = bundle.mtu
+                Tunnel.ipv6Enabled = bundle.tunIpv6
+                Tunnel.tunIndex = bundle.tunAddressIndex
                 val savedId = prefs().getString(KEY_SELECTED, null)
                 Tunnel.selected = bundle.profiles.firstOrNull { it.id == savedId }
                     ?: bundle.profiles.firstOrNull { it.id == bundle.defaultProfileId }

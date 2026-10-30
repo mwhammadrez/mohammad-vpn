@@ -125,3 +125,13 @@ Remaining open items are listed in `docs/VERIFICATION_REPORT.md` §"Known limita
 - `EgressVerdict` is pure and unit-tested (5 tests): changed/no-tunnel/inconclusive + IPv6 leak flag.
 - Tests 32 → 37, all green. lint/assemble/placeholder gates green.
 - Guide: `docs/SELF_TEST_GUIDE.md` (steps + field-to-row mapping).
+
+**2026-10-30 · v0.5.1 — fixes from the first real device report**
+
+Device report analysis (realme RMX3709, Android 16, VLESS):
+- tunnel proven: egress 95.135.125.40 → 205.252.135.182 (`conclusion: tunnel`), DNS 48–78 ms, ping 85 ms.
+- **Bug 1 (fixed):** `traffic.up/down` were 0 despite a successful 1 MiB download. Root cause: `GetFeature` was called with `(*app/stats.Manager)(nil)` while Xray matches on `features/stats.ManagerType()`; the lookup returned nil every time, so `QueryTraffic` short-circuited to zeros.
+- **Bug 2 (mitigated):** IPv6 was enabled unconditionally; the device has a local IPv6 address but the server gives no IPv6 egress (`ipv6.egress: null`), so `::/0` routing made apps prefer AAAA and stall. IPv6 is now **opt-in** via bundle `"tunIpv6": true`, default false.
+- Added `connect.timeline` (stage → ms) to the self-test report so connect latency can be attributed.
+
+Tests 37 → 38. Gates green.

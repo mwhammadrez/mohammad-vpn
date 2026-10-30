@@ -27,6 +27,8 @@ data class OperatorBundle(
     val defaultProfileId: String?,
     val dnsServers: List<String>,
     val mtu: Int,
+    val tunIpv6: Boolean = false,
+    val tunAddressIndex: Int = 0,
 )
 
 class BundleException(message: String) : Exception(message)
@@ -145,7 +147,10 @@ object OperatorBundleLoader {
             throw BundleException("defaultProfileId does not match any profile")
         }
 
-        return OperatorBundle(result, defaultId, dns, mtu)
+        val tunIpv6 = root.optBoolean("tunIpv6", false)
+        val tunIndex = root.optInt("tunAddressIndex", 0).coerceAtLeast(0)
+
+        return OperatorBundle(result, defaultId, dns, mtu, tunIpv6, tunIndex)
     }
 
     /** Only the Xray-accepted subset is allowed for Hysteria2 (SPEC FR-29). */

@@ -48,7 +48,11 @@ object Tunnel {
     var tunIndex: Int = 0
 
     @Volatile
-    var ipv6Enabled: Boolean = true
+    var ipv6Enabled: Boolean = false
+
+    /** Stage timings for the most recent connect attempt: (stage, elapsed ms). */
+    @Volatile
+    var connectTimeline: List<Pair<String, Long>> = emptyList()
 
     /** Carrier egress IP captured before the first connect; null until known. */
     @Volatile

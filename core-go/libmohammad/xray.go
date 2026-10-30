@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/xtls/xray-core/app/stats"
 	"github.com/xtls/xray-core/core"
+	"github.com/xtls/xray-core/features/stats"
 	"github.com/xtls/xray-core/infra/conf/serial"
 
 	// Register every app handler and proxy/transport implementation.
@@ -91,8 +91,8 @@ func (c *XrayController) QueryTraffic() *Traffic {
 	if c.inst == nil {
 		return out
 	}
-	feature := c.inst.GetFeature((*stats.Manager)(nil))
-	mgr, ok := feature.(*stats.Manager)
+	feature := c.inst.GetFeature(stats.ManagerType())
+	mgr, ok := feature.(stats.Manager)
 	if !ok || mgr == nil {
 		return out
 	}

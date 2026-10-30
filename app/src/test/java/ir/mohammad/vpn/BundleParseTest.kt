@@ -42,6 +42,14 @@ class BundleParseTest {
         OperatorBundleLoader.parse(valid.replace("\"serverPort\":443", "\"serverPort\":0"))
     }
 
+    @Test
+    fun ipv6IsOptIn() {
+        val bundle = OperatorBundleLoader.parse(valid)
+        assertEquals(false, bundle.tunIpv6)
+        val enabled = OperatorBundleLoader.parse(valid.replace("\"schemaVersion\":1", "\"schemaVersion\":1,\"tunIpv6\":true"))
+        assertEquals(true, enabled.tunIpv6)
+    }
+
     @Test(expected = BundleException::class)
     fun rejectsProtocolCoreMismatch() {
         OperatorBundleLoader.parse(
