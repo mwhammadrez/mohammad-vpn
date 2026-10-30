@@ -151,3 +151,9 @@ Report facts: connect 487 ms total (tun 183, core 304), egress flipped to the se
 - **Added:** `XrayController.StatsDebug()` (`VisitCounters` dump) and its inclusion in the self-test report — the next report will show whether the counters exist at all.
 - **Reverted:** default MTU back to 1400 (the value that worked before 0.6.0).
 - Tests 41, lint/assemble/placeholder green.
+
+**2026-10-30 · v0.6.2 — config comparison + rule hardening**
+- `docs/CONFIG_COMPARISON.md`: element-by-element comparison with the reference client's shipped config and Iran preset.
+- Geo rules hardened: `domain:ir` (TLD suffix, always available) replaces `geosite:category-ir`, which is missing from several datasets and is a startup hazard.
+- `policy.levels` added to match the reference template's handshake/connIdle/uplinkOnly/downlinkOnly values.
+- Tests 41 green; lint/assemble/placeholder green.

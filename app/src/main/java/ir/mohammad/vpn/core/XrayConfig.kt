@@ -27,10 +27,11 @@ object XrayConfig {
 
     /** Local-only suffixes that never resolve on the public internet. */
     private val DIRECT_DOMAINS = listOf(
-        "localhost",
-        ".local",
-        ".lan",
-        ".home.arpa",
+        "domain:ir",
+        "domain:localhost",
+        "domain:local",
+        "domain:lan",
+        "domain:home.arpa",
     )
 
     fun render(
@@ -90,7 +91,7 @@ object XrayConfig {
                 JSONObject()
                     .put("type", "field")
                     .put("outboundTag", "direct")
-                    .put("domain", JSONArray().put("geosite:category-ir"))
+                    .put("domain", JSONArray().put("domain:ir"))
                     .put("ip", JSONArray().put("geoip:ir")),
             )
         } else {
@@ -113,12 +114,24 @@ object XrayConfig {
             .put("stats", JSONObject())
             .put(
                 "policy",
-                JSONObject().put(
-                    "system",
-                    JSONObject()
-                        .put("statsOutboundUplink", true)
-                        .put("statsOutboundDownlink", true),
-                ),
+                JSONObject()
+                    .put(
+                        "levels",
+                        JSONObject().put(
+                            "0",
+                            JSONObject()
+                                .put("handshake", 4)
+                                .put("connIdle", 300)
+                                .put("uplinkOnly", 1)
+                                .put("downlinkOnly", 1),
+                        ),
+                    )
+                    .put(
+                        "system",
+                        JSONObject()
+                            .put("statsOutboundUplink", true)
+                            .put("statsOutboundDownlink", true),
+                    ),
             )
             .put(
                 "dns",

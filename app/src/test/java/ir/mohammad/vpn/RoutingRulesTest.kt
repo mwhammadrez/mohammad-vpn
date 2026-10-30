@@ -83,7 +83,7 @@ class RoutingRulesTest {
             val domains = rule.optJSONArray("domain") ?: continue
             for (j in 0 until domains.length()) {
                 when (domains.getString(j)) {
-                    "geosite:category-ir" -> iranFound = true
+                    "domain:ir" -> iranFound = true
                     "geosite:category-ads-all" -> adsFound = true
                 }
             }
