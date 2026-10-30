@@ -194,3 +194,13 @@ Data path is now the one mature clients use:
 - Log events: `NETWORK_LOST`, `NETWORK_RESTORED`, `RECONNECT_STARTED`, `RECONNECT_SUCCEEDED`, `RECONNECT_FAILED`.
 - Tests: 7 `HandoverPolicyTest` + 5 `SocksProbeTest` written first (8 failed for the right reasons), now green; 55 unit tests total.
 - Device verification: **NOT VERIFIED** — no device attached.
+
+**2026-10-30 · v0.7.4 — configuration parity closure**
+- Device evidence (operator-supplied): 0.7.3 carries traffic (`95.135.125.40`, same exit as the reference client) and recovers 3.83 s after airplane mode.
+- MTU 1400 → **1500** (D-32, supersedes D-23).
+- `0.0.0.0/0` → **45 split routes** with private/reserved ranges excluded (D-33).
+- Two resolvers → **`8.8.8.8` only**; `:10809` HTTP inbound removed (D-34).
+- TUN address fixed at `10.10.10.1/30`.
+- `setUnderlyingNetworks(null)` on network loss, rebind on restore.
+- `TunPlanTest` rewritten: asserts no default route, excluded ranges, public coverage, no duplicates.
+- Device verification of 0.7.4: **NOT VERIFIED**.

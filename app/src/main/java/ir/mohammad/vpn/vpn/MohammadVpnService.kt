@@ -162,7 +162,6 @@ class MohammadVpnService : VpnService() {
         val plan = TunPlan.build(
             mtu = Tunnel.defaultMtu,
             dns = Tunnel.defaultDns,
-            index = Tunnel.tunIndex,
             ipv6 = Tunnel.ipv6Enabled,
         )
         LogStore.add("I", TAG, "profile=${profile.name} protocol=${profile.protocol} core=${profile.core}")
@@ -551,6 +550,8 @@ class MohammadVpnService : VpnService() {
         when (val action = handover.onEvent(HandoverEvent.NETWORK_LOST, ctx)) {
             is HandoverAction.HoldForNetwork -> {
                 waitingForNetwork = true
+                runCatching { setUnderlyingNetworks(null) }
+                    .onFailure { LogStore.add("W", TAG, "underlying network clear failed: ${it.message}") }
                 LogStore.add("D", TAG, "holding tunnel open until the network returns")
                 updateNotification("Network lost", "Waiting for connectivity")
                 synchronized(lock) {

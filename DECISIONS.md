@@ -161,3 +161,23 @@ The probe target comes from memory and is never logged; failures log only a coun
 ## D-31 — Network loss never stops the service
 **Date:** 2026-10-30
 `scheduleRetry` previously called `stopSelf()` when offline, so a phone call killed the tunnel permanently. Now an offline retry sets `waitingForNetwork`, keeps the foreground service, and the `NetMonitor` collector resumes with a bounded attempt when connectivity returns. Only an exhausted retry budget stops the service.
+
+## D-32 — MTU 1500 (supersedes D-23)
+**Date:** 2026-10-30 · **Scope:** tunnel interface
+The reference client runs MTU 1500 on the same device, network and server. D-23's 1400 was measured
+under the old architecture where Xray itself owned the tun inbound; that code path is gone and the
+descriptor now goes through the same gVisor bridge the reference client uses. Parity therefore costs
+nothing that the old measurement was protecting. Revert path: `defaultMtu` in the bundle.
+
+## D-33 — Split routes instead of 0.0.0.0/0
+**Date:** 2026-10-30
+The interface carries the minimal exact route set for all public IPv4 space, excluding `10/8`,
+`127/8`, `169.254/16`, `172.16/12`, `192.168/16` and `224/4`. No default route exists, so LAN,
+link-local, loopback and multicast traffic never enters the tunnel — printers, casting and
+ADB-over-Wi-Fi keep working without an app bypass list. The reference client behaves the same way.
+
+## D-34 — Single resolver, single listener
+**Date:** 2026-10-30
+DNS is `8.8.8.8` only and the core exposes one loopback listener (`:10808`). The second resolver and
+the HTTP inbound were ours, not the reference client's; removing them matches the observed interface
+exactly and shrinks the loopback surface.

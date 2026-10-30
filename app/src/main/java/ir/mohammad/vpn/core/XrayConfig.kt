@@ -16,7 +16,6 @@ import org.json.JSONObject
 object XrayConfig {
 
     const val SOCKS_PORT = 10808
-    const val HTTP_PORT = 10809
     const val LOOPBACK = "127.0.0.1"
 
     /** Documented FakeDNS pool; must not collide with real destinations. */
@@ -73,13 +72,6 @@ object XrayConfig {
                 "sniffing",
                 JSONObject().put("enabled", true).put("destOverride", sniffOverride),
             )
-
-        val http = JSONObject()
-            .put("tag", "http")
-            .put("listen", LOOPBACK)
-            .put("port", HTTP_PORT)
-            .put("protocol", "http")
-            .put("settings", JSONObject().put("userLevel", 0))
 
         val dnsServersJson = JSONArray()
         if (fakeDns) dnsServersJson.put("fakedns")
@@ -172,7 +164,7 @@ object XrayConfig {
         )
 
         return root
-            .put("inbounds", JSONArray().put(socks).put(http))
+            .put("inbounds", JSONArray().put(socks))
             .put(
                 "outbounds",
                 JSONArray()
