@@ -1,7 +1,7 @@
 # PROGRESS.md — Mohammad (`ir.mohammad.vpn`)
 
 **Last updated:** 2026-10-31 (UTC)
-**Current phase:** M3 complete → M4 not started
+**Current phase:** M4-W complete → M4 not started
 **Current release:** 0.11.2 (versionCode 29)
 
 > **Correction notice (2026-10-31).** This file was frozen at Phase 1 ("no application code exists
@@ -20,6 +20,7 @@
 | M1 | MTU / MSS / `sockopt` | ✅ done | green | config verified; device behaviour NOT VERIFIED |
 | M2 | uTLS fingerprint | ✅ done | green | allow-list from the pinned core |
 | M3 | REALITY + Vision | ✅ done | green | ships together with M4 (D-49) |
+| M4-W | Widget + quick-settings tile | ✅ done | green | two system surfaces, one entry point |
 | M4 | State machine + path policy | ⬜ not started | — | largest milestone |
 | M5 | Pre-flight netcheck | ⬜ not started | — | measurement, not guesswork |
 | M6 | Second path (WS+TLS via CDN) | ⬜ not started | — | resilience to IP death |
@@ -107,6 +108,20 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
 - `AcTraceabilityTest` added: every AC must have a runnable command, and every referenced test class
   must exist in sources or be planned. It caught two AC rows with shorthand instead of a command.
 - Gate: **100/100 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
+
+### 2026-10-31 · M4-W — widget + quick-settings tile
+- `surfaces/`: `SurfaceState` (7 projections), `SurfaceStateMapper`, `TileStateMapper`, `TunnelController`
+  (the single entry point), `SurfaceStore` (cold-start profile lookup), `SurfaceUpdater` (one reactive
+  collector on `Tunnel.state`; no polling).
+- `widget/MohammadWidgetProvider` (RemoteViews, 2x1 and 4x1, resizable) and
+  `tile/MohammadTileService` (listening flag, no references kept after `onStopListening`).
+- `MainActivity` now delegates to `TunnelController`; the service resolves `ACTION_TOGGLE` with a pure
+  function so the dial, widget and tile provably share one path (D-84).
+- Zero new permissions: `aapt2 dump permissions` still lists the same five.
+- Gate: **205/205 tests, lint 0 errors / 15 warnings, APK 14.4 MB, placeholder exit 0.**
+- Snapshots: `app/build/reports/surfaces/widget_{idle,connecting,connected,failed}.png`.
+- **NOT VERIFIED:** real launcher rendering, tile binding by the system, and Doze/reboot behaviour —
+  all need a device.
 
 ### 2026-10-31 · trial build for the operator (0.14.0)
 - Inspected the bundle shipped in the public 0.8.0 APK: decrypts, **1 profile**, VLESS over WS,

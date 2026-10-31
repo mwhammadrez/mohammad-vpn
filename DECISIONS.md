@@ -600,3 +600,47 @@ Durable fix: M7 (signed remote config) makes this a publish, not a re-encryption
 change must be re-encrypted into the bundle.
 Consequence for tests: the policy is correct, but "the fix is in effect" depends on the bundle. A
 release checklist item should assert `defaultMtu` of the bundle about to ship.
+
+## D-81 — The surfaces use RemoteViews, not Glance
+**Date:** 2026-10-31 · **Source:** M4-W brief ("Glance or RemoteViews")
+RemoteViews: it needs no new dependency, it renders under Robolectric without a device, and the
+widget's four states are simple enough that Compose's advantages do not pay for the extra Gradle
+plugin and its version coupling to Kotlin 2.0.21.
+Cost: the layout is XML and cannot share Compose code. Mitigation: `SurfaceState` carries the strings
+and colours, so the XML stays dumb and the mapping stays testable.
+Zero new permissions: the manifest gains a receiver and a tile service, both guarded by permissions the
+*system* holds (`BIND_QUICK_SETTINGS_TILE`), not ones we request. `aapt2 dump permissions` confirms the
+APK requests exactly the five permissions it requested before.
+
+## D-82 — One deprecated call, suppressed with a reason
+**Date:** 2026-10-31 · **Source:** Lint `StartActivityAndCollapseDeprecated`
+`startActivityAndCollapse(PendingIntent)` exists only from API 34; minSdk is 26. Below 34 the Intent
+overload is the only API that collapses the shade while opening the app, so it is used and suppressed
+on the method with this reason. Raising minSdk for a cosmetic collapse is not worth it.
+
+## D-83 — Surfaces depend on a projection, never on the state machine
+**Date:** 2026-10-31 · **Source:** M4-W brief ("M4 must consume it, not the other way around")
+`TunnelState` → `SurfaceStateMapper` → `SurfaceState` → widget/tile. When M4 grows the machine to ten
+states, only `SurfaceStateMapper` (and possibly `SurfaceState`) changes; `widget/` and `tile/` do not.
+The mapper's precedence is explicit and tested: no profile beats no permission, and mid-transition
+states are not tappable so a second tap cannot start a second tunnel.
+`CONNECTED` is inherited, not invented: the service only sets `TunnelState.Connected` after a passing
+SOCKS probe, so both surfaces show green exactly when the dial would.
+
+## D-84 — One entry point, enforced by test
+**Date:** 2026-10-31 · **Source:** AC-W2
+`MainActivity` no longer builds a tunnel Intent: `requestConnect`, the dial, the widget and the tile all
+go through `TunnelController`. The widget attaches `TunnelController.toggleIntent(context)` unchanged,
+and `MohammadVpnService.resolve(ACTION_TOGGLE, state)` turns it into connect or disconnect using the
+same rule the controller uses.
+`WidgetInteractionTest` also scans `MainActivity.kt` for a reintroduced `Intent(this,
+MohammadVpnService::class.java)` and fails if one appears — the same guard technique as D-78, because
+"one entry point" degrades silently.
+Surfaces never call `Tunnel.update`; they only send intents, so a widget tap cannot fake a state.
+
+## D-85 — Widget and tile read persisted selection, not just memory
+**Date:** 2026-10-31 · **Source:** M4-W brief ("cold start from widget/tile tap")
+`Tunnel.selected` is null until an Activity loads the bundle, so a cold process would show "open the
+app" even to a user who has a profile. `SurfaceStore.hasProfile` falls back to the selection already
+persisted by `MainActivity.selectProfile` in the `mohammad` preferences.
+No secret is read: only the profile id string, which is not an endpoint.

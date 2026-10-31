@@ -62,6 +62,7 @@ import ir.mohammad.vpn.data.Profile
 import ir.mohammad.vpn.data.Tunnel
 import ir.mohammad.vpn.data.TunnelError
 import ir.mohammad.vpn.data.TunnelState
+import ir.mohammad.vpn.surfaces.TunnelController
 import ir.mohammad.vpn.diagnostics.CrashRecorder
 import ir.mohammad.vpn.ui.MohammadScreen
 import ir.mohammad.vpn.vpn.MohammadVpnService
@@ -184,7 +185,7 @@ class MainActivity : ComponentActivity() {
     }
 
     fun requestConnect() {
-        if (Tunnel.selected == null) {
+        if (!TunnelController.hasProfile()) {
             Tunnel.update(TunnelState.Failed(TunnelError.NoProfileSelected))
             return
         }
@@ -197,18 +198,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * The dial, the widget and the tile all enter the tunnel through [TunnelController]; this is the
+     * only place an Activity adds anything (the consent dialog).
+     */
     private fun startTunnel() {
-        val serviceIntent = Intent(this, MohammadVpnService::class.java).apply {
-            action = MohammadVpnService.ACTION_CONNECT
+        if (TunnelController.connect(this) == TunnelController.Outcome.NEEDS_PERMISSION) {
+            VpnService.prepare(this)?.let { vpnPermissionLauncher.launch(it) }
         }
-        ContextCompat.startForegroundService(this, serviceIntent)
     }
 
     fun requestDisconnect() {
-        val serviceIntent = Intent(this, MohammadVpnService::class.java).apply {
-            action = MohammadVpnService.ACTION_DISCONNECT
-        }
-        startService(serviceIntent)
+        TunnelController.disconnect(this)
     }
 
     private companion object {

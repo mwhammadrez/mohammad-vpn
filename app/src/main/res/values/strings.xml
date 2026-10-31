@@ -1,4 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Mohammad</string>
+
+    <!-- App widget and quick-settings tile. No endpoint, host or key may ever appear here (D-78). -->
+    <string name="widget_label">Mohammad</string>
+    <string name="widget_content_description">Mohammad connection status. Tap to connect or disconnect.</string>
+    <string name="widget_title_idle">Ready</string>
+    <string name="widget_title_connecting">Connecting</string>
+    <string name="widget_title_connected">Connected</string>
+    <string name="widget_title_disconnecting">Disconnecting</string>
+    <string name="widget_title_failed">Not connected</string>
+    <string name="widget_title_needs_app">Set up Mohammad</string>
+    <string name="widget_title_permission">Permission needed</string>
+    <string name="widget_subtitle_idle">Tap to connect</string>
+    <string name="widget_subtitle_connecting">Starting the tunnel</string>
+    <string name="widget_subtitle_connected">Traffic is protected</string>
+    <string name="widget_subtitle_disconnecting">Closing the tunnel</string>
+    <string name="widget_subtitle_failed">Tap to try again</string>
+    <string name="widget_subtitle_needs_app">Tap to open the app</string>
+    <string name="widget_subtitle_permission">Tap to grant VPN access</string>
+    <string name="widget_action_connect">CONNECT</string>
+    <string name="widget_action_disconnect">STOP</string>
+    <string name="widget_action_open">OPEN</string>
+    <string name="widget_action_wait">WAIT</string>
+    <string name="tile_label">Mohammad</string>
+
+    <string name="surface_desc_needs_app">Mohammad has no profile yet. Open the app to set it up.</string>
+    <string name="surface_desc_permission">Mohammad needs VPN permission. Open the app to grant it.</string>
+    <string name="surface_desc_idle">Mohammad is ready. Tap to connect.</string>
+    <string name="surface_desc_connecting">Mohammad is connecting to the tunnel.</string>
+    <string name="surface_desc_connected">Mohammad is connected. Tap to disconnect.</string>
+    <string name="surface_desc_disconnecting">Mohammad is closing the tunnel.</string>
+    <string name="surface_desc_failed">Mohammad is not connected. Tap to try again.</string>
 </resources>

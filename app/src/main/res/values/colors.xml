@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Mirror of ir.mohammad.vpn.ui.theme.Palette for surfaces that cannot use Compose
+  (app widget, quick-settings tile). SurfacePaletteTest asserts both stay in sync.
+-->
+<resources>
+    <color name="surface_bg">#FF050807</color>
+    <color name="surface_card">#FF0E1311</color>
+    <color name="surface_mint">#FF34F5C5</color>
+    <color name="surface_amber">#FFF59E0B</color>
+    <color name="surface_rose">#FFF43F5E</color>
+    <color name="surface_text_primary">#FFF8FAFC</color>
+    <color name="surface_text_muted">#FF64748B</color>
+    <color name="surface_border">#472DF8C5</color>
+</resources>

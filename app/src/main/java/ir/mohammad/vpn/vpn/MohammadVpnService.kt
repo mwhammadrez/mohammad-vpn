@@ -45,6 +45,21 @@ class MohammadVpnService : VpnService() {
     companion object {
         const val ACTION_CONNECT = "ir.mohammad.vpn.action.CONNECT"
         const val ACTION_DISCONNECT = "ir.mohammad.vpn.action.DISCONNECT"
+        /** Sent by the app widget and the quick-settings tile: one action, decided by the service. */
+        const val ACTION_TOGGLE = "ir.mohammad.vpn.action.TOGGLE"
+
+        /**
+         * Resolves a toggle into a concrete action from the current state. Pure so the widget, the
+         * tile and the in-app dial can be proven to take the same path (AC-W2).
+         */
+        fun resolve(action: String?, state: TunnelState): String? = when (action) {
+            ACTION_TOGGLE -> when (state) {
+                is TunnelState.Connected, is TunnelState.Connecting -> ACTION_DISCONNECT
+                is TunnelState.Disconnecting -> null
+                else -> ACTION_CONNECT
+            }
+            else -> action
+        }
 
         const val CHANNEL_ID = "mohammad_tunnel"
         const val NOTIFICATION_ID = 1001
@@ -114,7 +129,8 @@ class MohammadVpnService : VpnService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         LogStore.add("D", TAG, "onStartCommand action=${intent?.action} startId=$startId")
-        when (intent?.action) {
+        val action = resolve(intent?.action, Tunnel.state.value)
+        when (action) {
             ACTION_CONNECT -> {
                 createChannel()
                 startForeground(NOTIFICATION_ID, buildNotification("Connecting…", "Starting VPN engine"))
