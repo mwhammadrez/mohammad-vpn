@@ -252,8 +252,14 @@ app is already skippable, so recomposition was **not** the bottleneck — alloca
    1.2 s, on a dedicated executor so it never queues behind the geo download) and injected as a
    static mapping, removing one resolver round trip inside the core. Skipped when the server address
    is already a literal. Neither the name nor the address is logged.
-3. **`Builder.setMetered()`** (API 29+ guard, so minSdk 26 stays valid): Wi-Fi and Ethernet are
-   unmetered, everything else metered.
+3. **`Builder.setMetered(false)`** (API 29+ guard, so minSdk 26 stays valid), unconditionally:
+   a tunnel the user deliberately routed is not subject to Data Saver throttling.
+
+   **Superseded variant:** 0.11.0 shipped a network-aware version (metred on cellular). The operator
+   asked for the unconditional form. Trade-off recorded honestly: on a cellular link this tells
+   Android the VPN is unmetered, so Data Saver will not restrict tunnelled traffic. That is the
+   intended product semantic here, not an accident; if data-saving behaviour is wanted later, the
+   network-aware branch in git history is the revert path.
 
 All three are configuration-level. None has been measured on a device; the claims are
 "field is emitted correctly", not "connection is faster".

@@ -57,16 +57,16 @@ class ConnectionQualityConfigTest {
     }
 
     @Test
-    fun `setMetered reaches the builder`() {
+    fun `setMetered is unconditional false`() {
         val service = Robolectric.buildService(MohammadVpnService::class.java).create().get()
         val builder = service.newBuilder()
-        service.applyMetering(builder, true)
+        service.applyMetering(builder)
 
         // Android 14 keeps the flag on the internal VpnConfig, not on the builder.
         val configField = VpnService.Builder::class.java.getDeclaredField("mConfig")
             .apply { isAccessible = true }
         val config = configField.get(builder)!!
         val metered = config.javaClass.getField("isMetered").getBoolean(config)
-        assertTrue("setMetered(true) must reach the config", metered)
+        assertFalse("a VPN tunnel is always reported as unmetered", metered)
     }
 }

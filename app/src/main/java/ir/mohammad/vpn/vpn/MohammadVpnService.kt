@@ -442,10 +442,13 @@ class MohammadVpnService : VpnService() {
         }
     }
 
-    /** Exposed for tests: the builder call is the only thing this does. */
-    internal fun applyMetering(builder: Builder, metered: Boolean) {
-        // Builder.setMetered() arrived in API 29; below that the system infers it itself.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(metered)
+    /**
+     * A VPN tunnel is reported as unmetered: the system must not apply Data Saver
+     * restrictions to traffic the user has already chosen to route through the tunnel.
+     * Builder.setMetered() arrived in API 29; below that the system infers it itself.
+     */
+    internal fun applyMetering(builder: Builder) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(false)
     }
 
     /** A Builder requires the enclosing VpnService instance; tests cannot construct one. */
@@ -470,14 +473,6 @@ class MohammadVpnService : VpnService() {
         return mapOf(host to literal)
     }
 
-    /** Wi-Fi and Ethernet are unmetered; cellular and anything unknown is metered. */
-    private fun meteredFor(network: Network?): Boolean {
-        val caps = network?.let { getSystemService(ConnectivityManager::class.java).getNetworkCapabilities(it) }
-            ?: return true
-        return !caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
-            !caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-    }
-
     private fun buildInterface(plan: TunPlan): ParcelFileDescriptor? {
         LogStore.add("D", TAG, "building interface from plan: mtu=${plan.mtu}")
         val builder = Builder()
@@ -493,7 +488,7 @@ class MohammadVpnService : VpnService() {
             LogStore.add("D", TAG, "ipv6 enabled: ${plan.ipv6Address}/${plan.ipv6Prefix} + default route")
         }
         val currentNetwork = netMonitor.currentNetwork()
-        runCatching { applyMetering(builder, meteredFor(currentNetwork)) }
+        runCatching { applyMetering(builder) }
             .onFailure { LogStore.add("W", TAG, "setMetered rejected: ${it.message}") }
         currentNetwork?.let { network ->
             runCatching { builder.setUnderlyingNetworks(arrayOf(network)) }

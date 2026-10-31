@@ -281,3 +281,8 @@ Data path is now the one mature clients use:
   absent when unresolved, and `setMetered` proven by reflecting the framework's `VpnConfig.isMetered`.
 - 91 tests green; lint, assemble and the placeholder gate pass.
 - Device measurement: **pending**. These are config-level improvements, not measured speed-ups.
+
+**2026-10-30 · v0.11.1 — metered semantic aligned with the brief**
+- `applyMetering(builder)` now calls `setMetered(false)` unconditionally (was network-aware in
+  0.11.0). Test updated first, compile-red, then implemented.
+- Everything else (keep-alive 25/15, `dns.hosts` pre-resolution) unchanged from 0.11.0.

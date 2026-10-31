@@ -276,6 +276,6 @@ O-1 signing key (none; debug only) · O-2 device availability (none) · O-3 rele
 | `sockopt.tcpKeepAliveIdle` | 25 s | CGNAT expires idle mappings at 30–60 s |
 | `sockopt.tcpKeepAliveInterval` | 15 s | probe cadence once idle |
 | `dns.hosts` | server name → resolved address | one resolver round trip removed per connect |
-| `Builder.setMetered` | false on Wi-Fi/Ethernet, true otherwise | correct system signal (API 29+) |
+| `Builder.setMetered` | always `false` | a deliberately routed tunnel must not be Data-Saver throttled (API 29+) |
 
 Applies to Xray outbounds only; AmneziaWG has its own socket layer.
