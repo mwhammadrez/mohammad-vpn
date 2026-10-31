@@ -64,6 +64,8 @@ import ir.mohammad.vpn.data.ProxyState
 import ir.mohammad.vpn.proxy.DnsProxyService
 import ir.mohammad.vpn.net.RealDelay
 import ir.mohammad.vpn.ui.AppMode
+import ir.mohammad.vpn.ui.profilesFor
+import ir.mohammad.vpn.ui.resolveSelection
 import ir.mohammad.vpn.ui.DnsMode
 import ir.mohammad.vpn.ui.DnsScreen
 import ir.mohammad.vpn.ui.ProfilePing
@@ -224,6 +226,18 @@ class MainActivity : ComponentActivity() {
     }
 
     fun requestConnect() {
+        // A DNS profile selected in Mode 1 would start a DNS engine with no visible reason; the
+        // dial is the Xray dial, so it uses an Xray profile.
+        if (Tunnel.selected?.core == "DNS") {
+            val fallback = resolveSelection(AppMode.XRAY, Tunnel.profiles, Tunnel.selected)
+            if (fallback == null) {
+                LogStore.add("E", "APP", "selected profile is a DNS tunnel; open Mode 2 to use it")
+                Tunnel.update(TunnelState.Failed(TunnelError.NoProfileSelected))
+                return
+            }
+            selectProfile(fallback)
+            LogStore.add("W", "APP", "DNS profile selected in Mode 1; using ${fallback.name}")
+        }
         if (!TunnelController.hasProfile()) {
             Tunnel.update(TunnelState.Failed(TunnelError.NoProfileSelected))
             return
@@ -367,9 +381,8 @@ fun MohammadApp() {
 
     if (appMode == AppMode.DNS) {
         DnsScreen(
-            dnsProfiles = profiles.filter { it.core == "DNS" },
-            selected = profiles.firstOrNull { it.id == selected?.id && it.core == "DNS" }
-                ?: profiles.firstOrNull { it.core == "DNS" },
+            dnsProfiles = profilesFor(AppMode.DNS, profiles),
+            selected = resolveSelection(AppMode.DNS, profiles, selected),
             dnsMode = dnsMode,
             tunnelState = state,
             proxy = proxy,
@@ -416,7 +429,7 @@ fun MohammadApp() {
         state = state,
         traffic = traffic,
         logs = logs,
-        profiles = profiles.filter { it.core != "DNS" },
+        profiles = profilesFor(AppMode.XRAY, profiles),
         selected = selected,
         pingMs = pingMs,
         pingBusy = pingBusy,

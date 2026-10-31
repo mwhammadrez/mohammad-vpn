@@ -5,6 +5,16 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.15.3 — a DNS profile can no longer hijack the Mode 1 dial
+
+### Fixed
+- Pressing the big dial in Mode 1 while a DNS profile was selected started a DNS engine, which then
+  failed with no server — the symptom looked identical to "the app is broken". Mode 1 now picks an
+  Xray profile (or refuses and says why), and the selection rule lives in one tested place.
+- Mode 2's profile list and selection use the same rule, so the two screens can no longer disagree.
+
+---
+
 ## 0.15.2 — Mode 2, reviewed (M6-UI review)
 
 Eight defects found by reading the mode code against its own rules, all fixed:

@@ -1,5 +1,7 @@
 package ir.mohammad.vpn.ui
 
+import ir.mohammad.vpn.data.Profile
+
 /**
  * The two environments the app presents.
  *
@@ -16,6 +18,26 @@ enum class AppMode(val storageKey: String, val label: String, val short: String)
     companion object {
         fun from(value: String?): AppMode = entries.firstOrNull { it.storageKey == value } ?: XRAY
     }
+}
+
+/**
+ * Which profiles belong to which mode, and what "selected" means in each.
+ *
+ * The two environments do not share a profile kind: a DNS tunnel has no meaning in Mode 1, and a
+ * VLESS profile has none behind a DNS engine. Keeping the rule here — instead of inline filters in
+ * the activity — is what makes it testable and keeps the two screens from disagreeing.
+ */
+fun profilesFor(mode: AppMode, all: List<Profile>): List<Profile> =
+    all.filter { if (mode == AppMode.DNS) it.core == "DNS" else it.core != "DNS" }
+
+/**
+ * The profile the mode would use: the current selection when it belongs to this mode, otherwise the
+ * first one that does, otherwise null.
+ */
+fun resolveSelection(mode: AppMode, all: List<Profile>, selected: Profile?): Profile? {
+    val candidates = profilesFor(mode, all)
+    if (selected != null && candidates.any { it.id == selected.id }) return selected
+    return candidates.firstOrNull()
 }
 
 /** How Mode 2 is used: a proxy on localhost, or a tunnel for the whole device. */
