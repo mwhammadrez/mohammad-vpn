@@ -268,3 +268,14 @@ O-1 signing key (none; debug only) · O-2 device availability (none) · O-3 rele
 | User disconnects during the outage | No reconnect on restoration |
 | Core alive but data path dead | SOCKS probe detects it; two consecutive failures trigger reconnect |
 | Retry budget exhausted | `RECONNECT_FAILED`; service stops instead of looping |
+
+## Connection quality defaults (0.11.0)
+
+| Field | Value | Reason |
+|---|---|---|
+| `sockopt.tcpKeepAliveIdle` | 25 s | CGNAT expires idle mappings at 30–60 s |
+| `sockopt.tcpKeepAliveInterval` | 15 s | probe cadence once idle |
+| `dns.hosts` | server name → resolved address | one resolver round trip removed per connect |
+| `Builder.setMetered` | false on Wi-Fi/Ethernet, true otherwise | correct system signal (API 29+) |
+
+Applies to Xray outbounds only; AmneziaWG has its own socket layer.

@@ -271,3 +271,13 @@ Data path is now the one mature clients use:
   animates — the measurable half of the smoothness claim.
 - Lint 19 → 15 findings; APK 15.0 → 14.97 MB; 87 tests green.
 - FPS / cold start / memory: NOT VERIFIED (no device). See `docs/PERF_QUALITY_REPORT.md`.
+
+**2026-10-30 · v0.11.0 — three low-risk quality defaults**
+- `sockopt.tcpKeepAliveIdle=25`, `tcpKeepAliveInterval=15` on every Xray outbound (D-41).
+- `dns.hosts` entry for a domain server, resolved once at connect with a 1.2 s cap on a dedicated
+  executor; skipped for literal addresses.
+- `VpnService.Builder.setMetered()` with an API 29 guard; Wi-Fi/Ethernet are unmetered.
+- `ConnectionQualityConfigTest` (4 tests) written first: keep-alive fields, hosts emitted, hosts
+  absent when unresolved, and `setMetered` proven by reflecting the framework's `VpnConfig.isMetered`.
+- 91 tests green; lint, assemble and the placeholder gate pass.
+- Device measurement: **pending**. These are config-level improvements, not measured speed-ups.

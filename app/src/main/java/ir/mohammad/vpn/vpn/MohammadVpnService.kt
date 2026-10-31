@@ -5,7 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.net.ConnectivityManager
 import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -30,6 +32,7 @@ import kotlinx.coroutines.launch
 import libmohammad.AwgController
 import libmohammad.TunBridge
 import libmohammad.XrayController
+import java.net.InetAddress
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledFuture
@@ -70,6 +73,8 @@ class MohammadVpnService : VpnService() {
     private val worker = Executors.newSingleThreadExecutor()
     private val io = Executors.newSingleThreadExecutor()
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
+    // DNS pre-resolution must not queue behind the 28 MB geo download on `io`.
+    private val resolver = Executors.newSingleThreadExecutor()
     private val retryPolicy = RetryPolicy()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -250,6 +255,7 @@ class MohammadVpnService : VpnService() {
                 geo = geoReady,
                 fakeDns = true,
                 tuning = currentTuning(),
+                serverHosts = preResolve(profile),
             )
         } catch (t: Throwable) {
             LogStore.add("E", TAG, "xray config render failed: ${t.javaClass.simpleName}: ${t.message}")
@@ -436,6 +442,42 @@ class MohammadVpnService : VpnService() {
         }
     }
 
+    /** Exposed for tests: the builder call is the only thing this does. */
+    internal fun applyMetering(builder: Builder, metered: Boolean) {
+        // Builder.setMetered() arrived in API 29; below that the system infers it itself.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) builder.setMetered(metered)
+    }
+
+    /** A Builder requires the enclosing VpnService instance; tests cannot construct one. */
+    internal fun newBuilder(): Builder = Builder()
+
+    /**
+     * Resolves the server name once, with a hard cap, so the rendered config can carry
+     * a `dns.hosts` entry and skip a resolver round trip inside the core.
+     * Never logs the name or the address.
+     */
+    private fun preResolve(profile: Profile): Map<String, String> {
+        val host = profile.host
+        if (host.contains(':') || host.all { it.isDigit() || it == '.' }) return emptyMap()
+        val task = try {
+            resolver.submit<InetAddress?> { runCatching { InetAddress.getByName(host) }.getOrNull() }
+        } catch (e: RejectedExecutionException) {
+            return emptyMap()
+        }
+        val address = runCatching { task.get(1_200, TimeUnit.MILLISECONDS) }.getOrNull() ?: return emptyMap()
+        val literal = address.hostAddress ?: return emptyMap()
+        LogStore.add("D", TAG, "server address pre-resolved for hosts entry")
+        return mapOf(host to literal)
+    }
+
+    /** Wi-Fi and Ethernet are unmetered; cellular and anything unknown is metered. */
+    private fun meteredFor(network: Network?): Boolean {
+        val caps = network?.let { getSystemService(ConnectivityManager::class.java).getNetworkCapabilities(it) }
+            ?: return true
+        return !caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
+            !caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+    }
+
     private fun buildInterface(plan: TunPlan): ParcelFileDescriptor? {
         LogStore.add("D", TAG, "building interface from plan: mtu=${plan.mtu}")
         val builder = Builder()
@@ -450,7 +492,10 @@ class MohammadVpnService : VpnService() {
             plan.ipv6Routes.forEach { (destination, prefix) -> builder.addRoute(destination, prefix) }
             LogStore.add("D", TAG, "ipv6 enabled: ${plan.ipv6Address}/${plan.ipv6Prefix} + default route")
         }
-        netMonitor.currentNetwork()?.let { network ->
+        val currentNetwork = netMonitor.currentNetwork()
+        runCatching { applyMetering(builder, meteredFor(currentNetwork)) }
+            .onFailure { LogStore.add("W", TAG, "setMetered rejected: ${it.message}") }
+        currentNetwork?.let { network ->
             runCatching { builder.setUnderlyingNetworks(arrayOf(network)) }
                 .onFailure { LogStore.add("W", TAG, "underlying network rejected: ${it.message}") }
         }
@@ -831,6 +876,7 @@ class MohammadVpnService : VpnService() {
         worker.shutdown()
         io.shutdown()
         scheduler.shutdown()
+        resolver.shutdown()
         super.onDestroy()
     }
 

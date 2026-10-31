@@ -242,3 +242,18 @@ every composition; the console rebuilt 40 text rows per log line. All three were
 console renders 12 rows from a `remember(logs.size)` slice.
 The Compose compiler report was checked first: with Kotlin 2.0 strong skipping every composable in the
 app is already skippable, so recomposition was **not** the bottleneck — allocation and overdraw were.
+
+## D-41 — Three config-level quality defaults
+**Date:** 2026-10-30
+1. **Keep-alive 25 s / 15 s** (`sockopt.tcpKeepAliveIdle/Interval`). Xray's default is Chrome's 45 s,
+   which sits inside the 30–60 s window where Iranian CGNAT expires idle mappings. Two small packets
+   per interval are the cost. Merged into an existing `sockopt` block, never overwritten.
+2. **`dns.hosts` for the server name.** The address is resolved once at connect time (capped at
+   1.2 s, on a dedicated executor so it never queues behind the geo download) and injected as a
+   static mapping, removing one resolver round trip inside the core. Skipped when the server address
+   is already a literal. Neither the name nor the address is logged.
+3. **`Builder.setMetered()`** (API 29+ guard, so minSdk 26 stays valid): Wi-Fi and Ethernet are
+   unmetered, everything else metered.
+
+All three are configuration-level. None has been measured on a device; the claims are
+"field is emitted correctly", not "connection is faster".

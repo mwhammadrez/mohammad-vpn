@@ -19,6 +19,10 @@ object XrayConfig {
     const val LOOPBACK = "127.0.0.1"
 
     /** Documented FakeDNS pool; must not collide with real destinations. */
+    /** CGNAT in Iran expires idle mappings around 30-60 s; stay well inside that. */
+    const val KEEPALIVE_IDLE_S = 25
+    const val KEEPALIVE_INTERVAL_S = 15
+
     const val FAKE_DNS_POOL = "198.18.0.0/15"
     const val FAKE_DNS_POOL_SIZE = 65535
 
@@ -75,6 +79,22 @@ object XrayConfig {
         }
     }
 
+    /**
+     * Socket-level defaults that every Xray outbound benefits from.
+     *
+     * 25 s idle / 15 s interval: carrier-grade NAT in Iran drops idle mappings in
+     * the 30-60 s range; Xray's Chrome-derived default of 45 s sits inside that
+     * window. Merges into an existing `sockopt` block instead of replacing it.
+     */
+    private fun applySockopt(outbound: JSONObject) {
+        val stream = outbound.optJSONObject("streamSettings")
+            ?: JSONObject().also { outbound.put("streamSettings", it) }
+        val sockopt = stream.optJSONObject("sockopt")
+            ?: JSONObject().also { stream.put("sockopt", it) }
+        if (!sockopt.has("tcpKeepAliveIdle")) sockopt.put("tcpKeepAliveIdle", KEEPALIVE_IDLE_S)
+        if (!sockopt.has("tcpKeepAliveInterval")) sockopt.put("tcpKeepAliveInterval", KEEPALIVE_INTERVAL_S)
+    }
+
     fun render(
         profile: Profile,
         mtu: Int,
@@ -84,9 +104,11 @@ object XrayConfig {
         geo: Boolean = false,
         fakeDns: Boolean = true,
         tuning: TransportTuning = TransportTuning(),
+        serverHosts: Map<String, String> = emptyMap(),
     ): String {
         val outbound = JSONObject(profile.xray.toString()).apply { put("tag", "proxy") }
         applyTuning(outbound, tuning)
+        applySockopt(outbound)
 
         val sniffOverride = JSONArray().put("http").put("tls")
         if (fakeDns) sniffOverride.put("fakedns")
@@ -124,6 +146,15 @@ object XrayConfig {
         }
         dnsServers.forEach { dnsServersJson.put(it) }
 
+        val dnsObject = JSONObject()
+        if (serverHosts.isNotEmpty()) {
+            // Saves one resolver round trip per connection: the server name is known
+            // before the tunnel exists, so there is nothing to discover.
+            val hosts = JSONObject()
+            serverHosts.forEach { (name, address) -> hosts.put(name, address) }
+            dnsObject.put("hosts", hosts)
+        }
+
         val root = JSONObject()
             .put("log", JSONObject().put("loglevel", logLevel))
             .put("stats", JSONObject())
@@ -150,7 +181,7 @@ object XrayConfig {
             )
             .put(
                 "dns",
-                JSONObject()
+                dnsObject
                     .put("servers", dnsServersJson)
                     .put("queryStrategy", if (ipv6) "UseIP" else "UseIPv4"),
             )
