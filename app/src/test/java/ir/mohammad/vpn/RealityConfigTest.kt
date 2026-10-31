@@ -67,6 +67,24 @@ class RealityConfigTest {
         assertEquals("reality", stream.getString("security"))
     }
 
+    @Test
+    fun `a completely different server is accepted unchanged`() {
+        // D-78/SRC-3: validation is about shape, not about this operator's values.
+        val otherKey = "0MxEDeM4M-TnvFkSSt2PvBBbSLDiVeYZSDJZ91sitAw"
+        val otherId = "96da3c3fa8193e34"
+        val json = bundle(
+            reality = """{"serverName":"cdn.example.net","publicKey":"$otherKey","shortId":"$otherId","fingerprint":"firefox"}""",
+            extraProfile = "\"flow\":\"xtls-rprx-vision\",",
+        )
+        val profile = parse(json).profiles.single()
+        val reality = proxyStream(profile).getJSONObject("realitySettings")
+
+        assertEquals("cdn.example.net", reality.getString("serverName"))
+        assertEquals(otherKey, reality.getString("publicKey"))
+        assertEquals(otherId, reality.getString("shortId"))
+        assertEquals("firefox", reality.getString("fingerprint"))
+    }
+
     // --- serverName -----------------------------------------------------------------
 
     @Test
