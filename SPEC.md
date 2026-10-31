@@ -248,7 +248,22 @@ it is testable on the JVM without a device. Android types stay out of policy cod
 | SRC-4 | Adding, removing or changing a server requires only a new bundle or a remote-config publish — never a new APK. |
 | SRC-5 | Every policy, state and rendering test covers 1, 2 and N profiles, including the empty-set case. |
 
-### 5.13 AmneziaWG (AWG) — `NOT VERIFIED`
+### 5.13 System surfaces: widget and tile (FR-W) — milestone M4-W
+
+| ID | Requirement |
+|---|---|
+| FR-W1 | A home-screen widget shows the current connection state with an icon, a title and an action, in the existing cyber-emerald palette. |
+| FR-W2 | A quick-settings tile shows the same state as active / inactive / unavailable, with a label and subtitle. |
+| FR-W3 | A tap on either surface connects or disconnects through **the same entry point as the in-app dial** — no second logic path. |
+| FR-W4 | Neither surface may display a connected state unless the SOCKS health probe has passed; the projection is derived from `TunnelState`, which the service only sets after the probe. |
+| FR-W5 | Both surfaces work from a cold process: a tap starts the service, and a surface rendered before any Activity reads the persisted profile selection rather than showing "not set up". |
+| FR-W6 | Neither surface displays or embeds an endpoint, host, IP, UUID, publicKey or shortId. |
+| FR-W7 | The widget is resizable and lays out correctly at 2x1 and 4x1. |
+| FR-W8 | Both surfaces update from the connection `StateFlow`; no polling. |
+| FR-W9 | Both surfaces depend on a projection (`SurfaceState`), never on the state machine directly, so M4's ten states require no change in `widget/` or `tile/`. |
+| FR-W10 | No new Android permission is requested for either surface. |
+
+### 5.14 AmneziaWG (AWG) — `NOT VERIFIED`
 
 | ID | Requirement |
 |---|---|
@@ -463,6 +478,16 @@ Every AC names a test class that exists today or is created by the milestone in 
 | AC-35 | placeholder ban | static | `./scripts/check-no-placeholders` | exit 0, no skipped tests | every |
 | AC-36 | build | build | `./gradlew clean :app:assembleDebug` | exit 0 | every |
 | AC-37 | AWG-4 | docs | `grep -R "AmneziaWG.*NOT VERIFIED" README.md docs` | match found | every |
+| AC-W1 | FR-W1 | UI | `--tests "*SurfaceStateMapperTest"` | every state maps to one surface state | M4-W |
+| AC-W2 | FR-W3 | integration | `--tests "*WidgetInteractionTest"` | widget tap attaches the shared toggle intent | M4-W |
+| AC-W3 | FR-W2 | unit | `--tests "*TileStateMapperTest"` | only CONNECTED is active; unusable states are unavailable | M4-W |
+| AC-W4 | FR-W3 | integration | `--tests "*TileInteractionTest"` | tile toggles through `TunnelController`, never its own Intent | M4-W |
+| AC-W5 | FR-W4 | static+unit | `--tests "*SurfaceProbeGateTest"` | Connected has one writer, downstream of the probe | M4-W |
+| AC-W6 | FR-W5 | Robolectric | `--tests "*SurfaceColdStartTest"` | cold process reads the persisted selection | M4-W |
+| AC-W7 | FR-W6 | static | `--tests "*SurfaceResourceScanTest"` | no endpoint-shaped value in surface resources | M4-W |
+| AC-W8 | FR-W7 | Robolectric | `--tests "*WidgetResizableTest"` | 2x1 and 4x1 both measure without clipping | M4-W |
+| AC-W9 | FR-W2 | unit | `--tests "*TileInteractionTest"` | long-press is platform-owned; unused outcomes open the app | M4-W |
+| AC-W10 | FR-W9 | static | `--tests "*AcTraceabilityTest"` | test count never decreases; matrix stays valid | every |
 | AC-39 | SRC-1, SRC-2, SRC-3 | static | `--tests "*NoHardcodedEndpointsTest"` | no server data in production sources | every |
 | AC-40 | SRC-1, SRC-5 | unit | `--tests "*PathPolicyTest"` | policy correct for 1, 2 and N profiles | M4 |
 | AC-41 | SRC-4 | integration | `--tests "*RemoteConfigApplierTest"` | a publish adds a server without an APK | M7 |

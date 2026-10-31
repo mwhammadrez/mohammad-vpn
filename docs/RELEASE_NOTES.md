@@ -5,6 +5,38 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.14.1 — home-screen widget and quick-settings tile (M4-W)
+
+Adds two ways to connect without opening the app. **No change to VPN behaviour**: the data path, MTU,
+REALITY handling and validation are byte-identical to 0.14.0.
+
+### Added
+- Home-screen widget, resizable from 2x1 to 4x1. Shows the real connection state with an icon, a
+  title and an action; tapping it connects or disconnects.
+- Quick-settings tile with the same three states as the system expects: active, inactive, unavailable.
+- Both surfaces show green only when the tunnel has answered a real SOCKS probe — the same rule as the
+  in-app dial, because they read the same state.
+- Both surfaces survive process death: a tap from a cold process starts the service, and a widget
+  rendered before the app is opened reads the saved profile instead of asking the user to set up again.
+
+### Not changed
+- No new permissions. The APK still requests exactly the five it requested in 0.14.0.
+- No new dependency. The widget uses RemoteViews rather than Glance.
+- No endpoint, profile name, UUID or key is displayed on either surface.
+
+### Known limitation
+- Long-press on a quick-settings tile opens the app's system info page; Android gives apps no
+  callback for that gesture. Tapping the tile opens the app when it cannot toggle (no profile, or no
+  VPN consent), which is the closest sanctioned behaviour (D-87).
+- AmneziaWG still reports connected on process start rather than after a probe (D-86). It remains
+  `NOT VERIFIED` and is not recommended for users until its own milestone.
+
+### Not verified
+- Real launcher rendering, system tile binding, and Doze/reboot behaviour: no device in this
+  workspace.
+
+---
+
 ## 0.14.0 — REALITY + XTLS Vision (M3)
 
 **This release must not be deployed alone. It ships together with the 0.15.0 fallback path (D-49).**

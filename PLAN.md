@@ -16,6 +16,7 @@ diagnostics, and M7 exists to deliver M1–M6 to installed users without a relea
 | M1 | MTU / MSS / sockopt | #1, #2 | 0.12.0 | connection stops cutting | **yes** (behaviour) |
 | M2 | uTLS fingerprint | #3 | 0.13.0 | quieter on the wire | no |
 | M3 | REALITY + Vision | #4 | 0.14.0 | survives protocol filtering | **yes** (survival) |
+| M4-W | Widget + quick-settings tile | — | 0.14.1 | connect from the home screen | **yes** (launcher) |
 | M4 | State machine + path policy | #5, #6, #7 | 0.15.0 | multi-path, honest states | no |
 | M5 | Pre-flight netcheck | #8 | 0.16.0 | fewer wrong assumptions | **yes** (measurement) |
 | M6 | Second path (WS+TLS via CDN) | #10 | 0.17.0 | works when the IP dies | **yes** (survival) |
@@ -149,6 +150,39 @@ M4's fallback — the release note must say so.
 **Rollback:** revert; v1 bundles and `security:none` still work.
 
 ---
+
+## M4-W — Widget + quick-settings tile (0.14.1)
+
+**Goal.** Connect and disconnect without opening the app, on two system surfaces that cannot lie about
+state and cannot drift from the dial.
+
+**Covers:** FR-W1 … FR-W10, AC-W1 … AC-W10. Inserted before M4 because it depends only on the existing
+five-state machine; M4 then extends it through the projection instead of rewriting it.
+
+**Tasks**
+
+1. `surfaces/SurfaceState` + `SurfaceStateMapper`: `TunnelState` → what a surface draws. Precedence:
+   no profile, then no consent, then the tunnel state. **This is the seam M4 plugs into** (D-83).
+2. `surfaces/TunnelController`: the single entry point. `MainActivity` delegates; the widget and tile
+   send its intents unchanged (D-84).
+3. `widget/MohammadWidgetProvider`: RemoteViews, resizable 2x1/4x1, per-state icon/title/action, one
+   immutable PendingIntent that falls back to opening the app when nothing can be toggled.
+4. `tile/MohammadTileService`: listening flag, no retained references, three tile statuses.
+5. `surfaces/SurfaceStore`: cold-start profile lookup from the persisted selection (D-85).
+6. `surfaces/SurfaceUpdater`: one reactive collector on `Tunnel.state`; no polling.
+
+**Tests first:** `SurfaceStateMapperTest`, `TileStateMapperTest`, `WidgetInteractionTest`,
+`TileInteractionTest`, `SurfaceColdStartTest`, `SurfaceResourceScanTest`, `WidgetResizableTest`,
+`SurfaceProbeGateTest`, `SurfaceLifecycleTest`, `WidgetRenderTest` (incl. four snapshots).
+
+**Acceptance:** the ten AC-W rows in `SPEC.md §9.2`; zero new permissions
+(`aapt2 dump permissions`); lint warnings not above the M3 baseline of 15.
+
+**Deliberate exclusions:** no ten-state machine, no path policy, no REALITY change, no Persian/RTL, no
+new dependency (RemoteViews chosen over Glance for exactly that reason, D-81).
+
+**Rollback:** revert the M4-W commit; the manifest, provider and tile disappear together and the app
+returns to Activity-only entry.
 
 ## M4 — State machine + path policy + anti-flap (0.15.0)
 
@@ -294,6 +328,7 @@ Not implementable in this workspace. The deliverable is a procedure, not code.
 | M5 | NET-1, NET-2, NET-3, NET-4, NET-5, NET-6, MTU-6 |
 | M6 | SP-1, SP-2, SP-3, SP-4, SP-5 |
 | M7 | RC-1, RC-2, RC-3, RC-4, RC-5, RC-6, RC-7, RC-8, RC-9 |
+| M4-W | FR-W1, FR-W2, FR-W3, FR-W4, FR-W5, FR-W6, FR-W7, FR-W8, FR-W9, FR-W10 |
 | continuous | CFG-1, CFG-2, CFG-4, CFG-5, CFG-6, OBS-4, OBS-5, OBS-6, UI-1, UI-2, UI-4, UI-5, SRC-1, SRC-2, SRC-3, SRC-4, SRC-5 |
 | M-DEV | AWG-1, AWG-2, AWG-3, AWG-4, AWG-5 (verification only; no client change) |
 

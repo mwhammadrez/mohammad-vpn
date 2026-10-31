@@ -11,13 +11,13 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@drawable/widget_background"
-    android:padding="12dp">
+    android:padding="10dp">
 
     <ImageView
         android:id="@+id/widget_icon"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:padding="8dp"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:padding="6dp"
         android:background="@drawable/widget_icon_ring"
         android:contentDescription="@string/widget_content_description"
         android:src="@drawable/ic_surface_idle" />
@@ -27,7 +27,7 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical"
-        android:layout_marginStart="12dp">
+        android:layout_marginStart="8dp">
 
         <TextView
             android:id="@+id/widget_title"
@@ -57,10 +57,10 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="8dp"
         android:background="@drawable/widget_action_pill"
-        android:paddingStart="12dp"
-        android:paddingEnd="12dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="5dp"
+        android:paddingBottom="5dp"
         android:text="@string/widget_action_connect"
         android:textColor="@color/surface_bg"
         android:textSize="11sp"

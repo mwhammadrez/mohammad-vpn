@@ -118,10 +118,12 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
 - `MainActivity` now delegates to `TunnelController`; the service resolves `ACTION_TOGGLE` with a pure
   function so the dial, widget and tile provably share one path (D-84).
 - Zero new permissions: `aapt2 dump permissions` still lists the same five.
-- Gate: **205/205 tests, lint 0 errors / 15 warnings, APK 14.4 MB, placeholder exit 0.**
+- Gate: **224/224 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
 - Snapshots: `app/build/reports/surfaces/widget_{idle,connecting,connected,failed}.png`.
 - **NOT VERIFIED:** real launcher rendering, tile binding by the system, and Doze/reboot behaviour —
   all need a device.
+- Open defect recorded: the AmneziaWG branch reports connected without a probe (D-86); AC-W9
+  (tile long-press) is not implementable on the public API (D-87).
 
 ### 2026-10-31 · trial build for the operator (0.14.0)
 - Inspected the bundle shipped in the public 0.8.0 APK: decrypts, **1 profile**, VLESS over WS,

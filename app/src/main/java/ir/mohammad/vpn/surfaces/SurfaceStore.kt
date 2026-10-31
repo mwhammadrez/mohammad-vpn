@@ -25,13 +25,18 @@ object SurfaceStore {
 
     fun permissionGranted(context: Context): Boolean = TunnelController.permissionGranted(context)
 
-    /** The state the surfaces should draw right now. */
-    fun currentState(context: Context): SurfaceState =
-        SurfaceStateMapper.map(
-            state = Tunnel.state.value,
-            hasProfile = hasProfile(context),
-            permissionGranted = permissionGranted(context),
-        )
+    /**
+     * The state the surfaces should draw right now.
+     *
+     * The two environment facts are parameters with production defaults so a cold-start test can
+     * describe "a device that has consent" without pretending to be the Android VPN subsystem.
+     */
+    fun currentState(
+        context: Context,
+        hasProfile: Boolean = hasProfile(context),
+        permissionGranted: Boolean = permissionGranted(context),
+        state: TunnelState = Tunnel.state.value,
+    ): SurfaceState = SurfaceStateMapper.map(state, hasProfile, permissionGranted)
 
     /** Convenience for callers that already hold a raw state. */
     fun surfaceOf(context: Context, state: TunnelState): SurfaceState =

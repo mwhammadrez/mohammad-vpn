@@ -644,3 +644,41 @@ Surfaces never call `Tunnel.update`; they only send intents, so a widget tap can
 app" even to a user who has a profile. `SurfaceStore.hasProfile` falls back to the selection already
 persisted by `MainActivity.selectProfile` in the `mohammad` preferences.
 No secret is read: only the profile id string, which is not an endpoint.
+
+## D-86 — AmneziaWG reports connected without a probe (open defect, not fixed here)
+**Date:** 2026-10-31 · **Source:** AC-W5
+The Xray path is gated: `startXray` returns `StartResult.UNHEALTHY` unless `awaitHealthy` gets a
+successful SOCKS probe, and `TunnelState.Connected` has exactly one writer, inside the `OK` branch.
+The AmneziaWG path returns `OK` as soon as `core.start` returns. So an AWG profile can turn the dial,
+the widget and the tile green without a single packet having crossed.
+Not fixed in M4-W: it is a VPN-behaviour change, and the milestone's scope forbids those. AWG is
+labelled `NOT VERIFIED` in `SPEC.md`, `README` and the release notes, and `SurfaceProbeGateTest` pins
+the exception so it cannot be forgotten.
+Fix belongs to the AWG proof milestone: either a probe through the AWG interface or an explicit
+`UNVERIFIED` connection state that cannot render green.
+
+## D-87 — A tile cannot have a long-press action, so AC-W9 is platform-limited
+**Date:** 2026-10-31 · **Source:** AC-W9; `android.service.quicksettings.TileService`
+`TileService` exposes `onClick`, `onStartListening`, `onStopListening`, `onTileAdded`, `onTileRemoved`
+— and no long-press callback. The system owns the gesture (it opens the app's info page on Android 13+).
+`TileInteractionTest` asserts the absence reflectively, so the limitation is evidence rather than a
+note. What is implemented instead: when the tile cannot toggle (no profile, no VPN consent) a tap opens
+the app, which is the only sanctioned path from the shade to the Activity.
+If the operator wants a guaranteed "open the app" gesture, the options are a second tile or a
+cathedral-shortcut; both are product decisions, not implementation details.
+
+## D-88 — The widget was tightened for 2x1
+**Date:** 2026-10-31 · **Source:** AC-W8
+The first layout overflowed at 2x1: a 40 dp icon plus 12 dp margins plus the action pill exceeded the
+narrowest cell. Icon 40→32 dp, paddings 12→10 dp, action padding 12→10 dp. `WidgetResizableTest`
+measures at both 2x1 and 4x1 and asserts the action stays inside the widget, so a future tweak to the
+4x1 look cannot silently break the 2x1.
+
+## D-89 — Cold-start tests inject the environment, they do not fake Android
+**Date:** 2026-10-31 · **Source:** AC-W6
+`SurfaceStore.currentState` takes `hasProfile`, `permissionGranted` and `state` as parameters whose
+defaults are the production lookups. A cold-start test can therefore describe "a device that has
+consent and a saved profile" without stubbing `VpnService.prepare`, which Robolectric cannot fake
+faithfully.
+This is constructor-style injection, not test logic in production: the defaults are the real path and
+only tests pass arguments.

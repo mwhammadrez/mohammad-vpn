@@ -33,7 +33,7 @@ class AcTraceabilityTest {
 
     @Test
     fun everyAcceptanceCriterionHasACommandAndANumberedRow() {
-        val rows = Regex("""^\|\s*(AC-\d+)\s*\|""", RegexOption.MULTILINE)
+        val rows = Regex("""^\|\s*(AC-(?:W)?\d+)\s*\|""", RegexOption.MULTILINE)
             .findAll(spec).map { it.groupValues[1] }.toList()
 
         assertTrue("SPEC.md must declare at least 30 acceptance criteria", rows.size >= 30)
@@ -71,14 +71,14 @@ class AcTraceabilityTest {
 
     @Test
     fun everyAcceptanceCriterionNamesAnOwningMilestone() {
-        val milestoneColumn = Regex("""^\|\s*AC-\d+\s*\|.*\|\s*([A-Za-z0-9-]+)\s*\|$""", RegexOption.MULTILINE)
+        val milestoneColumn = Regex("""^\|\s*AC-(?:W)?\d+\s*\|.*\|\s*([A-Za-z0-9-]+)\s*\|$""", RegexOption.MULTILINE)
             .findAll(spec)
             .map { it.groupValues[1] }
             .toList()
 
         assertTrue("AC rows must end with a milestone column", milestoneColumn.isNotEmpty())
         val known = milestoneColumn.all {
-            it == "every" || Regex("""^M-?[A-Za-z0-9]+$""").matches(it)
+            it == "every" || Regex("""^M-?[A-Za-z0-9-]+$""").matches(it)
         }
         assertTrue("unknown milestone token in the AC matrix: $milestoneColumn", known)
     }
