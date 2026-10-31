@@ -25,8 +25,23 @@ object ImportBatch {
             }
     }
 
+    /**
+     * Splits clipboard text into links. Newlines are the common case, but a channel that copies a
+     * block can deliver links concatenated on one line (`…#name1vless://…`), so a scheme that starts
+     * anywhere also begins a new link.
+     */
+    internal fun splitLinks(text: String): List<String> =
+        text.split('\n', '\r')
+            .flatMap { it.split(SCHEME_BOUNDARY) }
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+    // The lookbehind is load-bearing: "vless://" contains "ss://" starting at its fifth letter, and
+    // without it every vless link would be split into "vle" + a broken shadowsocks link.
+    private val SCHEME_BOUNDARY = Regex("(?i)(?<![a-z])(?=(?:vless|vmess|trojan|ss)://)")
+
     fun parse(text: String): Outcome {
-        val lines = text.split('\n', '\r').map { it.trim() }.filter { it.isNotEmpty() }
+        val lines = splitLinks(text)
         val profiles = LinkedHashMap<String, Profile>()
         val failures = mutableListOf<String>()
         var ignored = 0

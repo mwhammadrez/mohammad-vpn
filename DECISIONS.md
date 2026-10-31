@@ -835,3 +835,25 @@ The old handshake ping was deleted rather than kept beside it: two numbers where
 than one number.
 Cost: one extra connect per test (a few hundred ms on a cold start), and an AMNEZIAWG profile reports
 "not implemented" instead of a made-up number.
+
+## D-107 — An import must be faithful, not convenient
+**Date:** 2026-10-31 · **Source:** three real operator links that failed in 0.14.5
+The 0.14.5 importer produced a config the core accepted and the server refused. Three causes, all of
+them silent substitutions:
+* `users[].encryption` was hardcoded to `"none"`, so a link carrying
+  `mlkem768x25519plus.native.0rtt.<key>` lost its post-quantum key. The core accepts `none`; the
+  server does not.
+* `type=httpupgrade` was written as `wsSettings`. HTTPUpgrade has its own block, and its host is a
+  field (`host`) rather than a header. The upgrade never completes.
+* `fm=` (the URL-encoded finalMask) was ignored, so the fragment that the link exists to apply was
+  missing — the handshake looked nothing like the one the link describes.
+Rule from now on: if the link carries it and it changes the bytes on the wire, it is carried through
+or the import is refused. Defaults are only for things absent from the link (FR-U7).
+Verified: all three links, rendered by `XrayConfig.render`, pass `xray run -test` and return
+HTTP 204 through the real server (1.08–1.32 s). From this host, not from Iran.
+
+## D-108 — Split on schemes, not only on newlines
+**Date:** 2026-10-31 · **Source:** same links
+Copied blocks arrive concatenated (`…#H3vless://…`). Splitting only on newlines lost two of three
+links. Splitting on a scheme boundary must be line-aware and must not cut `vless://` at its own
+`ss://` — the lookbehind in `ImportBatch.SCHEME_BOUNDARY` is what prevents that.

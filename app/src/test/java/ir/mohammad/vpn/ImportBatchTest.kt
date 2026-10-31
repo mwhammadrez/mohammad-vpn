@@ -47,6 +47,21 @@ class ImportBatchTest {
     }
 
     @Test
+    fun `a vless link is not split at the ss inside it`() {
+        val outcome = ImportBatch.parse(vless)
+        assertEquals(1, outcome.profiles.size)
+        assertEquals("VLESS", outcome.profiles.single().protocol)
+        assertEquals(0, outcome.failures.size)
+    }
+
+    @Test
+    fun `links concatenated on one line are still three links`() {
+        val outcome = ImportBatch.parse("$vless#$trojan#${vless.replace("a.example.com", "c.example.com")}")
+        assertEquals(3, outcome.profiles.size) // three distinct links, three profiles
+        assertEquals(0, outcome.failures.size)
+    }
+
+    @Test
     fun `the same link twice yields one profile`() {
         val outcome = ImportBatch.parse("$vless\n$vless")
         assertEquals(1, outcome.profiles.size)

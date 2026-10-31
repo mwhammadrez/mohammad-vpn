@@ -1,6 +1,7 @@
 package ir.mohammad.vpn.data
 
 import android.net.Uri
+import ir.mohammad.vpn.core.FinalMaskRules
 import ir.mohammad.vpn.core.TlsFingerprint
 import org.json.JSONArray
 import org.json.JSONObject
@@ -67,10 +68,14 @@ object ConfigUri {
         val network = param(q, "type")?.lowercase()?.takeIf { it.isNotBlank() } ?: "tcp"
         val warnings = mutableListOf<String>()
 
+        // `encryption` is not decoration. Modern servers use "mlkem768x25519plus.<mode>.<rtt>.<key>"
+        // (VLESS post-quantum). Forcing "none" here produces a config the core accepts and the
+        // server rejects — a handshake failure with no useful message.
+        val encryption = param(q, "encryption")?.takeIf { it.isNotBlank() } ?: "none"
         val users = JSONArray().put(
             JSONObject()
                 .put("id", uuid)
-                .put("encryption", "none")
+                .put("encryption", encryption)
                 .apply { param(q, "flow")?.let { put("flow", it) } },
         )
         val xray = JSONObject()
@@ -97,7 +102,7 @@ object ConfigUri {
             awg = null,
             fingerprint = fingerprintFor(security, param(q, "fp"), warnings),
             flow = param(q, "flow"),
-            finalMask = null,
+            finalMask = finalMask(param(q, "fm"), warnings),
         )
         return Parsed(profile, warnings)
     }
@@ -300,13 +305,22 @@ object ConfigUri {
         val stream = JSONObject().put("network", network).put("security", security)
 
         when (network) {
-            "ws", "httpupgrade" -> stream.put(
+            "ws" -> stream.put(
                 "wsSettings",
                 JSONObject()
                     .put("path", param(q, "path") ?: "/")
                     .apply {
                         param(q, "host")?.let { put("headers", JSONObject().put("Host", it)) }
                     },
+            )
+            // HTTPUpgrade looks like WebSocket on the wire but has its own settings block, and its
+            // host is a field, not a header. Writing wsSettings here silently produces a config that
+            // cannot complete the upgrade.
+            "httpupgrade" -> stream.put(
+                "httpupgradeSettings",
+                JSONObject()
+                    .put("path", param(q, "path") ?: "/")
+                    .apply { param(q, "host")?.let { put("host", it) } },
             )
             "grpc" -> stream.put("grpcSettings", JSONObject().put("serviceName", param(q, "serviceName") ?: ""))
             "h2", "http" -> stream.put(
@@ -350,6 +364,25 @@ object ConfigUri {
             }
         }
         return stream
+    }
+
+    /**
+     * `fm=` carries `streamSettings.finalMask` as URL-encoded JSON — usually the fragment that splits
+     * the ClientHello. Dropping it changes how the handshake looks on the wire, which is the whole
+     * point of the link.
+     */
+    private fun finalMask(raw: String?, warnings: MutableList<String>): JSONObject? {
+        if (raw.isNullOrBlank()) return null
+        val mask = runCatching { JSONObject(raw) }.getOrElse {
+            warnings.add("fm is not valid JSON; fragment setting ignored")
+            return null
+        }
+        val problem = FinalMaskRules.validate(mask)
+        if (problem != null) {
+            warnings.add("$problem; fragment setting ignored")
+            return null
+        }
+        return mask
     }
 
     private fun fingerprintFor(security: String, fp: String?, warnings: MutableList<String>): String? {

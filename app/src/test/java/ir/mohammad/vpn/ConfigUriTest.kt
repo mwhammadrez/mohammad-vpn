@@ -4,6 +4,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import ir.mohammad.vpn.data.ConfigUri
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -140,6 +141,52 @@ class ConfigUriTest {
         assertEquals("s.example.com", b.profile.host)
         assertEquals(8388, b.profile.port)
         assertEquals("SS B", b.profile.name)
+    }
+
+    @Test
+    fun `vless post-quantum encryption is carried, not replaced with none`() {
+        val parsed = ConfigUri.parse(
+            "vless://11111111-2222-3333-4444-555555555555@pq.example.com:443" +
+                "?encryption=mlkem768x25519plus.native.0rtt.${"P".repeat(43)}&security=tls&sni=pq.example.com",
+        )
+        val user = parsed.profile.xray!!.getJSONObject("settings").getJSONArray("vnext")
+            .getJSONObject(0).getJSONArray("users").getJSONObject(0)
+        assertEquals("mlkem768x25519plus.native.0rtt.${"P".repeat(43)}", user.getString("encryption"))
+    }
+
+    @Test
+    fun `httpupgrade gets its own settings block, not websocket`() {
+        val parsed = ConfigUri.parse(
+            "vless://11111111-2222-3333-4444-555555555555@up.example.com:443" +
+                "?type=httpupgrade&host=edge.example.com&path=%2Fmirror&security=tls",
+        )
+        val stream = parsed.profile.xray!!.getJSONObject("streamSettings")
+        assertEquals("httpupgrade", stream.getString("network"))
+        assertFalse(stream.has("wsSettings"))
+        val up = stream.getJSONObject("httpupgradeSettings")
+        assertEquals("/mirror", up.getString("path"))
+        assertEquals("edge.example.com", up.getString("host"))
+    }
+
+    @Test
+    fun `fm becomes the finalMask`() {
+        val mask = """{"tcp":[{"type":"fragment","settings":{"packets":"tlshello","length":"104-1"}}]}"""
+        val encoded = java.net.URLEncoder.encode(mask, "UTF-8")
+        val parsed = ConfigUri.parse(
+            "vless://11111111-2222-3333-4444-555555555555@f.example.com:443?security=tls&fm=$encoded",
+        )
+        val tcp = parsed.profile.finalMask!!.getJSONArray("tcp").getJSONObject(0)
+        assertEquals("fragment", tcp.getString("type"))
+        assertEquals("tlshello", tcp.getJSONObject("settings").getString("packets"))
+    }
+
+    @Test
+    fun `an unusable fm is reported and dropped, the link still imports`() {
+        val parsed = ConfigUri.parse(
+            "vless://11111111-2222-3333-4444-555555555555@f.example.com:443?security=tls&fm=not-json",
+        )
+        assertNull(parsed.profile.finalMask)
+        assertTrue(parsed.warnings.any { it.contains("fm") })
     }
 
     @Test

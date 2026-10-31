@@ -5,6 +5,24 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.14.6 — imports are faithful now (M4-U2)
+
+### Fixed
+- **Post-quantum VLESS links were broken.** `encryption=mlkem768x25519plus…` was replaced with
+  `none`, so the server rejected the handshake. It is carried through now.
+- **`httpupgrade` was imported as WebSocket.** It has its own settings block and its host is a
+  field, not a header. The upgrade never completed before; it does now.
+- **`fm=` was dropped.** The finalMask encoded in the link (usually the ClientHello fragment) now
+  becomes the profile's finalMask.
+- **Links copied without newlines** are split correctly instead of importing only the first.
+
+### Verified
+- Three real links that failed in 0.14.5: rendered by the app's own config builder, accepted by the
+  core, and answering **HTTP 204** through the server in 1.08–1.32 s. Measured from a host outside
+  Iran; whether they pass Iranian filtering is still a device question.
+
+---
+
 ## 0.14.5 — paste any config, measure what it really does (M4-U)
 
 ### Added
