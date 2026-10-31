@@ -97,6 +97,7 @@ fun MohammadScreen(
     pingByProfile: Map<String, ProfilePing> = emptyMap(),
     importMessage: String? = null,
     pingProgress: Pair<Int, Int>? = null,
+    topBar: @Composable () -> Unit = { Header() },
 ) {
     MohammadTheme {
         val down = remember { mutableStateListOf<Float>() }
@@ -131,7 +132,7 @@ fun MohammadScreen(
                     .padding(top = 18.dp, bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
-                Header()
+                topBar()
                 if (crashReport != null) CrashCard(crashReport, onDismissCrash)
                 Hero(state, selected, traffic, onToggle)
                 Bento(down, up, traffic)
@@ -878,7 +879,7 @@ private val glassBrush = Brush.verticalGradient(
 )
 
 @Composable
-private fun Glass(
+internal fun Glass(
     modifier: Modifier = Modifier,
     shape: androidx.compose.ui.unit.Dp = 24.dp,
     border: Color = Palette.BorderSubtle,

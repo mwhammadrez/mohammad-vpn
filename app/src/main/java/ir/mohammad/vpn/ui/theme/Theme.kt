@@ -20,6 +20,7 @@ object Palette {
     val CardInner = Color(0xFF0A0E0C)
     val BorderSubtle = Color(0x12FFFFFF)
     val BorderEmerald = Color(0x472DF8C5)
+    val BorderViolet = Color(0x47A78BFA)
 
     val Mint = Color(0xFF34F5C5)
     val Emerald = Color(0xFF10B981)

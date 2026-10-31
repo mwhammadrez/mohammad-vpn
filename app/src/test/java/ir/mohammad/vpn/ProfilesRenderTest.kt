@@ -63,10 +63,20 @@ class ProfilesRenderTest {
                 ),
                 importMessage = "imported 2, skipped 1 unrecognised",
                 pingProgress = 2 to 3,
+                topBar = {
+                    ir.mohammad.vpn.ui.TopBar(
+                        mode = ir.mohammad.vpn.ui.AppMode.XRAY,
+                        version = "v0.15.1",
+                        menuOpen = true,
+                        onToggleMenu = {},
+                        onPickMode = {},
+                    )
+                },
             )
         }
         compose.mainClock.advanceTimeBy(600)
         compose.onRoot().captureRoboImage("build/reports/surfaces/profiles_paste.png")
         compose.onNodeWithText("TESTING 2/3…").assertExists()
+        compose.onNodeWithText("Mode 2").assertExists()
     }
 }

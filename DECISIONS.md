@@ -913,3 +913,18 @@ server at session setup — which on a phone looks like "connecting forever". It
 naming the expected length.
 `DnsConfig.diagnostic` prints domain, cipher name and resolver count; the key never reaches the log,
 matching NFR-5.
+
+## D-115 — Mode 2 is a separate environment, proxy-first
+**Date:** 2026-10-31 · **Source:** operator request; WhiteDNS's `connectionModes`
+The app now has two modes behind one chevron. Mode 2 is not a skin: it has its own engine, its own
+failure mode and its own controls.
+* **PROXY** is the default for Mode 2 because a DNS tunnel *is* a proxy by nature — slow, single
+  stream per session, no route table needed. Starting it costs no permission dialog and cannot break
+  another app's connectivity.
+* **FULL TUNNEL** reuses the exact path Mode 1 already had; the VpnService does not know or care that
+  a DNS engine answers behind the bridge.
+* The proxy runs in a foreground service of type `specialUse`, which the app already declares, so the
+  permission list stays at five (FR-M6). The reference app needed `dataSync` plus its own permission;
+  we did not.
+* Switching mode or proxy/vpn stops whatever the other one started — two cores at once is still
+  forbidden (D-105).

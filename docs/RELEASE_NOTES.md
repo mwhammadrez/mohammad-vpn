@@ -5,6 +5,23 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.15.1 — Mode 2 (M6-UI)
+
+### Added
+- **A chevron in the header.** Tap it: Mode 1 (Xray) and Mode 2 (DNS tunnel). The active mode is named
+  under the title, so the environment on screen is never ambiguous.
+- **Mode 2 screen.** Its own palette, its own connect orb, its own profile list (DNS only), its own log
+  tail.
+- **PROXY / FULL TUNNEL.** Proxy mode starts the engine and publishes `127.0.0.1:10809` — no VPN
+  permission, no routes, nothing else on the phone touched. Full tunnel uses the same path Mode 1
+  already had.
+
+### Notes
+- Switching mode, or switching proxy/full-tunnel, stops what the other one started.
+- The proxy is a foreground service of type `specialUse`: the app still asks for five permissions.
+
+---
+
 ## 0.15.0 — DNS tunnel as a second path (M6-DNS)
 
 ### Added

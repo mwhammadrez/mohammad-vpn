@@ -309,7 +309,18 @@ it is testable on the JVM without a device. Android types stay out of policy cod
 | FR-U8 | Every attribute that changes the wire format is carried through: `encryption` (including VLESS post-quantum keys), transport-specific blocks (`httpupgrade` is not `ws`, `xhttp` is its own block), and `fm` (the finalMask). A substituted default is a bug, not a convenience. |
 | FR-U9 | One action measures every profile in turn and reports each result in place. Profiles that cannot be measured while another one carries the tunnel are marked as skipped, never given a number. |
 
-### 5.17 DNS tunnel — second path (FR-D) — milestone M6-DNS
+### 5.17 Mode switch and Mode 2 environment (FR-M) — milestone M6-UI
+
+| ID | Requirement |
+|---|---|
+| FR-M1 | The header carries a chevron; tapping it opens a two-row sheet listing Mode 1 (Xray) and Mode 2 (DNS tunnel), and the active mode is named under the title at all times. |
+| FR-M2 | The chosen mode is persisted; an unknown stored value falls back to Mode 1. |
+| FR-M3 | Mode 2 is a separate environment: its own colour, its own connect control, its own profile list limited to DNS profiles, and its own log tail. |
+| FR-M4 | Mode 2 offers PROXY and FULL TUNNEL. PROXY starts the engine and publishes `127.0.0.1:10809` with no VpnService, no routes and no consent dialog; FULL TUNNEL uses the same path as Mode 1. |
+| FR-M5 | Switching between PROXY and FULL TUNNEL, or between modes, stops whatever the other one started. |
+| FR-M6 | The proxy runs in a foreground service of type `specialUse`, so the app's permission list does not grow for this feature. |
+
+### 5.18 DNS tunnel — second path (FR-D) — milestone M6-DNS
 
 | ID | Requirement |
 |---|---|
@@ -555,6 +566,9 @@ Every AC names a test class that exists today or is created by the milestone in 
 | AC-D1 | FR-D1..D4 | unit | `--tests "*DnsConfigTest"` | TOML shape, key/cipher match, hex, domain, resolver bounds | M6-DNS |
 | AC-D2 | FR-D8 | unit | `--tests "*ConfigUriTest"` | `dns://` imports and a bad key is refused | M6-DNS |
 | AC-D3 | FR-D2 | native | engine + server binaries on one host | SOCKS5 request returns 204 through the tunnel | M6-DNS |
+| AC-M1 | FR-M1, FR-M3 | render | `--tests "*ProfilesRenderTest" --tests "*DnsScreenRenderTest"` | menu lists both modes; Mode 2 renders without overlap | M6-UI |
+| AC-M2 | FR-M2 | unit | `--tests "*AppModeTest"` | unknown values fall back to Mode 1 / proxy | M6-UI |
+| AC-M3 | FR-M4, FR-M6 | static | manifest | `DnsProxyService` is `specialUse`; permission count unchanged | M6-UI |
 | AC-N1 | FR-N1 | unit | `--tests "*TileStateSyncTest"` | one push per distinct state; listen always pushes | M4-N |
 | AC-N2 | FR-N2 | integration | `--tests "*TileInteractionTest"` | tile toggles through the shared controller | M4-N |
 | AC-N3 | FR-N3 | Robolectric | `--tests "*SurfaceColdStartTest"` | cold process: tile inactive from persisted profile | M4-N |

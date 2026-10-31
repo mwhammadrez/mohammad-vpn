@@ -27,6 +27,7 @@
 | M4-U2 | Import fidelity: encryption, httpupgrade, fm | ✅ done | green | real links now import correctly |
 | M4-U3 | Parity audit + test-all | ✅ done | green | every PattNG core feature accounted for |
 | M6-DNS | DNS tunnel second path | ✅ done | green | engine in APK; needs a delegated domain to go live |
+| M6-UI | Mode switch + Mode 2 environment | ✅ done | green | proxy and full-tunnel from one screen |
 | M4 | State machine + path policy | ⬜ not started | — | largest milestone |
 | M5 | Pre-flight netcheck | ⬜ not started | — | measurement, not guesswork |
 | M6 | Second path (WS+TLS via CDN) | ⬜ not started | — | resilience to IP death |

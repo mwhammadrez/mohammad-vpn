@@ -60,8 +60,14 @@ import androidx.lifecycle.lifecycleScope
 import ir.mohammad.vpn.data.ImportBatch
 import ir.mohammad.vpn.data.LogStore
 import ir.mohammad.vpn.data.ProfileStore
+import ir.mohammad.vpn.data.ProxyState
+import ir.mohammad.vpn.proxy.DnsProxyService
 import ir.mohammad.vpn.net.RealDelay
+import ir.mohammad.vpn.ui.AppMode
+import ir.mohammad.vpn.ui.DnsMode
+import ir.mohammad.vpn.ui.DnsScreen
 import ir.mohammad.vpn.ui.ProfilePing
+import ir.mohammad.vpn.ui.TopBar
 import ir.mohammad.vpn.data.OperatorBundleLoader
 import ir.mohammad.vpn.data.Profile
 import ir.mohammad.vpn.data.Tunnel
@@ -245,6 +251,40 @@ class MainActivity : ComponentActivity() {
         TunnelController.disconnect(this)
     }
 
+    /** First DNS profile, preferring the current selection. */
+    internal fun dnsProfile(): Profile? =
+        Tunnel.selected?.takeIf { it.core == "DNS" }
+            ?: Tunnel.profiles.firstOrNull { it.core == "DNS" }
+
+    /**
+     * Mode 2 connect. Proxy mode never touches the VpnService: the engine listens on loopback and
+     * the user points apps at it. Full tunnel uses exactly the same path as Mode 1.
+     */
+    fun startDns() {
+        val profile = dnsProfile()
+        if (profile == null) {
+            LogStore.add("E", "APP", "no DNS profile to connect")
+            return
+        }
+        if (Tunnel.selected?.id != profile.id) selectProfile(profile)
+        when (DnsMode.from(prefs().getString("dns_mode", null))) {
+            DnsMode.PROXY -> {
+                LogStore.add("I", "APP", "starting DNS proxy for ${profile.name}")
+                DnsProxyService.start(this, profile)
+            }
+            DnsMode.VPN -> requestConnect()
+        }
+    }
+
+    fun stopDns() {
+        DnsProxyService.stop(this)
+        if (Tunnel.state.value !is TunnelState.Disconnected) requestDisconnect()
+    }
+
+    fun stopDnsProxy() {
+        DnsProxyService.stop(this)
+    }
+
     private companion object {
         const val KEY_SELECTED = "selected_profile"
     }
@@ -265,6 +305,10 @@ fun MohammadApp() {
     var pingBusy by remember { mutableStateOf(false) }
     var importMessage by remember { mutableStateOf<String?>(null) }
     var pingProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var appMode by remember { mutableStateOf(AppMode.from(activity.prefs().getString("app_mode", null))) }
+    var dnsMode by remember { mutableStateOf(DnsMode.from(activity.prefs().getString("dns_mode", null))) }
+    var modeMenuOpen by remember { mutableStateOf(false) }
+    val proxy by ProxyState.state.collectAsStateWithLifecycle()
     val pingByProfile = remember { mutableStateMapOf<String, ProfilePing>() }
     val clipboard = LocalClipboardManager.current
     var crash by remember { mutableStateOf(activity.lastCrash) }
@@ -276,6 +320,59 @@ fun MohammadApp() {
     LaunchedEffect(Tunnel.profiles) {
         profiles = Tunnel.profiles
         selected = Tunnel.selected
+    }
+
+    val topBar: @Composable () -> Unit = {
+        TopBar(
+            mode = appMode,
+            version = "v0.15.0",
+            menuOpen = modeMenuOpen,
+            onToggleMenu = { modeMenuOpen = !modeMenuOpen },
+            onPickMode = { picked ->
+                modeMenuOpen = false
+                if (picked != appMode) {
+                    appMode = picked
+                    activity.prefs().edit { putString("app_mode", picked.storageKey) }
+                    LogStore.add("I", "APP", "mode ${picked.label}")
+                }
+            },
+        )
+    }
+
+    if (appMode == AppMode.DNS) {
+        DnsScreen(
+            dnsProfiles = profiles.filter { it.core == "DNS" },
+            selected = profiles.firstOrNull { it.id == selected?.id && it.core == "DNS" }
+                ?: profiles.firstOrNull { it.core == "DNS" },
+            dnsMode = dnsMode,
+            tunnelState = state,
+            proxy = proxy,
+            logs = logs,
+            onPickDnsMode = { picked ->
+                if (picked != dnsMode) {
+                    if (proxy.running || proxy.starting) activity.stopDnsProxy()
+                    if (state is TunnelState.Connected) activity.requestDisconnect()
+                    dnsMode = picked
+                    activity.prefs().edit { putString("dns_mode", picked.storageKey) }
+                    LogStore.add("I", "APP", "dns mode ${picked.label}")
+                }
+            },
+            onSelectProfile = { profile ->
+                activity.selectProfile(profile)
+                selected = profile
+            },
+            onToggle = {
+                val running = proxy.running || proxy.starting || state is TunnelState.Connected ||
+                    state is TunnelState.Connecting
+                if (running) activity.stopDns() else activity.startDns()
+            },
+            onCopyAddress = {
+                clipboard.setText(androidx.compose.ui.text.AnnotatedString(proxy.address))
+                LogStore.add("I", "APP", "proxy address copied")
+            },
+            topBar = topBar,
+        )
+        return@MohammadApp
     }
 
     MohammadScreen(
@@ -375,5 +472,6 @@ fun MohammadApp() {
         pingByProfile = pingByProfile,
         importMessage = importMessage,
         pingProgress = pingProgress,
+        topBar = topBar,
     )
 }
