@@ -146,6 +146,14 @@ object XrayConfig {
         }
     }
 
+    /** `streamSettings.finalMask`: the profile's copy wins, the transport JSON is never rewritten. */
+    private fun applyFinalMask(outbound: JSONObject, profile: Profile) {
+        val mask = profile.finalMask ?: return
+        val stream = outbound.optJSONObject("streamSettings")
+            ?: JSONObject().also { outbound.put("streamSettings", it) }
+        if (!stream.has("finalMask")) stream.put("finalMask", JSONObject(mask.toString()))
+    }
+
     private fun applySockopt(outbound: JSONObject, mtu: Int, profile: Profile) {
         val stream = outbound.optJSONObject("streamSettings")
             ?: JSONObject().also { outbound.put("streamSettings", it) }
@@ -174,6 +182,7 @@ object XrayConfig {
         applyFingerprint(outbound, profile)
         applyFlow(outbound, profile)
         applyCipherSuites(outbound, profile)
+        applyFinalMask(outbound, profile)
         applySockopt(outbound, mtu, profile)
 
         val sniffOverride = JSONArray().put("http").put("tls")

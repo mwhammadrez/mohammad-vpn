@@ -4,6 +4,7 @@ import android.content.Context
 import ir.mohammad.vpn.BuildConfig
 import ir.mohammad.vpn.core.MtuPolicy
 import ir.mohammad.vpn.core.DialModeRules
+import ir.mohammad.vpn.core.FinalMaskRules
 import ir.mohammad.vpn.core.RealityRules
 import ir.mohammad.vpn.core.TlsFingerprint
 import org.json.JSONObject
@@ -39,6 +40,8 @@ data class Profile(
     val dialMode: String? = null,
     /** TLS cipher-suite list, colon separated; passed straight to the core's TLS settings. */
     val cipherSuites: String? = null,
+    /** `streamSettings.finalMask`: transport shaping (`merge`, `fragment`, ...). Validated by FinalMaskRules. */
+    val finalMask: JSONObject? = null,
 )
 
 /** Decrypted operator bundle plus its defaults. */
@@ -186,13 +189,15 @@ object OperatorBundleLoader {
             val profileDialMode = o.optString("dialMode").takeIf { it.isNotBlank() }
             DialModeRules.validate(profileDialMode)?.let { throw BundleException("profile dialMode: $it") }
             val profileCipherSuites = o.optString("cipherSuites").takeIf { it.isNotBlank() }
+            val profileFinalMask = o.optJSONObject("finalMask")
+            FinalMaskRules.validate(profileFinalMask)?.let { throw BundleException("profile $it") }
 
             val xray = o.optJSONObject("xray")
             val awg = o.optJSONObject("awg")
             if (core == "XRAY") {
                 if (xray == null) throw BundleException("xray outbound missing")
                 validateXray(protocol, xray)
-                validateTransport(xray, profileFingerprint, profileFlow)
+                validateTransport(xray, profileFingerprint, profileFlow, profileFinalMask)
             }
             if (core == "AMNEZIAWG" && awg == null) throw BundleException("awg settings missing")
 
@@ -200,6 +205,7 @@ object OperatorBundleLoader {
                 Profile(
                     id, name, protocol, core, host, port, xray, awg, profileMtu,
                     profileFingerprint, profileFlow, profileDialMode, profileCipherSuites,
+                    profileFinalMask,
                 ),
             )
         }
@@ -225,7 +231,12 @@ object OperatorBundleLoader {
      * ClientHello, which no browser produces. That is a validation error here rather than a silent
      * default, because a silent default is how the app ended up emitting the loud one.
      */
-    private fun validateTransport(xray: JSONObject, profileFingerprint: String?, flow: String?) {
+    private fun validateTransport(
+        xray: JSONObject,
+        profileFingerprint: String?,
+        flow: String?,
+        profileFinalMask: JSONObject?,
+    ) {
         val stream = xray.optJSONObject("streamSettings")
         val security = stream?.optString("security", "none")?.lowercase() ?: "none"
 
@@ -242,7 +253,7 @@ object OperatorBundleLoader {
             return
         }
         if (security == "reality") {
-            validateReality(stream!!)
+            validateReality(stream!!, profileFinalMask)
         }
 
         val fromSettings = when (security) {
@@ -255,10 +266,13 @@ object OperatorBundleLoader {
         if (!TlsFingerprint.isValid(effective)) {
             throw BundleException("unsupported fingerprint: $effective")
         }
+        if (security == "reality" && TlsFingerprint.isDegraded(effective)) {
+            throw BundleException("fingerprint $effective is rejected by the core with security=reality")
+        }
     }
 
     /** SPEC TLS-3, TLS-5. Messages never echo the public key or the short id (NFR-5). */
-    private fun validateReality(stream: JSONObject) {
+    private fun validateReality(stream: JSONObject, profileMask: JSONObject?) {
         val reality = stream.optJSONObject("realitySettings")
             ?: throw BundleException("realitySettings missing for security=reality")
 
@@ -273,14 +287,17 @@ object OperatorBundleLoader {
             RealityRules.validateSpiderX(reality.optString("spiderX"))
                 ?.let { throw BundleException("reality $it") }
         }
-        if (hasFragment(stream)) {
+        // D-76: fragmenting the ClientHello breaks REALITY's authentication. `merge` coalesces and
+        // leaves the bytes alone, so it stays allowed.
+        val streamMask = stream.optJSONObject("finalMask") ?: stream.optJSONObject("finalmask")
+        if (hasMaskType(streamMask, "fragment") || hasMaskType(profileMask, "fragment")) {
             throw BundleException("reality cannot be combined with finalmask fragment")
         }
     }
 
-    private fun hasFragment(stream: JSONObject): Boolean {
-        val tcp = stream.optJSONObject("finalmask")?.optJSONArray("tcp") ?: return false
-        return (0 until tcp.length()).any { tcp.optJSONObject(it)?.optString("type") == "fragment" }
+    private fun hasMaskType(mask: JSONObject?, type: String): Boolean {
+        val tcp = mask?.optJSONArray("tcp") ?: return false
+        return (0 until tcp.length()).any { tcp.optJSONObject(it)?.optString("type") == type }
     }
 
     /** Only the Xray-accepted subset is allowed for Hysteria2 (SPEC FR-29). */

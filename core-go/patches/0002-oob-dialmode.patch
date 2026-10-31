@@ -201,6 +201,55 @@ index 0000000..895a7ed
 +	err := windows.WSASend(windows.Handle(fd), &buf, 1, &sent, windows.MSG_OOB, nil, nil)
 +	return int(sent), err
 +}
+diff --git a/transport/internet/dialmode_test.go b/transport/internet/dialmode_test.go
+new file mode 100644
+index 0000000..ed1ebdf
+--- /dev/null
++++ b/transport/internet/dialmode_test.go
+@@ -0,0 +1,43 @@
++package internet
++
++import "testing"
++
++func TestParseOOBMode(t *testing.T) {
++	cases := []struct {
++		mode string
++		want []byte
++		ok   bool
++	}{
++		{"oob.0", []byte{0}, true},
++		{"oob.0,32,65", []byte{0, 32, 65}, true},
++		{"oob. 7 , 8 ", []byte{7, 8}, true},
++		{"oob.255", []byte{255}, true},
++		{"oob.", nil, false},
++		{"oob.256", nil, false},
++		{"oob.-1", nil, false},
++		{"oob.x", nil, false},
++		{"oob.1,,2", nil, false},
++		{"split", nil, false},
++		{"", nil, false},
++	}
++	for _, c := range cases {
++		got, ok := ParseOOBMode(c.mode)
++		if ok != c.ok {
++			t.Errorf("ParseOOBMode(%q) ok = %v, want %v", c.mode, ok, c.ok)
++			continue
++		}
++		if !ok {
++			continue
++		}
++		if len(got) != len(c.want) {
++			t.Errorf("ParseOOBMode(%q) = %v, want %v", c.mode, got, c.want)
++			continue
++		}
++		for i := range got {
++			if got[i] != c.want[i] {
++				t.Errorf("ParseOOBMode(%q) = %v, want %v", c.mode, got, c.want)
++				break
++			}
++		}
++	}
++}
 diff --git a/transport/internet/system_dialer.go b/transport/internet/system_dialer.go
 index f881a20..eae18bc 100644
 --- a/transport/internet/system_dialer.go

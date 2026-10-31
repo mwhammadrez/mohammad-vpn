@@ -10,16 +10,20 @@ import org.junit.Test
  *
  * The allow-list is not copied from documentation: it is the set of names the pinned Xray-core
  * actually resolves in `transport/internet/tls/tls.go` (PresetFingerprints + ModernFingerprints +
- * OtherFingerprints), minus `unsafe`, whose value stays nil and is therefore rejected at runtime.
+ * OtherFingerprints), minus `hellogolang`, which the config layer rejects outright.
+ *
+ * `unsafe` is a special case in the core rather than a fingerprint: the TLS branch skips the lookup
+ * for it (`config.Fingerprint != "unsafe"`), which means "do not use uTLS". The REALITY branch
+ * rejects it (`Fingerprint == "unsafe" || == "hellogolang"` → error). We mirror both.
  * Pinned source: xray-core v26.10.29, commit 0afec66085a85191e9dd2a4a6646c7c9a94688d1.
  */
 class TlsFingerprintTest {
 
     @Test
     fun `the allow list matches the pinned core`() {
-        // 61 = 11 preset (12 minus unsafe) + 11 modern + 40 other, minus hellogolang
-        // (accepted by the map, rejected by the config layer).
-        assertTrue("expected 61 names, got ${TlsFingerprint.VALID.size}", TlsFingerprint.VALID.size == 61)
+        // 62 = 12 preset (including unsafe, which the TLS branch special-cases) + 11 modern + 40 other,
+        // minus hellogolang (accepted by the map, rejected by the config layer).
+        assertTrue("expected 62 names, got ${TlsFingerprint.VALID.size}", TlsFingerprint.VALID.size == 62)
     }
 
     @Test
@@ -29,8 +33,12 @@ class TlsFingerprintTest {
     }
 
     @Test
-    fun `unsafe is refused because the core never assigns it a value`() {
-        assertFalse(TlsFingerprint.isValid("unsafe"))
+    fun `unsafe is accepted but marked degraded`() {
+        // Accepted because the TLS branch of `infra/conf/transport_security.go` accepts it; the value
+        // means "plain Go TLS, no uTLS", so it is flagged rather than recommended.
+        assertTrue(TlsFingerprint.isValid("unsafe"))
+        assertTrue(TlsFingerprint.isDegraded("unsafe"))
+        assertFalse(TlsFingerprint.isDegraded("chrome"))
     }
 
     @Test

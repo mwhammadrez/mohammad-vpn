@@ -33,6 +33,12 @@ for patch in core-go/patches/*.patch; do
   fi
 done
 
+# The patches ship their own tests, unlike the reference implementation. A broken patch has to fail
+# here rather than inside the APK.
+echo "running patch tests"
+(cd "$XRAY_SRC" && GOFLAGS="-mod=mod" go test -count=1 ./transport/internet/finalmask/merge/)
+(cd "$XRAY_SRC" && GOFLAGS="-mod=mod" go test -count=1 -run 'TestParseOOBMode' ./transport/internet/)
+
 cd core-go
 # The module replaces xray-core with this path; keep them in sync.
 GOFLAGS="-mod=mod" GOMAXPROCS="${GOMAXPROCS:-2}" GOGC="${GOGC:-50}" \

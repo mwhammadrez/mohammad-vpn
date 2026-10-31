@@ -171,14 +171,23 @@ Upstream added that guard in #6303; the operator's bundle is exactly the rejecte
 **Tasks**
 1. `core-go/patches/0001-allow-unencrypted-outbound.patch` — downgrade the guard to a warning.
 2. `core-go/patches/0002-oob-dialmode.patch` — `sockopt.dialMode` with `oob.<bytes>`.
-3. `scripts/build-core.sh` — clone at the pin, apply patches idempotently, `gomobile bind`, strip, copy.
-4. Kotlin: `Profile.dialMode` + `Profile.cipherSuites`, `DialModeRules` validation, renderer support.
+3. `scripts/build-core.sh` — clone at the pin, apply patches idempotently, run each patch's Go tests,
+   `gomobile bind`, strip, copy.
+4. `core-go/patches/0003-merge-finalmask.patch` — a `merge` TCP mask in the core's existing
+   `finalmask` framework, so the client can coalesce instead of only fragmenting.
+5. Kotlin: `Profile.dialMode`, `Profile.cipherSuites`, `Profile.finalMask`, `DialModeRules` and
+   `FinalMaskRules` validation, renderer support. `unsafe` is accepted for TLS only.
 
 **Verification that is real:** `oob.0` was proven end to end on this host by running the patched CLI
 core against a local listener: the listener received exactly the 5 bytes sent, proving the urgent byte
 is stripped and the stream is intact.
 
-**Not verified:** that `oob` defeats any specific ISP; all of that is device work.
+**Verification for merge:** three 2-byte writes through the patched core against a local listener
+arrived as **one** 6-byte read after 241 ms (delay 200 ms) — the coalescing window and payload
+integrity both hold.
+
+**Not verified:** that `oob` or `merge` defeats any specific ISP; that either survives REALITY on a
+real line; that a carrier-grade NAT keeps URG-bearing segments. All device work.
 
 ## M4-N — Tile reliability, notification and telemetry (0.14.2)
 

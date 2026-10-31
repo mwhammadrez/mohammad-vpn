@@ -772,3 +772,36 @@ untouched by it.
 The field is a TLS-level setting. Under REALITY the handshake borrows the decoy site's suites, so
 emitting a private list there would describe something that does not happen. The renderer writes it for
 `security: tls` and ignores it otherwise.
+
+## D-100 — `merge` is a TCP mask inside the existing finalmask framework
+**Date:** 2026-10-31 · **Source:** `docs/AUDIT_PATTNG.md` §2.3; `core-go/patches/0003`
+The pinned core already ships a `finalmask` framework with `fragment`, `sudoku`, `xmc`, `noise` and
+others. `merge` is one more TCP mask in it, not a new layer: it buffers client->server writes and
+flushes on idle (`delayMs`) or size (`maxBytes`), for `times` flushes, then passes writes through.
+Server side is untouched by design — only what we send is shaped.
+Two deliberate differences from the reference implementation:
+* `times: 0` means **one flush**, not "unlimited". Unbounded buffering on a phone turns a lost timer
+  into a connection that never speaks.
+* The defaults live in `newConn`, so a bare `Config{}`, a JSON mask and a hand-built protobuf message
+  behave identically. Their version defaults in the wrapper, which makes the two paths diverge.
+Proof on this host: three 2-byte writes arrived as one 6-byte read after 241 ms with `delayMs: 200`.
+Cost: up to `delayMs` added to the first writes of a connection, once per `times`.
+
+## D-101 — `finalMask` is a profile field, validated against the core's loaders
+**Date:** 2026-10-31 · **Source:** M4-C
+`streamSettings.finalMask` is exposed per profile, and a value already present in the transport JSON
+wins over it. Validation mirrors the core's `tcpmaskLoader` / `udpmaskLoader` type sets: an unknown
+type, `merge` on `udp`, or an out-of-range number is a bundle error naming the field, because the
+alternative is a core that refuses to start on a phone with one line of log.
+`fragment` stays forbidden with REALITY (D-76); `merge` is allowed there because it moves bytes
+without changing them. That combination is **NOT VERIFIED** on a device.
+
+## D-102 — `unsafe` is accepted for TLS, rejected for REALITY
+**Date:** 2026-10-31 · **Source:** `infra/conf/transport_security.go` (pinned core)
+Corrects the note behind D-73. `unsafe` is not a broken name: the TLS branch skips the `GetFingerprint`
+lookup for it (`Fingerprint != "unsafe"`), which the core uses to mean "plain Go TLS, no uTLS". The
+REALITY branch rejects it outright (`== "unsafe" || == "hellogolang"` → error).
+We now mirror the core exactly: accepted with `security: tls` and flagged `DEGRADED` (it is the
+loudest hello available, and it exists only for a server that breaks under every uTLS fingerprint);
+rejected with `security: reality`, with a message that names the reason.
+Allow-list is therefore **62** names, not 61.

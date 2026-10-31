@@ -11,19 +11,18 @@ import org.json.JSONObject
  * (`transport/internet/tls/tls.go`, commit 0afec66085a85191e9dd2a4a6646c7c9a94688d1):
  * `PresetFingerprints` + `ModernFingerprints` + `OtherFingerprints`.
  *
- * Two names are excluded on purpose:
+ * One name is excluded on purpose: `hellogolang` resolves in the map but the config layer rejects it
+ * (`infra/conf/transport_security.go`: `Fingerprint == "unsafe" || == "hellogolang"` → error).
  *
- *  - `unsafe` is a key of `PresetFingerprints` with a nil value that `init()` never assigns, so
- *    `GetFingerprint("unsafe")` returns nil and the core fails the connection;
- *  - `hellogolang` resolves in the map but the config layer rejects it explicitly
- *    (`infra/conf/transport_security.go`: `Fingerprint == "unsafe" || == "hellogolang"` → error).
- *
- * Accepting either here would only move a guaranteed failure later, where it looks like a network
- * problem instead of a configuration one.
+ * `unsafe` is accepted, but only where the core accepts it. In the TLS branch the core special-cases
+ * it (`Fingerprint != "unsafe"`), meaning "do not use uTLS at all": plain Go TLS with Go's own hello.
+ * The REALITY branch rejects it outright, so we reject it there too instead of failing at connect
+ * time. It exists for the one case nothing else fixes — a server that breaks under every uTLS
+ * fingerprint — and it is the single noisiest fingerprint available, hence [DEGRADED].
  */
 object TlsFingerprint {
 
-    /** Every name the pinned core accepts in a config file. 61 entries. */
+    /** Every name the pinned core accepts in a config file. 62 entries. */
     val VALID: Set<String> = setOf(
         "360", "android", "chrome", "edge", "firefox", "hello360_11_0", "hello360_7_5",
         "hello360_auto", "helloandroid_11_okhttp", "hellochrome_100", "hellochrome_100_psk",
@@ -38,7 +37,7 @@ object TlsFingerprint {
         "helloios_12_1", "helloios_13", "helloios_14", "helloios_auto", "helloqq_11_1",
         "helloqq_auto", "hellorandomized", "hellorandomizedalpn", "hellorandomizednoalpn",
         "hellosafari_16_0", "hellosafari_26_3", "hellosafari_auto", "ios", "qq", "random",
-        "randomized", "randomizednoalpn", "safari",
+        "randomized", "randomizednoalpn", "safari", "unsafe",
     )
 
     /**
@@ -50,7 +49,15 @@ object TlsFingerprint {
         "randomizednoalpn",
     )
 
+    /**
+     * Accepted by the core, but it removes uTLS: the handshake carries Go's own fingerprint, which is
+     * exactly the signal this project exists to avoid. Valid only with `security: tls`.
+     */
+    val DEGRADED: Set<String> = setOf("unsafe")
+
     fun isValid(name: String): Boolean = name in VALID
+
+    fun isDegraded(name: String): Boolean = name in DEGRADED
 
     fun isRecommended(name: String): Boolean = name in RECOMMENDED
 

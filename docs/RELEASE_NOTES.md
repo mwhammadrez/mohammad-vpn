@@ -5,6 +5,27 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.14.4 — `merge`, per-profile `finalMask`, `unsafe` (M4-C, second pass)
+
+### Added
+- **`merge` transport mask** — coalesces the first outbound writes into one full-size segment, so a
+  filter that keys on "a small first packet" sees nothing to key on. Verified locally: three small
+  writes arrived as one.
+- **`finalMask` per profile** — set `merge`, `fragment` or any mask the core ships, without editing
+  the core. Invalid types and out-of-range numbers are refused at bundle load with the field named.
+- **`fingerprint: unsafe`** — accepted for TLS (the core uses it to mean "no uTLS"), refused for
+  REALITY (the core refuses it there too).
+
+### Changed
+- `merge` is allowed with REALITY; `fragment` is still refused there, because splitting the
+  ClientHello breaks REALITY's authentication.
+
+### Not verified
+- Whether `merge` or `oob` defeats a specific ISP, and whether either survives a real line end to end.
+  That needs a device.
+
+---
+
 ## 0.14.3 — the app can start with the operator's configuration (M4-C)
 
 ### Fixed

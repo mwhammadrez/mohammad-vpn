@@ -290,7 +290,10 @@ it is testable on the JVM without a device. Android types stay out of policy cod
 | FR-O2 | Acceptance is never silent: every connection using such an outbound logs `unencrypted outbound` at warning level, in the app's log console. |
 | FR-O3 | A profile may set `dialMode: "oob.<b1>,<b2>,..."`. The value is validated at bundle load (0–255 per byte) and rendered into `sockopt.dialMode`. |
 | FR-O4 | A profile may set `cipherSuites`; it is rendered into `tlsSettings.cipherSuites` only when `security: tls`, and never invented for REALITY. |
-| FR-O5 | The core patches live in `core-go/patches/`, are applied in order by `scripts/build-core.sh`, and never change the pinned upstream commit (D-96). |
+| FR-O5 | The core patches live in `core-go/patches/`, are applied in order by `scripts/build-core.sh`, and never change the pinned upstream commit (D-96). A patch's tests run at build time, so a broken patch fails before the AAR exists. |
+| FR-O6 | A profile may set `finalMask` (`streamSettings.finalMask`). It is validated at bundle load against the mask types the pinned core's loaders accept, per side (`tcp`/`udp`). |
+| FR-O7 | `merge` is available as a `tcp` mask: it coalesces the first outbound writes. It is allowed with REALITY; `fragment` remains forbidden there (D-76). |
+| FR-O8 | `fingerprint: unsafe` is accepted only with `security: tls`, where the core special-cases it to "no uTLS", and is rejected with REALITY, where the core rejects it too. |
 
 ### 5.16 AmneziaWG (AWG) — `NOT VERIFIED`
 
@@ -510,7 +513,10 @@ Every AC names a test class that exists today or is created by the milestone in 
 | AC-O1 | FR-O1, FR-O2 | native | `scripts/build-core.sh` then run the core against a plaintext config | starts, logs `unencrypted outbound` | M4-C |
 | AC-O2 | FR-O3 | unit | `--tests "*DialModeConfigTest"` | `oob.*` rendered; malformed rejected at load | M4-C |
 | AC-O3 | FR-O4 | unit | `--tests "*DialModeConfigTest"` | cipherSuites only under tls | M4-C |
-| AC-O4 | FR-O5 | static | `ls core-go/patches/*.patch` + `scripts/build-core.sh` | both patches apply cleanly, AAR rebuilds | M4-C |
+| AC-O4 | FR-O5 | static | `ls core-go/patches/*.patch` + `scripts/build-core.sh` | all patches apply cleanly, their Go tests pass, AAR rebuilds | M4-C |
+| AC-O5 | FR-O6, FR-O7 | unit | `--tests "*FinalMaskConfigTest"` | `merge` renders; unknown type, `merge` on `udp`, out-of-range numbers and REALITY+fragment are rejected | M4-C |
+| AC-O6 | FR-O7 | native | patched core + local listener | three writes arrive as one segment after ~delayMs | M4-C |
+| AC-O7 | FR-O8 | unit | `--tests "*TlsFingerprintTest"` | `unsafe` valid and degraded; rejected with REALITY | M4-C |
 | AC-N1 | FR-N1 | unit | `--tests "*TileStateSyncTest"` | one push per distinct state; listen always pushes | M4-N |
 | AC-N2 | FR-N2 | integration | `--tests "*TileInteractionTest"` | tile toggles through the shared controller | M4-N |
 | AC-N3 | FR-N3 | Robolectric | `--tests "*SurfaceColdStartTest"` | cold process: tile inactive from persisted profile | M4-N |

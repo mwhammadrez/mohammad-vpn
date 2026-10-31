@@ -22,7 +22,7 @@
 | M3 | REALITY + Vision | ✅ done | green | ships together with M4 (D-49) |
 | M4-W | Widget + quick-settings tile | ✅ done | green | two system surfaces, one entry point |
 | M4-N | Tile reliability, notification, telemetry | ✅ done | green | three defects fixed, one surface added |
-| M4-C | Config compatibility + `oob` dialMode | ✅ done | green | core patched, current bundle can start |
+| M4-C | Config compatibility + `oob` + `merge` | ✅ done | green | core patched, current bundle can start |
 | M4 | State machine + path policy | ⬜ not started | — | largest milestone |
 | M5 | Pre-flight netcheck | ⬜ not started | — | measurement, not guesswork |
 | M6 | Second path (WS+TLS via CDN) | ⬜ not started | — | resilience to IP death |
@@ -110,6 +110,15 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
 - `AcTraceabilityTest` added: every AC must have a runnable command, and every referenced test class
   must exist in sources or be planned. It caught two AC rows with shorthand instead of a command.
 - Gate: **100/100 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
+
+### 2026-10-31 · M4-C (second pass) — `merge`, `finalMask`, `unsafe`
+- Parity audit against the reference core's actual source, not its README. Three gaps closed:
+  `merge` TCP mask (`0003`), per-profile `finalMask` with validation, `unsafe` fingerprint.
+- `merge` proven on this host: three 2-byte writes became one 6-byte read after 241 ms.
+- Patches now ship Go tests, and `scripts/build-core.sh` runs them before binding.
+- Correction to D-73 recorded as D-102: `unsafe` is valid for TLS (the core special-cases it) and
+  invalid for REALITY. Allow-list is 62 names.
+- Gate: **282/282 tests**, lint and placeholder clean.
 
 ### 2026-10-31 · M4-C — operator config compatibility and `oob`
 - **Found by running the pinned core**: the shipped profile shape (plaintext VLESS to a public host) is
