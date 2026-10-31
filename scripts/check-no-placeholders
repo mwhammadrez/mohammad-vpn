@@ -1,17 +1,55 @@
 #!/usr/bin/env bash
-# Fails if banned markers or empty catch blocks appear in committed sources.
+# Fails if banned markers, skipped tests, vacuous assertions or empty catch blocks appear in
+# committed sources. Phase M0 (D-58): the gate must catch what SPEC.md bans, not only TODO/FIXME.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-PATTERN='TODO|FIXME|XXX|HACK|lorem ipsum'
-HITS=$(grep -rnE "$PATTERN" \
-  --include='*.kt' --include='*.kts' --include='*.xml' --include='*.go' --include='*.sh' \
-  . 2>/dev/null \
-  | grep -vE '^\./(build|app/build|core-go/artifacts|third_party|\.gradle)/' \
-  | grep -vE 'check-no-placeholders' || true)
-EMPTY_CATCH=$(grep -rnE 'catch \([^)]*\) \{\s*\}' --include='*.kt' --include='*.go' . 2>/dev/null \
-  | grep -vE '^\./(build|app/build|\.gradle)/' || true)
+
 STATUS=0
-if [ -n "$HITS" ]; then echo "Banned markers found:"; echo "$HITS"; STATUS=1; fi
-if [ -n "$EMPTY_CATCH" ]; then echo "Empty catch blocks found:"; echo "$EMPTY_CATCH"; STATUS=1; fi
-if [ $STATUS -eq 0 ]; then echo "No banned markers found"; fi
+SKIP_DIRS='^\./(build|app/build|core-go/artifacts|third_party|\.gradle|\.git|docs)/'
+SELF='scripts/check-no-placeholders'
+
+fail() {
+  echo "FAIL: $1"
+  shift
+  printf '%s\n' "$@"
+  STATUS=1
+}
+
+# --- 1. banned markers --------------------------------------------------------------
+MARKERS='TODO|FIXME|XXX|HACK|lorem ipsum'
+MARKER_HITS=$(grep -rnE "$MARKERS" \
+  --include='*.kt' --include='*.kts' --include='*.xml' --include='*.go' --include='*.sh' \
+  --include='*.java' . 2>/dev/null \
+  | grep -vE "$SKIP_DIRS" \
+  | grep -v "$SELF" || true)
+[ -n "$MARKER_HITS" ] && fail "banned markers found:" "$MARKER_HITS"
+
+# --- 2. skipped or disabled tests ---------------------------------------------------
+SKIP_PATTERNS='@Ignore|@Disabled|Assume\.assume(True|False)|\.skip\(|\bxit\(|\bxfail|pytest\.mark\.skip'
+SKIP_HITS=$(grep -rnE "$SKIP_PATTERNS" --include='*.kt' --include='*.kts' --include='*.java' . 2>/dev/null \
+  | grep -vE "$SKIP_DIRS" \
+  | grep -v "$SELF" || true)
+[ -n "$SKIP_HITS" ] && fail "skipped/disabled tests found:" "$SKIP_HITS"
+
+# --- 3. vacuous assertions ----------------------------------------------------------
+VACUOUS='assertTrue\(true\)|assertEquals\(true, true\)|assertNotNull\(null\)'
+VACUOUS_HITS=$(grep -rnE "$VACUOUS" --include='*.kt' --include='*.java' . 2>/dev/null \
+  | grep -vE "$SKIP_DIRS" \
+  | grep -v "$SELF" || true)
+[ -n "$VACUOUS_HITS" ] && fail "vacuous assertions found:" "$VACUOUS_HITS"
+
+# --- 4. empty catch blocks ----------------------------------------------------------
+EMPTY_CATCH=$(grep -rnE 'catch \([^)]*\) \{\s*\}' --include='*.kt' --include='*.go' . 2>/dev/null \
+  | grep -vE "$SKIP_DIRS" \
+  | grep -v "$SELF" || true)
+[ -n "$EMPTY_CATCH" ] && fail "empty catch blocks found:" "$EMPTY_CATCH"
+
+# --- 5. empty function bodies in test sources ---------------------------------------
+# `fun name() {}` in a test file is a test that asserts nothing.
+EMPTY_FUN=$(grep -rnE 'fun [A-Za-z0-9_`]+\(\) \{\s*\}' --include='*.kt' app/src/test 2>/dev/null || true)
+[ -n "$EMPTY_FUN" ] && fail "empty test function bodies found:" "$EMPTY_FUN"
+
+if [ $STATUS -eq 0 ]; then
+  echo "No banned markers, skipped tests, vacuous assertions or empty catches found"
+fi
 exit $STATUS

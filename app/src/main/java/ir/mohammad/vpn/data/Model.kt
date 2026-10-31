@@ -55,12 +55,24 @@ object OperatorBundleLoader {
     private const val IV_LEN = 12
     private const val HEADER_LEN = 4 + SALT_LEN + IV_LEN
 
-    fun load(context: Context): OperatorBundle {
-        val bytes = try {
-            context.assets.open("operator/bundle.enc").use { it.readBytes() }
-        } catch (e: Exception) {
-            throw BundleException("operator bundle missing")
-        }
+    fun load(context: Context): OperatorBundle =
+        decrypt(readAsset(context), BuildConfig.OPERATOR_PASSWORD)
+
+    /** Reads the encrypted asset. Separate so the missing-asset failure stays typed and testable. */
+    internal fun readAsset(context: Context): ByteArray = try {
+        context.assets.open("operator/bundle.enc").use { it.readBytes() }
+    } catch (e: Exception) {
+        throw BundleException("operator bundle missing")
+    }
+
+    /**
+     * Decrypts [bytes] with [password] and parses the result.
+     *
+     * `internal` so unit tests can exercise both the success and the failure path with a generated
+     * fixture: the operator's real bundle is deliberately absent from the repository. The behaviour
+     * is identical to [load], which is the only production entry point.
+     */
+    internal fun decrypt(bytes: ByteArray, password: String): OperatorBundle {
         if (bytes.size <= HEADER_LEN || String(bytes, 0, 4, Charsets.US_ASCII) != MAGIC) {
             throw BundleException("operator bundle header invalid")
         }
@@ -69,7 +81,6 @@ object OperatorBundleLoader {
         val iv = bytes.copyOfRange(4 + SALT_LEN, HEADER_LEN)
         val cipherText = bytes.copyOfRange(HEADER_LEN, bytes.size)
 
-        val password = BuildConfig.OPERATOR_PASSWORD
         if (password.isEmpty()) throw BundleException("operator password not configured")
 
         val keyBytes = try {

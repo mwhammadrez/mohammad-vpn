@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Verifies the debug APK exists and stays within the NFR-19 budget (20 MB).
+# Usage: scripts/apk-size-check [path-to-apk]
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+APK="${1:-app/build/outputs/apk/debug/app-debug.apk}"
+LIMIT_MB="${APK_SIZE_LIMIT_MB:-20}"
+
+if [ ! -f "$APK" ]; then
+  echo "APK not found: $APK" >&2
+  echo "Build it first: ./gradlew :app:assembleDebug" >&2
+  exit 2
+fi
+
+BYTES=$(wc -c < "$APK")
+MB=$(awk -v b="$BYTES" 'BEGIN { printf "%.1f", b / 1048576 }')
+
+echo "APK:  $APK"
+echo "size: ${MB} MB (limit ${LIMIT_MB} MB)"
+
+if awk -v m="$MB" -v l="$LIMIT_MB" 'BEGIN { exit !(m > l) }'; then
+  echo "FAIL: APK exceeds the ${LIMIT_MB} MB budget (NFR-19)" >&2
+  exit 1
+fi
+
+echo "OK: within budget"
