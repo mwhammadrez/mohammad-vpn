@@ -174,6 +174,9 @@ would repeat the 0.7.0 failure: policy, UI and service each built and never wire
 
 **Tests first:** `ConnectionStateMachineTest`, `PathPolicyTest`, `AntiFlapTest`, `CircuitBreakerTest`,
 `StallDetectionTest`, `ShutdownOrderTest`, `TelemetryTileTest`, `AccessibilityTest`.
+`PathPolicyTest` must exercise **1, 2 and N (≥4) profiles**, an empty fallback list, a single-profile
+policy whose only path fails, and duplicate/unknown ids — SRC-1 and SRC-5 are acceptance criteria, not
+advice.
 
 **Risk.** This is the largest milestone. Mitigation: split into four commits
 (machine → policy → service wiring → UI) with the full gate run between them.
@@ -291,7 +294,7 @@ Not implementable in this workspace. The deliverable is a procedure, not code.
 | M5 | NET-1, NET-2, NET-3, NET-4, NET-5, NET-6, MTU-6 |
 | M6 | SP-1, SP-2, SP-3, SP-4, SP-5 |
 | M7 | RC-1, RC-2, RC-3, RC-4, RC-5, RC-6, RC-7, RC-8, RC-9 |
-| continuous | CFG-1, CFG-2, CFG-4, CFG-5, CFG-6, OBS-4, OBS-5, OBS-6, UI-1, UI-2, UI-4, UI-5 |
+| continuous | CFG-1, CFG-2, CFG-4, CFG-5, CFG-6, OBS-4, OBS-5, OBS-6, UI-1, UI-2, UI-4, UI-5, SRC-1, SRC-2, SRC-3, SRC-4, SRC-5 |
 | M-DEV | AWG-1, AWG-2, AWG-3, AWG-4, AWG-5 (verification only; no client change) |
 
 `continuous` means the requirement is upheld by every milestone and its test runs in the standard gate;

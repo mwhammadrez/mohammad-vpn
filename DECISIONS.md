@@ -555,3 +555,24 @@ Three cases in `TlsProfileValidationTest` used a REALITY block containing only `
 required `publicKey` and `shortId`, those fixtures were invalid, so they now carry a complete block and
 the assertions still test exactly what they tested before (the fingerprint rule). No assertion was
 removed or relaxed; the fixtures became valid inputs for a stricter schema.
+
+## D-78 — Multi-server by construction; no server data in source
+**Date:** 2026-10-31 · **Source:** operator constraint, M4 onward
+The app must serve any number of operator servers. Consequences, all normative from M4:
+1. **Nothing server-specific in Kotlin.** No address, IP, hostname, UUID, publicKey or shortId. The
+   only IPs allowed in production source are local infrastructure (TUN address, loopback, default
+   resolvers) and route-table prefixes; the only host allowed is the geo-asset download host.
+2. **Generic validation.** `RealityRules` and `TlsFingerprint` check *shapes* the core accepts, never
+   the operator's particular values. A different server with a different key must pass unchanged.
+3. **N profiles is the default assumption.** Path policy, the state machine, probing and rendering are
+   written and tested for 1, 2 and N (≥4) profiles, including "single profile whose only path fails".
+4. **Remote config is the growth path** (M7): adding a server must never require an APK.
+Enforcement: `NoHardcodedEndpointsTest` scans string literals in `app/src/main/java` and fails on
+UUID shapes, non-infrastructure IPs, unknown hostnames, 43-character base64url and 8–16 character hex
+strings. It is an AC (AC-39) and runs in every gate.
+The scan immediately found two dead constants in `MohammadVpnService` (`TUN_ADDRESS = "10.10.14.1"`,
+`TUN_PREFIX = 30`) that disagreed with `TunPlan.IPV4_ADDRESS = "10.10.10.1"`. They were unused, so the
+risk was latent rather than live — but a future call site would have built an interface whose address
+did not match the route plan. Both removed.
+Test sources are exempt from the scan: fixtures need concrete values, and the rule is about
+production. Fixtures use `.invalid` hosts and generated keys, never the operator's data.

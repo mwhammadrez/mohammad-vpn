@@ -43,7 +43,7 @@ SDK 36, NDK 28.2.13676358, Go 1.27.3, 3 GiB RAM, **no device, no `/dev/kvm`**.
 |---|---|---:|---|
 | Version | `./gradlew --version` | 0 | Gradle 8.14.6, JVM 17.0.21, Kotlin 2.0.21 |
 | Clean build | `./gradlew clean :app:assembleDebug` | 0 | `app-debug.apk` **14.3 MB** (limit 20) |
-| Unit | `./gradlew :app:testDebugUnitTest` | 0 | **159 tests, 159 passed, 0 skipped** (after M3) |
+| Unit | `./gradlew :app:testDebugUnitTest` | 0 | **161 tests, 161 passed, 0 skipped** (after the D-78 guard) |
 | Lint | `./gradlew :app:lintDebug` | 0 | **0 errors, 15 warnings** |
 | Placeholder | `./scripts/check-no-placeholders` | 0 | `No banned markers found` |
 | APK size | `./scripts/apk-size-check` | 0 | 14.3 MB, within 20 MB |
@@ -107,6 +107,13 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
 - `AcTraceabilityTest` added: every AC must have a runnable command, and every referenced test class
   must exist in sources or be planned. It caught two AC rows with shorthand instead of a command.
 - Gate: **100/100 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
+
+### 2026-10-31 · D-78 constraint harness (pre-M4)
+- `NoHardcodedEndpointsTest`: scans production string literals for UUIDs, non-infrastructure IPs,
+  unknown hostnames, 43-char base64url and 8–16 char hex. Added as AC-39 and to the continuous gate.
+- It found and removed two dead constants: `TUN_ADDRESS = "10.10.14.1"` and `TUN_PREFIX = 30` in
+  `MohammadVpnService`, which disagreed with `TunPlan.IPV4_ADDRESS = "10.10.10.1"`.
+- SPEC gains SRC-1…SRC-5 and AC-39…AC-41; PLAN's M4 acceptance now requires 1/2/N-profile coverage.
 
 ### 2026-10-31 · M3 — REALITY + XTLS Vision (0.14.0)
 - `core/RealityRules`: field rules taken from the pinned core's config layer — hostname-shaped

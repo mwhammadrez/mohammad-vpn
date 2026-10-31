@@ -48,9 +48,6 @@ class MohammadVpnService : VpnService() {
 
         const val CHANNEL_ID = "mohammad_tunnel"
         const val NOTIFICATION_ID = 1001
-        const val TUN_ADDRESS = "10.10.14.1"
-        const val TUN_PREFIX = 30
-
         const val CONNECT_TIMEOUT_MS = 15_000L
         const val HEALTH_INTERVAL_MS = 5_000L
 

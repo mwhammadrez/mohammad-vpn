@@ -238,7 +238,17 @@ it is testable on the JVM without a device. Android types stay out of policy cod
 | UI-4 | No endpoint, host, UUID or key is ever displayed. |
 | UI-5 | Accessibility: content descriptions on dial, tiles, profile rows, expand controls and banner actions; logical focus order; touch targets ≥ 48 dp. |
 
-### 5.12 AmneziaWG (AWG) — `NOT VERIFIED`
+### 5.12 Server data and multiplicity (SRC) — operator constraint 2026-10-31
+
+| ID | Requirement |
+|---|---|
+| SRC-1 | The app supports **any number** of operator profiles (1, 2 or N). No state, policy, probe or renderer may assume a single server. |
+| SRC-2 | No server address, IP, hostname, UUID, publicKey or shortId appears in Kotlin source. All of it comes from the encrypted bundle or the signed remote config, and nowhere else. |
+| SRC-3 | Validation is generic: any combination the pinned core accepts must be accepted. Nothing is special-cased to the operator's current server. |
+| SRC-4 | Adding, removing or changing a server requires only a new bundle or a remote-config publish — never a new APK. |
+| SRC-5 | Every policy, state and rendering test covers 1, 2 and N profiles, including the empty-set case. |
+
+### 5.13 AmneziaWG (AWG) — `NOT VERIFIED`
 
 | ID | Requirement |
 |---|---|
@@ -453,6 +463,9 @@ Every AC names a test class that exists today or is created by the milestone in 
 | AC-35 | placeholder ban | static | `./scripts/check-no-placeholders` | exit 0, no skipped tests | every |
 | AC-36 | build | build | `./gradlew clean :app:assembleDebug` | exit 0 | every |
 | AC-37 | AWG-4 | docs | `grep -R "AmneziaWG.*NOT VERIFIED" README.md docs` | match found | every |
+| AC-39 | SRC-1, SRC-2, SRC-3 | static | `--tests "*NoHardcodedEndpointsTest"` | no server data in production sources | every |
+| AC-40 | SRC-1, SRC-5 | unit | `--tests "*PathPolicyTest"` | policy correct for 1, 2 and N profiles | M4 |
+| AC-41 | SRC-4 | integration | `--tests "*RemoteConfigApplierTest"` | a publish adds a server without an APK | M7 |
 | AC-38 | end-to-end chain | device | `grep -c "NOT VERIFIED" docs/DEVICE_TEST_PLAN.md` after the supervised procedure | **NOT VERIFIED** — no device | M-DEV |
 
 **Rule:** an AC that names a test class which does not exist is a defect in this document, not a
