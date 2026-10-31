@@ -43,7 +43,7 @@ object Tunnel {
     var defaultDns: List<String> = listOf("1.1.1.1", "8.8.8.8")
 
     @Volatile
-    var defaultMtu: Int = 1500
+    var defaultMtu: Int = ir.mohammad.vpn.core.MtuPolicy.DEFAULT_MTU
 
     @Volatile
     var tunIndex: Int = 0

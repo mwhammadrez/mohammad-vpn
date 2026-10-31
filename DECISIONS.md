@@ -424,3 +424,45 @@ in a clean clone — which is why three tests were red on every machine but the 
 the seam makes the success path and every failure branch testable with a generated fixture.
 Behaviour is unchanged by construction: the same checks run in the same order with the same messages,
 and `BundleLoadTest` asserts each message. No product feature touched in M0.
+
+## D-64 — `BundleParseTest` expects 1400, not 1500
+**Date:** 2026-10-31 · **Source:** M1, D-45 (SPEC MTU-1)
+`BundleParseTest.parsesValidBundle` asserted `assertEquals(1500, bundle.mtu)` because 1500 was the
+hard-coded bundle default. D-45 changes that default to 1400, so the assertion must change with it.
+This is the only test edit M1 is allowed to make for this reason, and it is a *spec* change, not a
+convenience: the expectation follows the normative document, and the new value is asserted explicitly
+rather than loosened to a range.
+Logged before the edit, per the test-integrity rule.
+
+## D-65 — `mtu` is an additive, optional profile field; no schema version bump
+**Date:** 2026-10-31 · **Source:** M1, SPEC MTU-1
+`Profile.mtu: Int?` is optional and defaults to null ("use the bundle default"). Bundles written for
+0.11.2 keep parsing byte-for-byte; only the *default* changed (1500 → 1400, D-45). Adding a field that
+older bundles omit is not a compatibility break, so `schemaVersion` stays 1. A future field that
+changes meaning would need version 2.
+
+## D-66 — `tcpMaxSeg` is `min(mtu − 40, 1440)`
+**Date:** 2026-10-31 · **Source:** M1, catalog 105/115
+40 bytes covers the outer IP + TCP headers plus the TLS/WS framing the core adds above the tunnel
+payload. The 1440 cap is the classic Ethernet payload ceiling: with MTU 1500 the outbound would
+otherwise advertise 1460, which is more than a real path usually carries once PPPoE or a carrier
+tunnel is in the way. An explicit `sockopt.tcpMaxSeg` in the operator's profile always wins — the
+renderer merges, never overwrites.
+
+## D-67 — An out-of-range MTU is rejected, not clamped (behaviour change)
+**Date:** 2026-10-31 · **Source:** M1, SPEC MTU-1
+0.11.2 accepted any `defaultMtu` and silently substituted 1500 when the value was outside 1200–1500.
+M1 throws `BundleException("defaultMtu out of range")` instead, and the same for a profile `mtu`.
+Why: a silent substitution is how a misconfigured bundle ships for a month without anyone noticing,
+and the operator now has remote config (M7) to correct it.
+Risk: a deployed bundle carrying an out-of-range value would now fail to load entirely. Mitigation:
+validate the bundle before publishing (`scripts/encrypt-operator-bundle` path) and keep the previous
+bundle as the fallback. This is the only user-visible behaviour change in M1.
+
+## D-68 — M1 does not implement PLPMTUD
+**Date:** 2026-10-31 · **Source:** M1 scope; catalog 103/104
+M1 stops the bleeding with a conservative configured value and an MSS clamp. Probing the real path MTU
+belongs to M5 (pre-flight netcheck), which is the only place allowed to lower the effective value.
+Doing it now would add a probe before there is a policy to cache or bound it.
+Consequence: MTU-1…MTU-8 are verified as *configuration*, not as *behaviour*; the device register in
+`SPEC.md §11` keeps "effective MTU on a real Iranian mobile path" as `NOT VERIFIED`.

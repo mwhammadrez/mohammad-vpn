@@ -20,7 +20,7 @@ class BundleParseTest {
         val bundle = OperatorBundleLoader.parse(valid)
         val profiles = bundle.profiles
         assertEquals(listOf("1.1.1.1", "8.8.8.8"), bundle.dnsServers)
-        assertEquals(1500, bundle.mtu)
+        assertEquals(1400, bundle.mtu)
         assertEquals(1, profiles.size)
         assertEquals("p1", profiles[0].id)
         assertEquals("XRAY", profiles[0].core)
@@ -95,5 +95,47 @@ class BundleParseTest {
         val profiles = OperatorBundleLoader.parse(awg).profiles
         assertTrue(profiles[0].awg != null)
         assertEquals("AMNEZIAWG", profiles[0].core)
+    }
+
+    @Test
+    fun `defaultMtu is 1400 when the bundle omits it`() {
+        assertEquals(1400, OperatorBundleLoader.parse(valid).mtu)
+    }
+
+    @Test
+    fun `an explicit defaultMtu is honoured`() {
+        val bundle = OperatorBundleLoader.parse(
+            valid.replace("\"schemaVersion\":1", "\"schemaVersion\":1,\"defaultMtu\":1350"),
+        )
+        assertEquals(1350, bundle.mtu)
+    }
+
+    @Test(expected = BundleException::class)
+    fun `an out of range defaultMtu is rejected rather than clamped`() {
+        OperatorBundleLoader.parse(
+            valid.replace("\"schemaVersion\":1", "\"schemaVersion\":1,\"defaultMtu\":900"),
+        )
+    }
+
+    @Test
+    fun `a profile level mtu is parsed`() {
+        val bundle = OperatorBundleLoader.parse(
+            valid.replace("\"serverPort\":443", "\"serverPort\":443,\"mtu\":1390"),
+        )
+        assertEquals(1390, bundle.profiles[0].mtu)
+    }
+
+    @Test(expected = BundleException::class)
+    fun `a profile level mtu outside the range is rejected`() {
+        OperatorBundleLoader.parse(
+            valid.replace("\"serverPort\":443", "\"serverPort\":443,\"mtu\":1199"),
+        )
+    }
+
+    @Test(expected = BundleException::class)
+    fun `a non numeric profile mtu is rejected`() {
+        OperatorBundleLoader.parse(
+            valid.replace("\"serverPort\":443", "\"serverPort\":443,\"mtu\":\"big\""),
+        )
     }
 }

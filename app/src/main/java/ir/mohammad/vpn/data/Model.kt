@@ -2,6 +2,7 @@ package ir.mohammad.vpn.data
 
 import android.content.Context
 import ir.mohammad.vpn.BuildConfig
+import ir.mohammad.vpn.core.MtuPolicy
 import org.json.JSONObject
 import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
@@ -25,6 +26,8 @@ data class Profile(
     val port: Int,
     val xray: JSONObject?,
     val awg: JSONObject?,
+    /** Optional per-profile override; null means "use the bundle default". SPEC MTU-1. */
+    val mtu: Int? = null,
 )
 
 /** Decrypted operator bundle plus its defaults. */
@@ -124,8 +127,15 @@ object OperatorBundleLoader {
         }
         if (dns.isEmpty()) dns.addAll(listOf("1.1.1.1", "8.8.8.8"))
 
-        var mtu = root.optInt("defaultMtu", 1500)
-        if (mtu !in 1200..1500) mtu = 1500
+        val mtu = if (root.has("defaultMtu") && !root.isNull("defaultMtu")) {
+            val raw = root.opt("defaultMtu")
+            if (raw !is Number) throw BundleException("defaultMtu invalid")
+            val value = raw.toInt()
+            if (!MtuPolicy.isValid(value)) throw BundleException("defaultMtu out of range")
+            value
+        } else {
+            MtuPolicy.DEFAULT_MTU
+        }
 
         val result = ArrayList<Profile>(array.length())
         val seen = HashSet<String>()
@@ -150,6 +160,16 @@ object OperatorBundleLoader {
                 throw BundleException("protocol $protocol cannot run on core $core")
             }
 
+            val profileMtu = if (o.has("mtu") && !o.isNull("mtu")) {
+                val raw = o.opt("mtu")
+                if (raw !is Number) throw BundleException("profile mtu invalid")
+                val value = raw.toInt()
+                if (!MtuPolicy.isValid(value)) throw BundleException("profile mtu out of range")
+                value
+            } else {
+                null
+            }
+
             val xray = o.optJSONObject("xray")
             val awg = o.optJSONObject("awg")
             if (core == "XRAY") {
@@ -158,7 +178,7 @@ object OperatorBundleLoader {
             }
             if (core == "AMNEZIAWG" && awg == null) throw BundleException("awg settings missing")
 
-            result.add(Profile(id, name, protocol, core, host, port, xray, awg))
+            result.add(Profile(id, name, protocol, core, host, port, xray, awg, profileMtu))
         }
 
         val defaultId = root.optString("defaultProfileId").takeIf { it.isNotBlank() }

@@ -21,6 +21,7 @@ object XrayConfig {
     /** Documented FakeDNS pool; must not collide with real destinations. */
     /** CGNAT in Iran expires idle mappings around 30-60 s; stay well inside that. */
     const val KEEPALIVE_IDLE_S = 25
+    const val TCP_USER_TIMEOUT_MS = 30_000
     const val KEEPALIVE_INTERVAL_S = 15
 
     const val FAKE_DNS_POOL = "198.18.0.0/15"
@@ -84,13 +85,24 @@ object XrayConfig {
      *
      * 25 s idle / 15 s interval: carrier-grade NAT in Iran drops idle mappings in
      * the 30-60 s range; Xray's Chrome-derived default of 45 s sits inside that
-     * window. Merges into an existing `sockopt` block instead of replacing it.
+     * window.
+     *
+     * `tcpMaxSeg` is the only MSS clamp this app can express: it cannot run iptables,
+     * and tun2socks does not rewrite the MSS option. Without it a 1500-byte segment can
+     * be handed to a path that only carries 1400.
+     *
+     * `tcpUserTimeout` bounds how long unacknowledged data may sit before the socket
+     * dies; the kernel default is minutes, which is how a dead path looks alive.
+     *
+     * Every field is merged, never overwritten: an explicit operator value wins.
      */
-    private fun applySockopt(outbound: JSONObject) {
+    private fun applySockopt(outbound: JSONObject, mtu: Int) {
         val stream = outbound.optJSONObject("streamSettings")
             ?: JSONObject().also { outbound.put("streamSettings", it) }
         val sockopt = stream.optJSONObject("sockopt")
             ?: JSONObject().also { stream.put("sockopt", it) }
+        if (!sockopt.has("tcpMaxSeg")) sockopt.put("tcpMaxSeg", MtuPolicy.segmentSize(mtu))
+        if (!sockopt.has("tcpUserTimeout")) sockopt.put("tcpUserTimeout", TCP_USER_TIMEOUT_MS)
         if (!sockopt.has("tcpKeepAliveIdle")) sockopt.put("tcpKeepAliveIdle", KEEPALIVE_IDLE_S)
         if (!sockopt.has("tcpKeepAliveInterval")) sockopt.put("tcpKeepAliveInterval", KEEPALIVE_INTERVAL_S)
     }
@@ -108,7 +120,7 @@ object XrayConfig {
     ): String {
         val outbound = JSONObject(profile.xray.toString()).apply { put("tag", "proxy") }
         applyTuning(outbound, tuning)
-        applySockopt(outbound)
+        applySockopt(outbound, mtu)
 
         val sniffOverride = JSONArray().put("http").put("tls")
         if (fakeDns) sniffOverride.put("fakedns")

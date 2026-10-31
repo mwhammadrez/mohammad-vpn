@@ -16,6 +16,7 @@ import ir.mohammad.vpn.MainActivity
 import ir.mohammad.vpn.R
 import ir.mohammad.vpn.core.AwgConfig
 import ir.mohammad.vpn.core.GeoAssets
+import ir.mohammad.vpn.core.MtuPolicy
 import ir.mohammad.vpn.core.TransportTuning
 import ir.mohammad.vpn.core.TunPlan
 import ir.mohammad.vpn.core.XrayConfig
@@ -170,8 +171,11 @@ class MohammadVpnService : VpnService() {
             return
         }
 
+        val mtuResolution = MtuPolicy.resolve(profile.mtu, Tunnel.defaultMtu)
+        LogStore.add("I", TAG, MtuPolicy.diagnostic(mtuResolution))
+
         val plan = TunPlan.build(
-            mtu = Tunnel.defaultMtu,
+            mtu = mtuResolution.mtu,
             dns = Tunnel.defaultDns,
             ipv6 = Tunnel.ipv6Enabled,
         )

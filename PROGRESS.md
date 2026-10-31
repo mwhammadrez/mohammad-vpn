@@ -1,7 +1,7 @@
 # PROGRESS.md — Mohammad (`ir.mohammad.vpn`)
 
 **Last updated:** 2026-10-31 (UTC)
-**Current phase:** M0 complete → M1 not started
+**Current phase:** M1 complete → M2 not started
 **Current release:** 0.11.2 (versionCode 29)
 
 > **Correction notice (2026-10-31).** This file was frozen at Phase 1 ("no application code exists
@@ -17,7 +17,7 @@
 | ID | Milestone | Status | Gate | Notes |
 |---|---|---|---|---|
 | M0 | Harness correction | ✅ done | green | gates + AC→test mapping + `BundleLoadTest` fixture |
-| M1 | MTU / MSS / `sockopt` | ⬜ not started | — | the open user-facing bug |
+| M1 | MTU / MSS / `sockopt` | ✅ done | green | config verified; device behaviour NOT VERIFIED |
 | M2 | uTLS fingerprint | ⬜ not started | — | cheapest detection win |
 | M3 | REALITY + Vision | ⬜ not started | — | ships together with M4 |
 | M4 | State machine + path policy | ⬜ not started | — | largest milestone |
@@ -43,7 +43,7 @@ SDK 36, NDK 28.2.13676358, Go 1.27.3, 3 GiB RAM, **no device, no `/dev/kvm`**.
 |---|---|---:|---|
 | Version | `./gradlew --version` | 0 | Gradle 8.14.6, JVM 17.0.21, Kotlin 2.0.21 |
 | Clean build | `./gradlew clean :app:assembleDebug` | 0 | `app-debug.apk` **14.3 MB** (limit 20) |
-| Unit | `./gradlew :app:testDebugUnitTest` | 0 | **100 tests, 100 passed, 0 skipped** (after M0) |
+| Unit | `./gradlew :app:testDebugUnitTest` | 0 | **119 tests, 119 passed, 0 skipped** (after M1) |
 | Lint | `./gradlew :app:lintDebug` | 0 | **0 errors, 15 warnings** |
 | Placeholder | `./scripts/check-no-placeholders` | 0 | `No banned markers found` |
 | APK size | `./scripts/apk-size-check` | 0 | 14.3 MB, within 20 MB |
@@ -108,6 +108,19 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
   must exist in sources or be planned. It caught two AC rows with shorthand instead of a command.
 - Gate: **100/100 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
 
+### 2026-10-31 · M1 — MTU / MSS / `sockopt` (0.12.0)
+- `core/MtuPolicy`: resolution profile → bundle → **1400**, strict 1200–1500 validation, `segmentSize`,
+  and the `mtu resolved:` diagnostic line. 8 tests.
+- `Profile.mtu` added as an optional field (additive, D-65). `defaultMtu` default changed to 1400 and
+  out-of-range values are now rejected instead of clamped (D-67).
+- `XrayConfig.applySockopt(outbound, mtu)` now emits `tcpMaxSeg = min(mtu−40, 1440)` and
+  `tcpUserTimeout = 30000`, merging with explicit operator values; keepalive stays 25/15. 5 tests.
+- `MohammadVpnService` resolves the MTU once per connect and logs
+  `mtu resolved: configured=… effective=… source=profile|bundle|default`.
+- `BundleParseTest`: 1500 → 1400 (D-64, logged before the edit) + 5 new parse/validation tests.
+- Gate: **119/119 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
+- **NOT VERIFIED:** whether 1400 actually fixes the stall — needs a device run (SPEC §11, J-12).
+
 ### 2026-10-31 · Phase 1 (v2.0)
 - `SPEC.md` v2.0: 12 requirement groups, 10-state machine, path policy, remote-config contract,
   38 ACs mapped to real test classes, 14 failure journeys, device register.
@@ -119,9 +132,9 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
 
 ## Next action
 
-**M1 — MTU / MSS / `sockopt` (0.12.0).** Awaiting operator approval. Scope: MTU-1…MTU-8,
-`MtuPolicy`, `tcpMaxSeg`/`tcpUserTimeout`/keepalive rendering, the `mtu resolved:` diagnostic line.
-No MTU value may be claimed as fixed until a device captures a large transfer.
+**M2 — uTLS fingerprint (0.13.0).** Awaiting operator approval. Scope: TLS-2, TLS-7, AC-9, AC-11.
+`fingerprint` becomes required whenever `security` is `tls` or `reality`, validated against the
+allow-list of the pinned core; a golden test keeps `security:none` output byte-identical.
 
 ## Known blockers
 
