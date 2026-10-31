@@ -54,7 +54,7 @@ class MohammadVpnService : VpnService() {
 
         /** Probe the data path at most this often (health ticks x interval). */
         const val PROBE_EVERY_TICKS = 6
-        const val PROBE_FAILURES_TO_RECONNECT = 2
+        const val PROBE_FAILURES_TO_RECONNECT = DataPathPolicy.FAILURES_TO_RECONNECT
         /** Literal address for the health probe: no DNS, no operator data in the config. */
         const val HEALTH_TARGET = "1.1.1.1"
         const val HEALTH_TARGET_PORT = 443
@@ -82,6 +82,7 @@ class MohammadVpnService : VpnService() {
     @Volatile private var retryFuture: ScheduledFuture<*>? = null
     @Volatile private var waitingForNetwork = false
     @Volatile private var reconnecting = false
+    @Volatile private var lastTrafficAt = SystemClock.elapsedRealtime()
     private var healthTicks = 0
     private var statsTicks = 0
     private var probeFailures = 0
@@ -576,7 +577,13 @@ class MohammadVpnService : VpnService() {
         if (Tunnel.state.value !is TunnelState.Connected) return
         val core = xray ?: return
         runCatching { core.queryTraffic() }
-            .onSuccess { traffic -> Tunnel.updateTraffic(traffic.uplink, traffic.downlink) }
+            .onSuccess { traffic ->
+                val previous = Tunnel.traffic.value
+                if (traffic.uplink != previous.first || traffic.downlink != previous.second) {
+                    lastTrafficAt = SystemClock.elapsedRealtime()
+                }
+                Tunnel.updateTraffic(traffic.uplink, traffic.downlink)
+            }
             .onFailure { LogStore.add("W", TAG, "stats query failed: ${it.message}") }
         // The raw dump is only needed for diagnostics; rebuilding that string every
         // two seconds costs a JNI round trip and allocations for nothing.
@@ -613,15 +620,21 @@ class MohammadVpnService : VpnService() {
         healthTicks++
         if (healthTicks % PROBE_EVERY_TICKS != 0) return
 
-        val profile = Tunnel.selected ?: return
-        val ok = SocksProbe.probe(XrayConfig.SOCKS_PORT, profile.host, profile.port)
+        // Probe a neutral address, never the server itself: asking the proxy to
+        // connect back to its own port is rejected by many providers and produced
+        // a false "dead path" every minute.
+        val ok = SocksProbe.probe(XrayConfig.SOCKS_PORT, HEALTH_TARGET, HEALTH_TARGET_PORT)
         if (ok) {
             probeFailures = 0
             return
         }
         probeFailures++
-        LogStore.add("W", TAG, "data path probe failed ($probeFailures/$PROBE_FAILURES_TO_RECONNECT)")
-        if (probeFailures < PROBE_FAILURES_TO_RECONNECT) return
+        val silentFor = SystemClock.elapsedRealtime() - lastTrafficAt
+        LogStore.add(
+            "W", TAG,
+            "data path probe failed ($probeFailures/$PROBE_FAILURES_TO_RECONNECT, silent ${silentFor / 1000}s)",
+        )
+        if (!DataPathPolicy.shouldReconnect(probeFailures, silentFor)) return
 
         probeFailures = 0
         LogStore.add("W", "NET", "RECONNECT_STARTED (dead outbound path)")

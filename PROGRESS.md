@@ -286,3 +286,9 @@ Data path is now the one mature clients use:
 - `applyMetering(builder)` now calls `setMetered(false)` unconditionally (was network-aware in
   0.11.0). Test updated first, compile-red, then implemented.
 - Everything else (keep-alive 25/15, `dns.hosts` pre-resolution) unchanged from 0.11.0.
+
+**2026-10-30 · v0.11.2 — stop the self-inflicted reconnect loop**
+- Watchdog no longer probes the server through its own tunnel (that request is rejected by many
+  providers and produced a false "dead path" roughly every minute).
+- Three consecutive failures plus 60 s of traffic silence are now required before a reconnect.
+- `DataPathPolicy` + `DataPathPolicyTest` (4 tests).

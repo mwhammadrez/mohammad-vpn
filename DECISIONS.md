@@ -263,3 +263,18 @@ app is already skippable, so recomposition was **not** the bottleneck — alloca
 
 All three are configuration-level. None has been measured on a device; the claims are
 "field is emitted correctly", not "connection is faster".
+
+## D-42 — The watchdog probes a neutral address and needs traffic evidence
+**Date:** 2026-10-30
+0.10.0 probed `profile.host:profile.port` — i.e. asked the proxy to connect back to its own
+listening port. Many providers reject that, so the probe failed on a perfectly working tunnel; two
+failures 30 s apart tore the tunnel down and reconnected it, which on a device looks like
+"works for a few seconds, then cuts, forever".
+
+Fixes:
+- probe `1.1.1.1:443` (a neutral literal), never the server itself;
+- three consecutive failures (≈90 s), not two;
+- reconnect only when the traffic counters have also been silent for 60 s, so a busy tunnel is
+  never torn down by probe noise.
+
+`DataPathPolicy` holds the rule as a pure function and is unit-tested.
