@@ -508,3 +508,50 @@ changing the file by hand and justifying the diff here.
 Known limitation: `org.json` backs `JSONObject` with a hash map, so key order is stable for a given
 JDK and library version but not guaranteed across upgrades. If a JDK bump reorders keys, regenerate and
 record why — do not loosen the assertion to a structural comparison without a decision.
+
+## D-73 — `hellogolang` is not a valid fingerprint (corrects D-69)
+**Date:** 2026-10-31 · **Source:** M3; `infra/conf/transport_security.go` in the pinned core
+D-69 built the allow-list from the three `*Fingerprints` maps. Reading the config layer shows the
+core rejects two names explicitly before it ever calls `GetFingerprint`:
+`Fingerprint == "unsafe" || Fingerprint == "hellogolang"` → error.
+So the valid set is **61**, not 62. `unsafe` was already excluded; `hellogolang` is now excluded too.
+This is a correction of M2's list, not a scope change: a bundle using `hellogolang` never worked.
+`TlsFingerprintTest` asserted the opposite and was corrected with the same reasoning recorded here.
+
+## D-74 — REALITY field rules mirror the core, not intuition
+**Date:** 2026-10-31 · **Source:** M3; `infra/conf/transport_security.go`
+`publicKey` is base64 **RawURL**: padding is rejected, and the decoded value must be exactly 32 bytes.
+`shortId` is hexadecimal, at most 16 characters, and **an empty string is accepted** — the core
+decodes it into eight zero bytes, so rejecting it would reject a configuration the core runs. The key
+must be present; the value may be empty.
+`spiderX`, when present, must start with `/`.
+Error messages never echo the public key or the short id (NFR-5); they name the field only.
+
+## D-75 — Vision is allowed only with REALITY (deliberately narrower than the core)
+**Date:** 2026-10-31 · **Source:** operator instruction, M3; SPEC TLS-4
+The pinned core accepts `xtls-rprx-vision` with either TLS or REALITY, and the XTLS docs treat
+VLESS+TLS+Vision as a normal configuration. This project restricts it to REALITY.
+Why: every TLS profile we ship is REALITY-oriented, Vision's main benefit in Iran is record-boundary
+matching against a REALITY handshake, and a wider rule would let a half-configured TLS profile pass
+validation while providing none of the camouflage.
+Cost: an operator who wants plain VLESS+TLS+Vision cannot express it. Reversing this is a one-line
+change in `RealityRules.validateFlow` plus a SPEC edit — it is a scope decision, not a bug.
+
+## D-76 — REALITY and `finalmask.fragment` cannot coexist
+**Date:** 2026-10-31 · **Source:** M3, SPEC TLS-5
+Fragmenting the ClientHello defeats the camouflage REALITY depends on (the handshake must reach the
+server byte-intact to be indistinguishable from the decoy site). Two enforcement points:
+1. a bundle declaring `security: reality` **and** a `finalmask.tcp` entry of type `fragment` fails to
+   load with `reality cannot be combined with finalmask fragment`;
+2. the renderer refuses to add a fragment to a REALITY profile even when the UI setting is on, and
+   the service logs `fragment suppressed: it would break REALITY`.
+The second point is a suppression rather than a failure because the UI toggle is global and the
+profile is per-bundle: failing the connection would punish the user for a setting that is correct for
+their other profiles.
+
+## D-77 — M2 tests were updated because M3 tightened the schema
+**Date:** 2026-10-31 · **Source:** M3, SPEC TLS-3
+Three cases in `TlsProfileValidationTest` used a REALITY block containing only `serverName`. Once M3
+required `publicKey` and `shortId`, those fixtures were invalid, so they now carry a complete block and
+the assertions still test exactly what they tested before (the fingerprint rule). No assertion was
+removed or relaxed; the fixtures became valid inputs for a stricter schema.

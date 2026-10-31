@@ -55,7 +55,9 @@ object XrayConfig {
      * handshake against a known pattern.
      */
     private fun applyTuning(outbound: JSONObject, tuning: TransportTuning) {
-        if (tuning.fragment) {
+        // REALITY's camouflage depends on the ClientHello arriving intact; fragmenting it defeats
+        // the transport it is meant to protect (SPEC TLS-5).
+        if (tuning.fragment && !RealityRules.fragmentBreaksReality(RealityRules.securityOf(outbound))) {
             val fragment = JSONObject()
                 .put("packets", tuning.fragmentPackets)
                 .put("lengths", JSONArray(tuning.fragmentLengths))
@@ -113,6 +115,19 @@ object XrayConfig {
         }
     }
 
+    /**
+     * SPEC TLS-4. `flow` belongs on every VLESS user object in the outbound, not on the stream:
+     * the core reads it per account.
+     */
+    private fun applyFlow(outbound: JSONObject, profile: Profile) {
+        val flow = profile.flow ?: return
+        val vnext = outbound.optJSONObject("settings")?.optJSONArray("vnext") ?: return
+        for (i in 0 until vnext.length()) {
+            val users = vnext.optJSONObject(i)?.optJSONArray("users") ?: continue
+            for (j in 0 until users.length()) users.optJSONObject(j)?.put("flow", flow)
+        }
+    }
+
     private fun applySockopt(outbound: JSONObject, mtu: Int) {
         val stream = outbound.optJSONObject("streamSettings")
             ?: JSONObject().also { outbound.put("streamSettings", it) }
@@ -138,6 +153,7 @@ object XrayConfig {
         val outbound = JSONObject(profile.xray.toString()).apply { put("tag", "proxy") }
         applyTuning(outbound, tuning)
         applyFingerprint(outbound, profile)
+        applyFlow(outbound, profile)
         applySockopt(outbound, mtu)
 
         val sniffOverride = JSONArray().put("http").put("tls")

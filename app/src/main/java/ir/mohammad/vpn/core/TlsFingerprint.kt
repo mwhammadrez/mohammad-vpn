@@ -11,13 +11,19 @@ import org.json.JSONObject
  * (`transport/internet/tls/tls.go`, commit 0afec66085a85191e9dd2a4a6646c7c9a94688d1):
  * `PresetFingerprints` + `ModernFingerprints` + `OtherFingerprints`.
  *
- * `unsafe` is excluded on purpose. It is a key of `PresetFingerprints` with a nil value that `init()`
- * never assigns, so `GetFingerprint("unsafe")` returns nil and the core fails the connection. Accepting
- * it here would only move that failure later.
+ * Two names are excluded on purpose:
+ *
+ *  - `unsafe` is a key of `PresetFingerprints` with a nil value that `init()` never assigns, so
+ *    `GetFingerprint("unsafe")` returns nil and the core fails the connection;
+ *  - `hellogolang` resolves in the map but the config layer rejects it explicitly
+ *    (`infra/conf/transport_security.go`: `Fingerprint == "unsafe" || == "hellogolang"` → error).
+ *
+ * Accepting either here would only move a guaranteed failure later, where it looks like a network
+ * problem instead of a configuration one.
  */
 object TlsFingerprint {
 
-    /** Every name the pinned core accepts. 62 entries. */
+    /** Every name the pinned core accepts in a config file. 61 entries. */
     val VALID: Set<String> = setOf(
         "360", "android", "chrome", "edge", "firefox", "hello360_11_0", "hello360_7_5",
         "hello360_auto", "helloandroid_11_okhttp", "hellochrome_100", "hellochrome_100_psk",
@@ -28,7 +34,7 @@ object TlsFingerprint {
         "hellochrome_87", "hellochrome_96", "hellochrome_auto", "helloedge_106", "helloedge_85",
         "helloedge_auto", "hellofirefox_102", "hellofirefox_105", "hellofirefox_120",
         "hellofirefox_148", "hellofirefox_55", "hellofirefox_56", "hellofirefox_63",
-        "hellofirefox_65", "hellofirefox_99", "hellofirefox_auto", "hellogolang", "helloios_11_1",
+        "hellofirefox_65", "hellofirefox_99", "hellofirefox_auto", "helloios_11_1",
         "helloios_12_1", "helloios_13", "helloios_14", "helloios_auto", "helloqq_11_1",
         "helloqq_auto", "hellorandomized", "hellorandomizedalpn", "hellorandomizednoalpn",
         "hellosafari_16_0", "hellosafari_26_3", "hellosafari_auto", "ios", "qq", "random",

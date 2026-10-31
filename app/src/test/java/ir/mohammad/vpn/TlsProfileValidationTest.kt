@@ -53,7 +53,10 @@ class TlsProfileValidationTest {
     @Test
     fun `reality without a fingerprint is rejected`() {
         val failure = runCatching {
-            parse("""{"network":"tcp","security":"reality","realitySettings":{"serverName":"a.example"}}""")
+            parse(
+                """{"network":"tcp","security":"reality","realitySettings":
+                   {"serverName":"a.example","publicKey":"Q2H2h5jZW54Zg-MNKwBn8NOPEcZFMC2t2sAs_3vjKlg","shortId":"ee3e25522b558543"}}""",
+            )
         }.exceptionOrNull()
         assertTrue("expected BundleException, got $failure", failure is BundleException)
         assertTrue(failure?.message!!.contains("fingerprint"))
@@ -72,8 +75,8 @@ class TlsProfileValidationTest {
     fun `a known fingerprint is accepted for tls and reality`() {
         parse("""{"network":"tcp","security":"tls","tlsSettings":{"fingerprint":"chrome"}}""")
         parse(
-            """{"network":"tcp","security":"reality",
-               "realitySettings":{"serverName":"a.example","fingerprint":"firefox"}}""",
+            """{"network":"tcp","security":"reality","realitySettings":
+               {"serverName":"a.example","publicKey":"Q2H2h5jZW54Zg-MNKwBn8NOPEcZFMC2t2sAs_3vjKlg","shortId":"ee3e25522b558543","fingerprint":"firefox"}}""",
         )
     }
 
@@ -146,7 +149,9 @@ class TlsProfileValidationTest {
                "fingerprint":"firefox",
                "xray":{"protocol":"vless","settings":{},
                  "streamSettings":{"network":"tcp","security":"reality",
-                   "realitySettings":{"serverName":"a.example"}}}}
+                   "realitySettings":{"serverName":"a.example",
+                     "publicKey":"Q2H2h5jZW54Zg-MNKwBn8NOPEcZFMC2t2sAs_3vjKlg",
+                     "shortId":"ee3e25522b558543"}}}}
             ]}
         """.trimIndent()
         val profile = OperatorBundleLoader.parse(json).profiles.single()

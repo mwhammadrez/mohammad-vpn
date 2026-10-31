@@ -1,7 +1,7 @@
 # PROGRESS.md — Mohammad (`ir.mohammad.vpn`)
 
 **Last updated:** 2026-10-31 (UTC)
-**Current phase:** M2 complete → M3 not started
+**Current phase:** M3 complete → M4 not started
 **Current release:** 0.11.2 (versionCode 29)
 
 > **Correction notice (2026-10-31).** This file was frozen at Phase 1 ("no application code exists
@@ -19,7 +19,7 @@
 | M0 | Harness correction | ✅ done | green | gates + AC→test mapping + `BundleLoadTest` fixture |
 | M1 | MTU / MSS / `sockopt` | ✅ done | green | config verified; device behaviour NOT VERIFIED |
 | M2 | uTLS fingerprint | ✅ done | green | allow-list from the pinned core |
-| M3 | REALITY + Vision | ⬜ not started | — | ships together with M4 |
+| M3 | REALITY + Vision | ✅ done | green | ships together with M4 (D-49) |
 | M4 | State machine + path policy | ⬜ not started | — | largest milestone |
 | M5 | Pre-flight netcheck | ⬜ not started | — | measurement, not guesswork |
 | M6 | Second path (WS+TLS via CDN) | ⬜ not started | — | resilience to IP death |
@@ -43,7 +43,7 @@ SDK 36, NDK 28.2.13676358, Go 1.27.3, 3 GiB RAM, **no device, no `/dev/kvm`**.
 |---|---|---:|---|
 | Version | `./gradlew --version` | 0 | Gradle 8.14.6, JVM 17.0.21, Kotlin 2.0.21 |
 | Clean build | `./gradlew clean :app:assembleDebug` | 0 | `app-debug.apk` **14.3 MB** (limit 20) |
-| Unit | `./gradlew :app:testDebugUnitTest` | 0 | **138 tests, 138 passed, 0 skipped** (after M2) |
+| Unit | `./gradlew :app:testDebugUnitTest` | 0 | **159 tests, 159 passed, 0 skipped** (after M3) |
 | Lint | `./gradlew :app:lintDebug` | 0 | **0 errors, 15 warnings** |
 | Placeholder | `./scripts/check-no-placeholders` | 0 | `No banned markers found` |
 | APK size | `./scripts/apk-size-check` | 0 | 14.3 MB, within 20 MB |
@@ -108,6 +108,20 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
   must exist in sources or be planned. It caught two AC rows with shorthand instead of a command.
 - Gate: **100/100 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
 
+### 2026-10-31 · M3 — REALITY + XTLS Vision (0.14.0)
+- `core/RealityRules`: field rules taken from the pinned core's config layer — hostname-shaped
+  `serverName`, base64url-unpadded 32-byte `publicKey`, hex `shortId` ≤ 16 chars (empty allowed),
+  `spiderX` starting with `/`, and Vision as the only flow (D-74).
+- `validateReality` rejects a REALITY profile with a missing/invalid field, or combined with a
+  `finalmask` fragment (D-76); error messages never echo the key or the short id.
+- `Profile.flow` added; the renderer writes it onto every VLESS user and suppresses fragment for
+  REALITY, logging `fragment suppressed` instead of silently degrading (D-76).
+- Correction: `hellogolang` removed from the fingerprint allow-list — the core's config layer rejects
+  it, so 62 → 61 (D-73).
+- `docs/RELEASE_NOTES.md` states that 0.14.0 ships with the 0.15.0 fallback (D-49).
+- Gate: **159/159 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
+- **NOT VERIFIED:** whether REALITY survives any specific ISP; whether Vision improves throughput.
+
 ### 2026-10-31 · M2 — uTLS fingerprint (0.13.0)
 - `core/TlsFingerprint`: 62-name allow-list **parsed from the pinned Xray source**
   (`transport/internet/tls/tls.go`), not from documentation; `unsafe` excluded because the core never
@@ -145,10 +159,9 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
 
 ## Next action
 
-**M3 — REALITY + XTLS Vision (0.14.0).** Awaiting operator approval. Scope: TLS-1, TLS-3, TLS-4,
-TLS-5, CFG-3, AC-8, AC-10. Full `realitySettings` validation (`serverName`, `publicKey`, `shortId`),
-`xtls-rprx-vision` flow only with REALITY, and a hard rejection of REALITY + `finalmask.fragment`.
-Release note must state that M3 ships together with M4's fallback (D-49).
+**M4 — state machine + path policy (0.15.0).** Awaiting operator approval. Scope: ST-1…ST-9,
+HP-1…HP-6, PATH-1…PATH-8, OBS-1…OBS-3, UI-3, NFR-15. Ten states before any policy (D-50), ordered
+failover with jitter and hysteresis, per-path circuit breaker, ordered shutdown.
 
 ## Known blockers
 

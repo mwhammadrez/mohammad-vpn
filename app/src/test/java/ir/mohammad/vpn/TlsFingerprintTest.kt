@@ -17,8 +17,9 @@ class TlsFingerprintTest {
 
     @Test
     fun `the allow list matches the pinned core`() {
-        // 62 = 11 preset (12 minus unsafe) + 11 modern + 40 other, de-duplicated.
-        assertTrue("expected 62 names, got ${TlsFingerprint.VALID.size}", TlsFingerprint.VALID.size == 62)
+        // 61 = 11 preset (12 minus unsafe) + 11 modern + 40 other, minus hellogolang
+        // (accepted by the map, rejected by the config layer).
+        assertTrue("expected 61 names, got ${TlsFingerprint.VALID.size}", TlsFingerprint.VALID.size == 61)
     }
 
     @Test
@@ -40,11 +41,11 @@ class TlsFingerprintTest {
     }
 
     @Test
-    fun `core accepted but discouraged names are still formally valid`() {
-        // These resolve in the pinned core, so rejecting them would reject a bundle the core accepts.
-        assertTrue(TlsFingerprint.isValid("hellogolang"))
-        assertTrue(TlsFingerprint.isValid("hellofirefox_55"))
-        assertFalse("golang is valid but must not be recommended", TlsFingerprint.isRecommended("hellogolang"))
+    fun `names the config layer rejects are refused`() {
+        // hellogolang resolves in the map but `infra/conf/transport_security.go` rejects it outright.
+        assertFalse(TlsFingerprint.isValid("hellogolang"))
+        assertTrue("old versions are still valid", TlsFingerprint.isValid("hellofirefox_55"))
+        assertFalse("not a browser", TlsFingerprint.isRecommended("hellofirefox_55"))
     }
 
     @Test

@@ -17,6 +17,7 @@ import ir.mohammad.vpn.R
 import ir.mohammad.vpn.core.AwgConfig
 import ir.mohammad.vpn.core.GeoAssets
 import ir.mohammad.vpn.core.MtuPolicy
+import ir.mohammad.vpn.core.RealityRules
 import ir.mohammad.vpn.core.TransportTuning
 import ir.mohammad.vpn.core.TunPlan
 import ir.mohammad.vpn.core.XrayConfig
@@ -248,6 +249,14 @@ class MohammadVpnService : VpnService() {
 
     private fun startXray(profile: Profile, descriptor: ParcelFileDescriptor, plan: TunPlan): StartResult {
         val renderStart = SystemClock.elapsedRealtime()
+        val security = RealityRules.securityOf(profile.xray)
+        val tuningNow = currentTuning()
+        if (tuningNow.fragment && RealityRules.fragmentBreaksReality(security)) {
+            LogStore.add(
+                "W", TAG,
+                "fragment suppressed: it would break REALITY (security=$security)",
+            )
+        }
         val geoReady = GeoAssets.isReady(this)
         if (!geoReady) ensureGeoAssetsAsync()
         val config = try {
@@ -259,7 +268,7 @@ class MohammadVpnService : VpnService() {
                 ipv6 = plan.ipv6Address.isNotEmpty(),
                 geo = geoReady,
                 fakeDns = true,
-                tuning = currentTuning(),
+                tuning = tuningNow,
                 serverHosts = preResolve(profile),
             )
         } catch (t: Throwable) {
