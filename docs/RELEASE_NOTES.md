@@ -5,6 +5,25 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.14.3 — the app can start with the operator's configuration (M4-C)
+
+### Fixed
+- **The core refused the shipped profile.** Upstream Xray rejects unencrypted VLESS/Trojan outbounds to
+  public addresses. Every launch with the current bundle failed at config load. That guard is now a
+  warning: the profile starts, and the log console prints `unencrypted outbound` each time so the
+  trade-off is visible. Moving the server to REALITY remains the real fix.
+
+### Added
+- `dialMode: "oob.<b1>,<b2>,..."` per profile — appends a TCP urgent byte to the first writes so a
+  middlebox that mishandles the urgent pointer desynchronises on the handshake. Verified locally that
+  the peer receives the payload intact.
+- `cipherSuites` per profile, applied only when TLS is on.
+
+### Not verified
+- Whether `oob` defeats any specific ISP. It needs a device on an Iranian line.
+
+---
+
 ## 0.14.2 — tile reliability, live notification, working telemetry (M4-N)
 
 Three reported defects, fixed at the cause.

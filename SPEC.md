@@ -282,7 +282,17 @@ it is testable on the JVM without a device. Android types stay out of policy cod
 | FR-N13 | `docs/RESEARCH_TILE_NOTIFICATION_TELEMETRY.md` exists with at least 15 sourced findings. |
 | FR-N14 | When the counter source is unavailable the UI shows `—`, never a fabricated `0`. |
 
-### 5.15 AmneziaWG (AWG) — `NOT VERIFIED`
+### 5.15 Operator-config compatibility and transport patch (FR-O) — milestone M4-C
+
+| ID | Requirement |
+|---|---|
+| FR-O1 | The core accepts unencrypted VLESS/Trojan outbounds to public addresses, which upstream Xray refuses since #6303, because operator bundles still contain such profiles. |
+| FR-O2 | Acceptance is never silent: every connection using such an outbound logs `unencrypted outbound` at warning level, in the app's log console. |
+| FR-O3 | A profile may set `dialMode: "oob.<b1>,<b2>,..."`. The value is validated at bundle load (0–255 per byte) and rendered into `sockopt.dialMode`. |
+| FR-O4 | A profile may set `cipherSuites`; it is rendered into `tlsSettings.cipherSuites` only when `security: tls`, and never invented for REALITY. |
+| FR-O5 | The core patches live in `core-go/patches/`, are applied in order by `scripts/build-core.sh`, and never change the pinned upstream commit (D-96). |
+
+### 5.16 AmneziaWG (AWG) — `NOT VERIFIED`
 
 | ID | Requirement |
 |---|---|
@@ -497,6 +507,10 @@ Every AC names a test class that exists today or is created by the milestone in 
 | AC-35 | placeholder ban | static | `./scripts/check-no-placeholders` | exit 0, no skipped tests | every |
 | AC-36 | build | build | `./gradlew clean :app:assembleDebug` | exit 0 | every |
 | AC-37 | AWG-4 | docs | `grep -R "AmneziaWG.*NOT VERIFIED" README.md docs` | match found | every |
+| AC-O1 | FR-O1, FR-O2 | native | `scripts/build-core.sh` then run the core against a plaintext config | starts, logs `unencrypted outbound` | M4-C |
+| AC-O2 | FR-O3 | unit | `--tests "*DialModeConfigTest"` | `oob.*` rendered; malformed rejected at load | M4-C |
+| AC-O3 | FR-O4 | unit | `--tests "*DialModeConfigTest"` | cipherSuites only under tls | M4-C |
+| AC-O4 | FR-O5 | static | `ls core-go/patches/*.patch` + `scripts/build-core.sh` | both patches apply cleanly, AAR rebuilds | M4-C |
 | AC-N1 | FR-N1 | unit | `--tests "*TileStateSyncTest"` | one push per distinct state; listen always pushes | M4-N |
 | AC-N2 | FR-N2 | integration | `--tests "*TileInteractionTest"` | tile toggles through the shared controller | M4-N |
 | AC-N3 | FR-N3 | Robolectric | `--tests "*SurfaceColdStartTest"` | cold process: tile inactive from persisted profile | M4-N |

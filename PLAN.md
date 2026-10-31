@@ -18,6 +18,7 @@ diagnostics, and M7 exists to deliver M1–M6 to installed users without a relea
 | M3 | REALITY + Vision | #4 | 0.14.0 | survives protocol filtering | **yes** (survival) |
 | M4-W | Widget + quick-settings tile | — | 0.14.1 | connect from the home screen | **yes** (launcher) |
 | M4-N | Tile reliability, notification, telemetry | — | 0.14.2 | live notification, working counters | **yes** (shade) |
+| M4-C | Config compatibility + `oob` dialMode | — | 0.14.3 | the current bundle can actually start | **yes** (DPI) |
 | M4 | State machine + path policy | #5, #6, #7 | 0.15.0 | multi-path, honest states | no |
 | M5 | Pre-flight netcheck | #8 | 0.16.0 | fewer wrong assumptions | **yes** (measurement) |
 | M6 | Second path (WS+TLS via CDN) | #10 | 0.17.0 | works when the IP dies | **yes** (survival) |
@@ -151,6 +152,33 @@ M4's fallback — the release note must say so.
 **Rollback:** revert; v1 bundles and `security:none` still work.
 
 ---
+
+## M4-C — Operator-config compatibility and `oob` (0.14.3)
+
+**Goal.** Make the cores accept the configuration the operator actually ships, and give the client one
+transport trick worth having.
+
+**Trigger.** Running the pinned core against the shipped profile shape proved it never starts:
+
+```
+infra/conf: vless without TLS or other encryption is prohibited unless the server address is a private IP or domain
+```
+
+Upstream added that guard in #6303; the operator's bundle is exactly the rejected shape.
+
+**Covers:** FR-O1 … FR-O5, AC-O1 … AC-O4. Audit: `docs/AUDIT_PATTNG.md`.
+
+**Tasks**
+1. `core-go/patches/0001-allow-unencrypted-outbound.patch` — downgrade the guard to a warning.
+2. `core-go/patches/0002-oob-dialmode.patch` — `sockopt.dialMode` with `oob.<bytes>`.
+3. `scripts/build-core.sh` — clone at the pin, apply patches idempotently, `gomobile bind`, strip, copy.
+4. Kotlin: `Profile.dialMode` + `Profile.cipherSuites`, `DialModeRules` validation, renderer support.
+
+**Verification that is real:** `oob.0` was proven end to end on this host by running the patched CLI
+core against a local listener: the listener received exactly the 5 bytes sent, proving the urgent byte
+is stripped and the stream is intact.
+
+**Not verified:** that `oob` defeats any specific ISP; all of that is device work.
 
 ## M4-N — Tile reliability, notification and telemetry (0.14.2)
 

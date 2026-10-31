@@ -1,0 +1,250 @@
+diff --git a/infra/conf/transport_sockopt.go b/infra/conf/transport_sockopt.go
+index 454128c..8370fa6 100644
+--- a/infra/conf/transport_sockopt.go
++++ b/infra/conf/transport_sockopt.go
+@@ -63,6 +63,7 @@ type SocketConfig struct {
+ 	AddressPortStrategy   string                 `json:"addressPortStrategy"`
+ 	HappyEyeballsSettings *HappyEyeballsConfig   `json:"happyEyeballs"`
+ 	TrustedXForwardedFor  []string               `json:"trustedXForwardedFor"`
++	DialMode              string                 `json:"dialMode"`
+ }
+ 
+ // Build implements Buildable.
+@@ -183,5 +184,6 @@ func (c *SocketConfig) Build() (*internet.SocketConfig, error) {
+ 		AddressPortStrategy:  addressPortStrategy,
+ 		HappyEyeballs:        happyEyeballs,
+ 		TrustedXForwardedFor: c.TrustedXForwardedFor,
++		DialMode:             c.DialMode,
+ 	}, nil
+ }
+diff --git a/transport/internet/config.pb.go b/transport/internet/config.pb.go
+index 58f7489..28903d9 100644
+--- a/transport/internet/config.pb.go
++++ b/transport/internet/config.pb.go
+@@ -659,6 +659,7 @@ type SocketConfig struct {
+ 	AddressPortStrategy        AddressPortStrategy  `protobuf:"varint,21,opt,name=address_port_strategy,json=addressPortStrategy,proto3,enum=xray.transport.internet.AddressPortStrategy" json:"address_port_strategy,omitempty"`
+ 	HappyEyeballs              *HappyEyeballsConfig `protobuf:"bytes,22,opt,name=happy_eyeballs,json=happyEyeballs,proto3" json:"happy_eyeballs,omitempty"`
+ 	TrustedXForwardedFor       []string             `protobuf:"bytes,23,rep,name=trusted_x_forwarded_for,json=trustedXForwardedFor,proto3" json:"trusted_x_forwarded_for,omitempty"`
++	DialMode                   string               `protobuf:"bytes,40,opt,name=dial_mode,json=dialMode,proto3" json:"dial_mode,omitempty"`
+ 	unknownFields              protoimpl.UnknownFields
+ 	sizeCache                  protoimpl.SizeCache
+ }
+@@ -1096,3 +1097,10 @@ func file_transport_internet_config_proto_init() {
+ 	file_transport_internet_config_proto_goTypes = nil
+ 	file_transport_internet_config_proto_depIdxs = nil
+ }
++
++func (x *SocketConfig) GetDialMode() string {
++	if x != nil {
++		return x.DialMode
++	}
++	return ""
++}
+diff --git a/transport/internet/dialmode.go b/transport/internet/dialmode.go
+new file mode 100644
+index 0000000..ead159b
+--- /dev/null
++++ b/transport/internet/dialmode.go
+@@ -0,0 +1,36 @@
++package internet
++
++import (
++	"strconv"
++	"strings"
++)
++
++// DialModeOOBPrefix marks the "oob.<b1>,<b2>,..." dial mode family.
++//
++// Each listed byte is appended to one of the first writes on the dialed TCP connection and that
++// write is sent with the TCP urgent (MSG_OOB) flag; later writes pass through untouched. A
++// conforming peer's kernel removes the urgent byte from the stream, so the application sees the
++// original bytes, while a middlebox that mishandles the urgent pointer desynchronises on those
++// segments — usually on the TLS ClientHello.
++const DialModeOOBPrefix = "oob."
++
++// ParseOOBMode returns the byte list for an "oob." mode, and false when the syntax is invalid.
++func ParseOOBMode(mode string) ([]byte, bool) {
++	if !strings.HasPrefix(mode, DialModeOOBPrefix) {
++		return nil, false
++	}
++	list := mode[len(DialModeOOBPrefix):]
++	if list == "" {
++		return nil, false
++	}
++	parts := strings.Split(list, ",")
++	out := make([]byte, 0, len(parts))
++	for _, part := range parts {
++		n, err := strconv.Atoi(strings.TrimSpace(part))
++		if err != nil || n < 0 || n > 255 {
++			return nil, false
++		}
++		out = append(out, byte(n))
++	}
++	return out, true
++}
+diff --git a/transport/internet/dialmode_oob.go b/transport/internet/dialmode_oob.go
+new file mode 100644
+index 0000000..bab0a3a
+--- /dev/null
++++ b/transport/internet/dialmode_oob.go
+@@ -0,0 +1,59 @@
++//go:build unix || windows
++
++package internet
++
++import (
++	"syscall"
++
++	"github.com/xtls/xray-core/common/net"
++)
++
++// oobConn appends one byte per leading write and sends that write as TCP urgent data.
++type oobConn struct {
++	net.Conn
++	bytes []byte
++	used  int
++}
++
++func wrapOOB(conn net.Conn, bytes []byte) net.Conn {
++	return &oobConn{Conn: conn, bytes: bytes}
++}
++
++func (c *oobConn) Write(p []byte) (int, error) {
++	if c.used >= len(c.bytes) {
++		return c.Conn.Write(p)
++	}
++	urgent := c.bytes[c.used]
++	c.used++
++
++	sc, ok := c.Conn.(syscall.Conn)
++	if !ok {
++		return c.Conn.Write(p)
++	}
++	raw, err := sc.SyscallConn()
++	if err != nil {
++		return c.Conn.Write(p)
++	}
++
++	buf := make([]byte, len(p)+1)
++	copy(buf, p)
++	buf[len(p)] = urgent
++
++	var sendErr error
++	ctrlErr := raw.Write(func(fd uintptr) bool {
++		_, e := sendUrgent(fd, buf)
++		if e == syscall.EAGAIN || e == syscall.EWOULDBLOCK {
++			return false
++		}
++		sendErr = e
++		return true
++	})
++	if ctrlErr != nil {
++		return 0, ctrlErr
++	}
++	if sendErr != nil {
++		return 0, sendErr
++	}
++	// The urgent byte is not part of p: report only what the caller asked for.
++	return len(p), nil
++}
+diff --git a/transport/internet/dialmode_oob_other.go b/transport/internet/dialmode_oob_other.go
+new file mode 100644
+index 0000000..27180a4
+--- /dev/null
++++ b/transport/internet/dialmode_oob_other.go
+@@ -0,0 +1,8 @@
++//go:build !unix && !windows
++
++package internet
++
++import "github.com/xtls/xray-core/common/net"
++
++// Platforms without urgent-data send keep "oob." as a legal but inert mode.
++func wrapOOB(conn net.Conn, _ []byte) net.Conn { return conn }
+diff --git a/transport/internet/dialmode_oob_unix.go b/transport/internet/dialmode_oob_unix.go
+new file mode 100644
+index 0000000..eaa20ae
+--- /dev/null
++++ b/transport/internet/dialmode_oob_unix.go
+@@ -0,0 +1,13 @@
++//go:build unix
++
++package internet
++
++import "golang.org/x/sys/unix"
++
++// sendUrgent sends b with the TCP urgent flag; the last byte becomes the urgent byte.
++func sendUrgent(fd uintptr, b []byte) (int, error) {
++	if err := unix.Send(int(fd), b, unix.MSG_OOB); err != nil {
++		return 0, err
++	}
++	return len(b), nil
++}
+diff --git a/transport/internet/dialmode_oob_windows.go b/transport/internet/dialmode_oob_windows.go
+new file mode 100644
+index 0000000..895a7ed
+--- /dev/null
++++ b/transport/internet/dialmode_oob_windows.go
+@@ -0,0 +1,15 @@
++//go:build windows
++
++package internet
++
++import "golang.org/x/sys/windows"
++
++func sendUrgent(fd uintptr, b []byte) (int, error) {
++	if len(b) == 0 {
++		return 0, nil
++	}
++	buf := windows.WSABuf{Len: uint32(len(b)), Buf: &b[0]}
++	var sent uint32
++	err := windows.WSASend(windows.Handle(fd), &buf, 1, &sent, windows.MSG_OOB, nil, nil)
++	return int(sent), err
++}
+diff --git a/transport/internet/system_dialer.go b/transport/internet/system_dialer.go
+index f881a20..eae18bc 100644
+--- a/transport/internet/system_dialer.go
++++ b/transport/internet/system_dialer.go
+@@ -1,6 +1,7 @@
+ package internet
+ 
+ import (
++	"strings"
+ 	"context"
+ 	go_errors "errors"
+ 	"runtime"
+@@ -51,6 +52,18 @@ func resolveSrcAddr(network net.Network, src net.Address) net.Addr {
+ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest net.Destination, sockopt *SocketConfig) (net.Conn, error) {
+ 	errors.LogDebug(ctx, "dialing to "+dest.String())
+ 
++	// Mohammad patch: "oob.<b1>,<b2>,..." appends one urgent byte to each of the first writes.
++	var oobBytes []byte
++	if sockopt != nil {
++		if mode := sockopt.GetDialMode(); strings.HasPrefix(mode, DialModeOOBPrefix) {
++			parsed, ok := ParseOOBMode(mode)
++			if !ok {
++				return nil, errors.New("invalid dialMode: ", mode)
++			}
++			oobBytes = parsed
++		}
++	}
++
+ 	if dest.Network == net.Network_UDP {
+ 		destAddr, err := net.ResolveUDPAddr("udp", dest.NetAddr())
+ 		if err != nil {
+@@ -168,7 +181,14 @@ func (d *DefaultSystemDialer) Dial(ctx context.Context, src net.Address, dest ne
+ 		}
+ 	}
+ 
+-	return dialer.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
++	conn, err := dialer.DialContext(ctx, dest.Network.SystemString(), dest.NetAddr())
++	if err != nil {
++		return nil, err
++	}
++	if len(oobBytes) > 0 && dest.Network == net.Network_TCP {
++		conn = wrapOOB(conn, oobBytes)
++	}
++	return conn, nil
+ }
+ 
+ func (d *DefaultSystemDialer) DestIpAddress() net.IP {

@@ -730,3 +730,45 @@ notification show `—` for the former. A failed counter read sets it; a success
 `B` unit label, the matcher found three nodes and the test failed — correctly, because the query became
 ambiguous. The fixture is now `"Beta"`; the assertion (the selected profile id) is unchanged. Logged
 because test edits require a record, even cosmetic ones.
+
+## D-96 — The core is patched, not swapped
+**Date:** 2026-10-31 · **Source:** `docs/AUDIT_PATTNG.md`; M4-C
+Two patches in `core-go/patches/` are applied to the **pinned** Xray commit by
+`scripts/build-core.sh`. The pin in D-08 does not change; the patches are small, ordered, and applied
+idempotently (the script detects an already-applied patch and continues).
+Why not a fork: a fork is a second repository to keep in sync and a second place for the pin to drift.
+A patch over a known commit is auditable in one file and fails loudly when the pin moves.
+Cost: `./gradlew assembleDebug` alone no longer reflects the core; a core change means running
+`scripts/build-core.sh` first. That is recorded in the build section of `docs/HANDBOOK.txt`.
+
+## D-97 — Unencrypted outbounds are allowed, and loudly logged
+**Date:** 2026-10-31 · **Source:** local run of the pinned core; SPEC FR-O1/FR-O2
+The pinned Xray refuses to build an unencrypted VLESS/Trojan outbound to a public address (#6303), and
+the operator's bundle is exactly that shape. Verified locally:
+`Failed to start: … vless without TLS or other encryption is prohibited unless the server address is a
+private IP or domain`. In other words the shipped app could not start its core with the shipped
+configuration.
+`0001-allow-unencrypted-outbound.patch` downgrades the error to a warning instead of deleting the check
+(PattNG comments it out entirely). Consequence: the profile works, and the log console says
+`unencrypted outbound` on every connection, so the downgrade is visible instead of silent.
+This is a compatibility fix, not an endorsement: the proper fix is still moving the server to
+REALITY (OP-3), and the warning is the reminder.
+
+## D-98 — `oob` is ported as a technique, not as code
+**Date:** 2026-10-31 · **Source:** `docs/AUDIT_PATTNG.md` §2.2
+Their implementation is GPL-3.0 inside a GPL-3.0 app; ours is independently written against the same
+idea (append a byte, send with MSG_OOB) and lives in `0002-oob-dialmode.patch`. Two deliberate
+differences: the mode is validated at bundle load (a typo fails the bundle, not the connection), and the
+write returns `len(p)` rather than a byte count that includes the urgent byte, so callers see an
+unchanged stream contract.
+Proof on this host: with `dialMode: "oob.0"` and a local listener, the listener received exactly
+`HELLO` — the urgent byte was stripped by the kernel and the payload was intact. That is the mechanism
+working, not evidence that it defeats a given ISP.
+Cost: this is the first time the project carries a core patch; `MTU`, `REALITY` and path policy remain
+untouched by it.
+
+## D-99 — `cipherSuites` is rendered only for TLS
+**Date:** 2026-10-31 · **Source:** M4-C
+The field is a TLS-level setting. Under REALITY the handshake borrows the decoy site's suites, so
+emitting a private list there would describe something that does not happen. The renderer writes it for
+`security: tls` and ignores it otherwise.

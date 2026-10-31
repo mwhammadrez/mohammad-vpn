@@ -98,6 +98,24 @@ object XrayConfig {
      *
      * Every field is merged, never overwritten: an explicit operator value wins.
      */
+    /** Applies the profile's `dialMode` to the outbound's sockopt, if it has one. */
+    private fun outboundDialMode(sockopt: JSONObject, mode: String?) {
+        if (mode.isNullOrBlank()) return
+        if (!sockopt.has("dialMode")) sockopt.put("dialMode", mode)
+    }
+
+    /**
+     * `cipherSuites` is a TLS-level field. It is only meaningful with `security: tls`; a REALITY
+     * handshake borrows the decoy site's suites, so writing it there would be a lie.
+     */
+    private fun applyCipherSuites(outbound: JSONObject, profile: Profile) {
+        val suites = profile.cipherSuites ?: return
+        val stream = outbound.optJSONObject("streamSettings") ?: return
+        if (stream.optString("security", "none").lowercase() != "tls") return
+        val tls = stream.optJSONObject("tlsSettings") ?: JSONObject().also { stream.put("tlsSettings", it) }
+        if (!tls.has("cipherSuites")) tls.put("cipherSuites", suites)
+    }
+
     /**
      * SPEC TLS-2. A profile-level fingerprint wins over whatever the settings block carries, so the
      * operator can change it in one place without editing the transport JSON.
@@ -128,11 +146,12 @@ object XrayConfig {
         }
     }
 
-    private fun applySockopt(outbound: JSONObject, mtu: Int) {
+    private fun applySockopt(outbound: JSONObject, mtu: Int, profile: Profile) {
         val stream = outbound.optJSONObject("streamSettings")
             ?: JSONObject().also { outbound.put("streamSettings", it) }
         val sockopt = stream.optJSONObject("sockopt")
             ?: JSONObject().also { stream.put("sockopt", it) }
+        outboundDialMode(sockopt, profile.dialMode)
         if (!sockopt.has("tcpMaxSeg")) sockopt.put("tcpMaxSeg", MtuPolicy.segmentSize(mtu))
         if (!sockopt.has("tcpUserTimeout")) sockopt.put("tcpUserTimeout", TCP_USER_TIMEOUT_MS)
         if (!sockopt.has("tcpKeepAliveIdle")) sockopt.put("tcpKeepAliveIdle", KEEPALIVE_IDLE_S)
@@ -154,7 +173,8 @@ object XrayConfig {
         applyTuning(outbound, tuning)
         applyFingerprint(outbound, profile)
         applyFlow(outbound, profile)
-        applySockopt(outbound, mtu)
+        applyCipherSuites(outbound, profile)
+        applySockopt(outbound, mtu, profile)
 
         val sniffOverride = JSONArray().put("http").put("tls")
         if (fakeDns) sniffOverride.put("fakedns")

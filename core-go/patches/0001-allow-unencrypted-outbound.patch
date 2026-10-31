@@ -1,0 +1,16 @@
+--- a/infra/conf/xray.go	2026-10-31 05:35:36.915710417 -0400
++++ b/infra/conf/xray.go	2026-10-31 12:15:59.432742244 -0400
+@@ -399,8 +399,12 @@
+ 	if err := validateXDrive(ts, senderSettings.StreamSettings, senderSettings.MultiplexSettings, nil); err != nil {
+ 		return nil, err
+ 	}
++	// Mohammad patch: upstream rejects unencrypted VLESS/Trojan outbounds to public addresses
++	// (#6303). Operator-supplied bundles still contain such profiles, and the client cannot be
++	// useful if the core refuses to build them. Downgrade the error to a warning: the flow is
++	// allowed, but the log says exactly what it is, instead of failing silently or passing quietly.
+ 	if err := validateOutboundTransportSecurity(rawConfig, senderSettings); err != nil {
+-		return nil, err
++		errors.LogWarning(context.Background(), err.Error()+"; allowed by this build (unencrypted outbound)")
+ 	}
+ 
+ 	if _, ok := ts.(*masque.ClientConfig); !ok && senderSettings.StreamSettings != nil && senderSettings.StreamSettings.ProtocolName == "masque" {

@@ -3,6 +3,7 @@ package ir.mohammad.vpn.data
 import android.content.Context
 import ir.mohammad.vpn.BuildConfig
 import ir.mohammad.vpn.core.MtuPolicy
+import ir.mohammad.vpn.core.DialModeRules
 import ir.mohammad.vpn.core.RealityRules
 import ir.mohammad.vpn.core.TlsFingerprint
 import org.json.JSONObject
@@ -34,6 +35,10 @@ data class Profile(
     val fingerprint: String? = null,
     /** XTLS flow; only `xtls-rprx-vision`, and only with REALITY. SPEC TLS-4. */
     val flow: String? = null,
+    /** "oob.<b1>,<b2>,..." — TCP urgent-byte desync for the first writes. See DialModeRules. */
+    val dialMode: String? = null,
+    /** TLS cipher-suite list, colon separated; passed straight to the core's TLS settings. */
+    val cipherSuites: String? = null,
 )
 
 /** Decrypted operator bundle plus its defaults. */
@@ -178,6 +183,9 @@ object OperatorBundleLoader {
 
             val profileFingerprint = o.optString("fingerprint").takeIf { it.isNotBlank() }
             val profileFlow = o.optString("flow").takeIf { it.isNotBlank() }
+            val profileDialMode = o.optString("dialMode").takeIf { it.isNotBlank() }
+            DialModeRules.validate(profileDialMode)?.let { throw BundleException("profile dialMode: $it") }
+            val profileCipherSuites = o.optString("cipherSuites").takeIf { it.isNotBlank() }
 
             val xray = o.optJSONObject("xray")
             val awg = o.optJSONObject("awg")
@@ -188,7 +196,12 @@ object OperatorBundleLoader {
             }
             if (core == "AMNEZIAWG" && awg == null) throw BundleException("awg settings missing")
 
-            result.add(Profile(id, name, protocol, core, host, port, xray, awg, profileMtu, profileFingerprint, profileFlow))
+            result.add(
+                Profile(
+                    id, name, protocol, core, host, port, xray, awg, profileMtu,
+                    profileFingerprint, profileFlow, profileDialMode, profileCipherSuites,
+                ),
+            )
         }
 
         val defaultId = root.optString("defaultProfileId").takeIf { it.isNotBlank() }
