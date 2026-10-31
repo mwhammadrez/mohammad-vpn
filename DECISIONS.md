@@ -278,3 +278,149 @@ Fixes:
   never torn down by probe noise.
 
 `DataPathPolicy` holds the rule as a pure function and is unit-tested.
+
+---
+
+## D-43 — The research catalog is the roadmap, not a reading list
+**Date:** 2026-10-31 · **Source:** operator approval of Phase 0.5
+`docs/RESEARCH_CATALOG.md` (146 entries) and its 15-item shortlist are normative for milestone order.
+Every milestone in `PLAN.md` must cite the catalog entries it implements. A technique that is not in
+the shortlist needs a new decision, not a quiet addition.
+
+## D-44 — Persian UI and RTL are out of scope
+**Date:** 2026-10-31 · **Source:** operator instruction, Phase 1
+The UI stays English. FR-52, NFR-26, NFR-40 and AC-31 are withdrawn; `strings.xml` extraction stays
+required (NFR-2/UI-2) because it is a code-quality rule, not a localization one.
+Rationale: localization improves no measured quality dimension, and the four priorities are
+connection quality, stability, censorship resistance and operability. Reverting this decision is a
+scope change, not a bug fix.
+
+## D-45 — MTU default returns to 1400 (supersedes D-32)
+**Date:** 2026-10-31 · **Source:** catalog 103–105, 114; open bug report
+D-32 raised the MTU to 1500 for parity with a reference client. It was never device-verified on the
+current architecture, and the reported symptom ("works a few seconds, then cuts") is the textbook
+signature of a PMTU black hole. 1400 is the conservative value that the earlier architecture measured.
+Resolution order is profile → bundle → 1400, and the source is logged on every connect.
+Revert path: `defaultMtu` in the bundle, or a profile-level `mtu`.
+**Status:** the fix is `NOT VERIFIED` until a device captures a large transfer at both MTUs.
+
+## D-46 — MSS is clamped in the renderer, not in the kernel
+**Date:** 2026-10-31 · **Source:** catalog 105, 115
+The app cannot touch `iptables`. Xray's `sockopt.tcpMaxSeg` is the supported equivalent for the
+outbound leg, so the renderer sets `tcpMaxSeg = min(mtu − 40, 1440)`. This is the MSS clamp expressed
+in the only layer we own.
+Consequence: the clamp covers Xray→server. The gVisor→SOCKS leg is governed by the TUN MTU (D-45).
+
+## D-47 — `tcpUserTimeout` is mandatory
+**Date:** 2026-10-31 · **Source:** catalog 106
+Without it, a silently dead path looks alive to the OS for up to ~15 minutes, which is exactly how a
+"stable" connection becomes a frozen screen. Default 30 s, bounded, rendered on every outbound.
+
+## D-48 — A uTLS fingerprint is required whenever TLS is on
+**Date:** 2026-10-31 · **Source:** catalog 65, 87
+Go's default ClientHello is a fingerprint no browser produces, and JA3/JA4 is the cheapest signal a
+DPI box can compute. `security ∈ {tls, reality}` without `fingerprint` is a validation error, not a
+silent default — a silent default is how we ended up shipping the loud one.
+The allow-list is derived from the pinned Xray build, never from documentation.
+
+## D-49 — REALITY may not ship without a fallback path
+**Date:** 2026-10-31 · **Source:** catalog 86, 49
+REALITY is the strongest client-side change available, and its IPs are graylisted in Iran at specific
+ISPs (MCI first). Shipping M3 without M4 would replace "one weak path" with "one strong path that
+dies". The M3 release note must state the dependency.
+
+## D-50 — Ten states before any path policy
+**Date:** 2026-10-31 · **Source:** the 0.7.0 lesson; SPEC ST-1…ST-9
+`DEGRADED`, `RECOVERING` and `BLOCKED_BY_POLICY` do not exist in the current five-state model, so
+FR-44/PATH-* cannot be expressed. Building policy on the old model would repeat 0.7.0: both ends
+built, middle unwired, every test green.
+
+## D-51 — Pin the native sources inside the repository
+**Date:** 2026-10-31 · **Source:** `REVIEW.md:336`, Phase 0 reproducibility finding
+`core-go/go.mod` replaces three modules with `/tmp/xray-src`, `/tmp/awg-src`, `/tmp/t2s`. A clean
+clone therefore cannot rebuild `libgojni.so`. Fix: `go mod vendor` (or module requirements pinned to
+the same commits) checked in, with the `replace` lines kept only as an optional local override.
+Owner: M0 or a dedicated chore commit. Until then the native build stays `NOT VERIFIED` outside this host.
+
+## D-52 — Path selection is ordered and deterministic; no racing
+**Date:** 2026-10-31 · **Source:** catalog 117, 118, 121, 122
+Operator priority + fallback list + hysteresis, exactly as `PathPolicy` in SPEC §8.3. Parallel racing
+(catalog 122) is rejected for v2.0: it multiplies probe traffic, drains battery, and looks like
+scanning to a DPI box — the opposite of what a whitelist-style filter rewards.
+Revisit only with device-measured connect-time data showing sequential failover is too slow.
+
+## D-53 — Backoff gets jitter (amends D-38-era `RetryPolicy`)
+**Date:** 2026-10-31 · **Source:** catalog 112
+`RetryPolicy` is exponential but deterministic, so every client retries in lockstep after a national
+outage. Add full jitter in `[0, delay]`, keep the cap, keep the same public API so existing tests keep
+their meaning.
+
+## D-54 — Pre-flight netcheck may lower the MTU, never raise it
+**Date:** 2026-10-31 · **Source:** catalog 104, 19, 110
+Measurement is allowed to correct a too-optimistic configuration; it is never allowed to override the
+operator. Budget 2.5 s, cached 24 h per network identity, SSID hashed only, never fatal.
+
+## D-55 — The second path is a profile, not a code path
+**Date:** 2026-10-31 · **Source:** catalog 73, 60, 95
+A CDN relay is declared as an ordinary profile with `transport: websocket` and `security: tls`, and
+entered into `fallbackProfileIds`. No special-case branch in the service, no second connect flow.
+This keeps one state machine, one probe and one diagnostic path for every transport.
+
+## D-56 — Remote config: Ed25519 + JCS, two key slots, built-in bundle as the floor
+**Date:** 2026-10-31 · **Source:** SPEC §5.9, NFR-3, NFR-16
+Detached Ed25519 over RFC 8785 canonical JSON; two key slots so rotation does not brick installed
+apps; strictly increasing `configVersion`; atomic apply; built-in bundle is always the final fallback.
+A signing key is a remote kill switch — treat it as one.
+
+## D-57 — `BundleLoadTest` gets a fixture; nothing is skipped
+**Date:** 2026-10-31 · **Source:** 3 failing tests in the 2026-10-31 baseline
+The shipped bundle is gitignored, so its test can never pass in a clean clone. Resolution, without
+weakening:
+1. a fixture builder encrypts a synthetic bundle with a fixed **test** password, exercising the loader
+   success path on every run;
+2. a separate test asserts the shipped bundle decrypts **when** `mohammad.operatorPassword` is set,
+   and asserts the typed `operator password not configured` failure when it is not.
+Both branches are real assertions. No `@Ignore`, no `assumeTrue`, no conditional skip.
+
+## D-58 — An acceptance criterion must name a test that exists
+**Date:** 2026-10-31 · **Source:** Phase 0 discrepancy #2 (~37 of 40 ACs pointed at nonexistent classes)
+`SPEC.md §9.2` maps every AC to a real class, present today or created by the named milestone. A meta
+test asserts that every `--tests` filter in the table selects at least one test. A missing class is a
+spec defect, never a reason to skip the check.
+
+## D-59 — BBR is an operator action, not a milestone
+**Date:** 2026-10-31 · **Source:** catalog 108, 145; operator instruction
+Server-side sysctl. Tracked as OP-1 with the required evidence (`sysctl net.ipv4.tcp_congestion_control`).
+It never appears in a client milestone, and no client behaviour may depend on it being enabled.
+
+## D-60 — AmneziaWG stays `NOT VERIFIED`, with per-server v3 parameters
+**Date:** 2026-10-31 · **Source:** catalog 146, AWG-1…AWG-5
+`amneziawg-go v3.1.20260828` is already in the binary, but no AWG server has ever carried traffic.
+v3 exists because v2's static parameters became fingerprintable in mid-2026; therefore parameters must
+be generated per server and must never ship as shared defaults. Status changes only after a captured
+device trace proves bytes flowed.
+
+## D-61 — No third core and no QUIC-first transport in v2.0
+**Date:** 2026-10-31 · **Source:** catalog 89, 32, 33, 70
+UDP/443 is throttled or dropped in Iran, so Hysteria/TUIC/MASQUE are secondary at best; and a third
+core multiplies the verification surface we cannot test without a device. Revisit after M-DEV
+produces real measurements.
+
+## D-62 — Documentation numbers come from commands, not from history
+**Date:** 2026-10-31 · **Source:** PROGRESS/STATUS drift found at takeover
+Any count in `PROGRESS.md`, `STATUS.md` or a release note must be pasted from a command run in the
+same session, with date and exit code. Test counts, warning counts and APK size are the common
+offenders: this file previously claimed 55 tests against a real 95, and "no application code exists"
+against a shipped 0.11.2.
+
+## D-63 — The bundle loader exposes an internal decrypt seam
+**Date:** 2026-10-31 · **Source:** M0, D-57
+`OperatorBundleLoader.load(context)` is split into `readAsset(context)` + `decrypt(bytes, password)`
+and `load` is now `decrypt(readAsset(context), BuildConfig.OPERATOR_PASSWORD)`. Both new functions are
+`internal`, so they are invisible outside the module and unreachable from any production call site
+other than `load`.
+Why: the operator's bundle is git-ignored, so the success path of decryption could never be exercised
+in a clean clone — which is why three tests were red on every machine but the operator's. Extracting
+the seam makes the success path and every failure branch testable with a generated fixture.
+Behaviour is unchanged by construction: the same checks run in the same order with the same messages,
+and `BundleLoadTest` asserts each message. No product feature touched in M0.
