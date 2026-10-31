@@ -222,6 +222,28 @@ class ConfigUriTest {
     }
 
     @Test
+    fun `a dns tunnel link becomes a DNS profile`() {
+        val parsed = ConfigUri.parse(
+            "dns://v.example.com?key=0011223344556677&method=3&resolvers=1.1.1.1,8.8.8.8:53#Tunnel",
+        )
+        val p = parsed.profile
+        assertEquals("DNS", p.core)
+        assertEquals("DNS", p.protocol)
+        assertEquals("v.example.com", p.host)
+        assertEquals("Tunnel", p.name)
+        assertEquals(2, p.dns!!.getJSONArray("resolvers").length())
+        assertEquals(3, p.dns!!.getInt("method"))
+    }
+
+    @Test
+    fun `a dns link with a bad key is refused`() {
+        val failure = runCatching {
+            ConfigUri.parse("dns://v.example.com?key=short&method=3&resolvers=1.1.1.1")
+        }.exceptionOrNull()
+        assertTrue(failure is ConfigUri.InvalidConfig)
+    }
+
+    @Test
     fun `the same link always yields the same id`() {
         val link = "vless://11111111-2222-3333-4444-555555555555@x.example.com:443?security=none"
         assertEquals(ConfigUri.parse(link).profile.id, ConfigUri.parse(link).profile.id)

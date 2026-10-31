@@ -42,6 +42,8 @@ data class Profile(
     val cipherSuites: String? = null,
     /** `streamSettings.finalMask`: transport shaping (`merge`, `fragment`, ...). Validated by FinalMaskRules. */
     val finalMask: JSONObject? = null,
+    /** DNS-tunnel settings when [core] is `DNS`; see DnsConfig. */
+    val dns: JSONObject? = null,
 )
 
 /** Decrypted operator bundle plus its defaults. */
@@ -190,6 +192,7 @@ object OperatorBundleLoader {
             DialModeRules.validate(profileDialMode)?.let { throw BundleException("profile dialMode: $it") }
             val profileCipherSuites = o.optString("cipherSuites").takeIf { it.isNotBlank() }
             val profileFinalMask = o.optJSONObject("finalMask")
+            val profileDns = o.optJSONObject("dns")
             FinalMaskRules.validate(profileFinalMask)?.let { throw BundleException("profile $it") }
 
             val xray = o.optJSONObject("xray")
@@ -200,12 +203,17 @@ object OperatorBundleLoader {
                 validateTransport(xray, profileFingerprint, profileFlow, profileFinalMask)
             }
             if (core == "AMNEZIAWG" && awg == null) throw BundleException("awg settings missing")
+            if (core == "DNS") {
+                ir.mohammad.vpn.core.DnsConfig.validate(profileDns)?.let { throw BundleException(it) }
+            } else if (profileDns != null) {
+                throw BundleException("dns settings require core=DNS")
+            }
 
             result.add(
                 Profile(
                     id, name, protocol, core, host, port, xray, awg, profileMtu,
                     profileFingerprint, profileFlow, profileDialMode, profileCipherSuites,
-                    profileFinalMask,
+                    profileFinalMask, profileDns,
                 ),
             )
         }
@@ -334,6 +342,6 @@ object OperatorBundleLoader {
 
     private val PROTOCOLS = setOf(
         "VLESS", "VMESS", "TROJAN", "SHADOWSOCKS", "SOCKS", "HTTP",
-        "WIREGUARD", "AMNEZIAWG", "HYSTERIA2",
+        "WIREGUARD", "AMNEZIAWG", "HYSTERIA2", "DNS",
     )
 }

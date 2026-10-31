@@ -70,6 +70,7 @@ object ProfileStore {
         if (profile.host.isBlank()) return "host missing"
         if (profile.port !in 1..65535) return "port out of range"
         if (profile.core == "XRAY" && profile.xray == null) return "xray settings missing"
+        if (profile.core == "DNS" && profile.dns == null) return "dns settings missing"
         if (profile.core == "AMNEZIAWG" && profile.awg == null) return "awg settings missing"
         profile.mtu?.let { if (!MtuPolicy.isValid(it)) return "mtu out of range" }
         return null
@@ -91,6 +92,7 @@ object ProfileStore {
             profile.dialMode?.let { put("dialMode", it) }
             profile.cipherSuites?.let { put("cipherSuites", it) }
             profile.finalMask?.let { put("finalMask", JSONObject(it.toString())) }
+            profile.dns?.let { put("dns", JSONObject(it.toString())) }
         }
 
     fun fromJson(obj: JSONObject): Profile = Profile(
@@ -108,5 +110,6 @@ object ProfileStore {
         dialMode = obj.optString("dialMode").takeIf { it.isNotBlank() },
         cipherSuites = obj.optString("cipherSuites").takeIf { it.isNotBlank() },
         finalMask = obj.optJSONObject("finalMask"),
+        dns = obj.optJSONObject("dns"),
     )
 }

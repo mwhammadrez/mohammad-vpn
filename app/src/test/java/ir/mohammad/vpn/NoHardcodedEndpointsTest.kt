@@ -55,7 +55,7 @@ class NoHardcodedEndpointsTest {
 
     /** `last-crash.txt` and `geosite.dat` are filenames, not hosts; a host TLD is never a file type. */
     private val fileExtensions = setOf(
-        "txt", "dat", "json", "enc", "apk", "log", "db", "bin", "yml", "yaml", "xml",
+        "txt", "dat", "json", "enc", "apk", "log", "db", "bin", "yml", "yaml", "xml", "toml",
         "kt", "java", "so", "aar", "jar", "md", "png", "jpg", "proto", "pb", "csv",
     )
 

@@ -309,7 +309,20 @@ it is testable on the JVM without a device. Android types stay out of policy cod
 | FR-U8 | Every attribute that changes the wire format is carried through: `encryption` (including VLESS post-quantum keys), transport-specific blocks (`httpupgrade` is not `ws`, `xhttp` is its own block), and `fm` (the finalMask). A substituted default is a bug, not a convenience. |
 | FR-U9 | One action measures every profile in turn and reports each result in place. Profiles that cannot be measured while another one carries the tunnel are marked as skipped, never given a number. |
 
-### 5.17 AmneziaWG (AWG) — `NOT VERIFIED`
+### 5.17 DNS tunnel — second path (FR-D) — milestone M6-DNS
+
+| ID | Requirement |
+|---|---|
+| FR-D1 | A profile may use `core: DNS` with `dns { domain, key, method, resolvers[] }`. The tunnel domain, not a server address, is the profile's host. |
+| FR-D2 | The engine is the MIT MasterDnsVPN client, built from a pinned commit by `scripts/build-dns-engine.sh` and shipped as `libmdvpn_client.so` in `jniLibs`; it runs as a child process, never as JNI. |
+| FR-D3 | The rendered engine config and resolver list live in `cacheDir/dns-<port>/`, so a delay probe and the VPN can run on different ports without sharing files. |
+| FR-D4 | The key length must match the cipher (16/24/32 for AES-128/192/256, 32 otherwise); a mismatch is a bundle error, because the engine would otherwise fail at session setup with no useful message. |
+| FR-D5 | The key is never logged: `DnsConfig.diagnostic` prints domain, cipher and resolver count only. |
+| FR-D6 | The bridge consumes the engine's local SOCKS5 listener exactly as it consumes Xray's; nothing above the bridge knows which core is behind it. |
+| FR-D7 | A DNS profile is measured by the same real-delay probe as any other, on a spare port, with a longer timeout because session setup and MTU discovery are slow. |
+| FR-D8 | A `dns://domain?key=…&method=…&resolvers=a,b` link imports into a DNS profile and is validated by the same rules. |
+
+### 5.18 AmneziaWG (AWG) — `NOT VERIFIED`
 
 | ID | Requirement |
 |---|---|
@@ -539,6 +552,9 @@ Every AC names a test class that exists today or is created by the milestone in 
 | AC-U6 | FR-U8 | unit | `--tests "*ConfigUriTest"` | encryption preserved; httpupgrade has its own block; fm becomes finalMask | M4-U |
 | AC-U7 | FR-U8 | native | render the imported config, run it, request through it | the core accepts it and a request returns 204 | M4-U |
 | AC-U8 | FR-U9 | render | `--tests "*ProfilesRenderTest"` | per-row chips update while "TESTING i/n" is shown | M4-U |
+| AC-D1 | FR-D1..D4 | unit | `--tests "*DnsConfigTest"` | TOML shape, key/cipher match, hex, domain, resolver bounds | M6-DNS |
+| AC-D2 | FR-D8 | unit | `--tests "*ConfigUriTest"` | `dns://` imports and a bad key is refused | M6-DNS |
+| AC-D3 | FR-D2 | native | engine + server binaries on one host | SOCKS5 request returns 204 through the tunnel | M6-DNS |
 | AC-N1 | FR-N1 | unit | `--tests "*TileStateSyncTest"` | one push per distinct state; listen always pushes | M4-N |
 | AC-N2 | FR-N2 | integration | `--tests "*TileInteractionTest"` | tile toggles through the shared controller | M4-N |
 | AC-N3 | FR-N3 | Robolectric | `--tests "*SurfaceColdStartTest"` | cold process: tile inactive from persisted profile | M4-N |

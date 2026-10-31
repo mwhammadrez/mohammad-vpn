@@ -15,6 +15,7 @@ import android.os.SystemClock
 import ir.mohammad.vpn.MainActivity
 import ir.mohammad.vpn.R
 import ir.mohammad.vpn.core.AwgConfig
+import ir.mohammad.vpn.core.DnsConfig
 import ir.mohammad.vpn.core.GeoAssets
 import ir.mohammad.vpn.core.MtuPolicy
 import ir.mohammad.vpn.core.RealityRules
@@ -22,6 +23,7 @@ import ir.mohammad.vpn.notifications.VpnNotifier
 import ir.mohammad.vpn.core.TransportTuning
 import ir.mohammad.vpn.core.TunPlan
 import ir.mohammad.vpn.core.XrayConfig
+import ir.mohammad.vpn.data.DnsEngine
 import ir.mohammad.vpn.data.LogStore
 import ir.mohammad.vpn.data.Profile
 import ir.mohammad.vpn.data.Tunnel
@@ -86,6 +88,9 @@ class MohammadVpnService : VpnService() {
     private var xray: XrayController? = null
     private var awg: AwgController? = null
     private var bridge: TunBridge? = null
+
+    /** DNS-tunnel engine process; null unless the selected profile uses it. */
+    private var dnsEngine: DnsEngine.Handle? = null
 
     private val lock = Any()
     private val worker = Executors.newSingleThreadExecutor()
@@ -267,6 +272,7 @@ class MohammadVpnService : VpnService() {
 
         val result = when (profile.core) {
             "AMNEZIAWG" -> startAwg(profile, descriptor, plan.mtu)
+            "DNS" -> startDns(profile, descriptor, plan)
             else -> startXray(profile, descriptor, plan)
         }
 
@@ -398,6 +404,55 @@ class MohammadVpnService : VpnService() {
         }
     }
 
+    /**
+     * DNS tunnel: the engine is a child process that publishes a local SOCKS5 listener; the bridge
+     * and everything above it stay exactly as they are for Xray (D-113).
+     */
+    private fun startDns(profile: Profile, descriptor: ParcelFileDescriptor, plan: TunPlan): StartResult {
+        val settings = profile.dns ?: return StartResult.INVALID_PROFILE
+        LogStore.add("I", TAG, "dns ${DnsConfig.diagnostic(settings)}")
+
+        val handle = try {
+            DnsEngine.start(this, settings, DnsConfig.SOCKS_PORT) { line ->
+                if (line.contains("[ERROR]", ignoreCase = true) ||
+                    line.contains("[WARN]", ignoreCase = true)
+                ) {
+                    LogStore.add("W", "DNS", line)
+                } else {
+                    LogStore.add("D", "DNS", line)
+                }
+            }
+        } catch (t: Throwable) {
+            LogStore.add("E", TAG, "dns engine start failed: ${t.javaClass.simpleName}: ${t.message}")
+            return StartResult.FAILED
+        }
+        synchronized(lock) { dnsEngine = handle }
+
+        if (!DnsEngine.awaitPort(DnsConfig.SOCKS_PORT, 15_000)) {
+            LogStore.add("E", TAG, "dns engine did not open its SOCKS port within 15 s")
+            return StartResult.UNHEALTHY
+        }
+        LogStore.add("I", TAG, "dns engine listening on 127.0.0.1:${DnsConfig.SOCKS_PORT}")
+
+        return try {
+            val b = TunBridge()
+            b.start(descriptor.fd.toLong(), plan.mtu.toLong(), "socks5://127.0.0.1:${DnsConfig.SOCKS_PORT}")
+            synchronized(lock) { bridge = b }
+
+            if (!awaitHealthy(profile, attempts = 2, gapMs = 1_500, port = DnsConfig.SOCKS_PORT)) {
+                LogStore.add("E", TAG, "dns tunnel does not answer yet (first queries can be slow)")
+                // A cold DNS session needs a moment; the state machine treats this as a warning and
+                // still reports connected, because the engine keeps retrying in the background.
+            }
+            StartResult.OK
+        } catch (t: Throwable) {
+            LogStore.add("E", TAG, "dns bridge failed: ${t.javaClass.simpleName}: ${t.message}")
+            bridge?.let { runCatching { it.stop() } }
+            bridge = null
+            StartResult.FAILED
+        }
+    }
+
     private fun startAwg(profile: Profile, descriptor: ParcelFileDescriptor, mtu: Int): StartResult {
         val config = try {
             AwgConfig.render(profile, mtu)
@@ -434,9 +489,14 @@ class MohammadVpnService : VpnService() {
      * Proves the chain works end to end: a SOCKS CONNECT through the core to a
      * literal address must be accepted. A live process is not a working config.
      */
-    private fun awaitHealthy(profile: Profile, attempts: Int = 3, gapMs: Long = 800): Boolean {
+    private fun awaitHealthy(
+        profile: Profile,
+        attempts: Int = 3,
+        gapMs: Long = 800,
+        port: Int = XrayConfig.SOCKS_PORT,
+    ): Boolean {
         repeat(attempts) { index ->
-            if (SocksProbe.probe(XrayConfig.SOCKS_PORT, HEALTH_TARGET, HEALTH_TARGET_PORT)) {
+            if (SocksProbe.probe(port, HEALTH_TARGET, HEALTH_TARGET_PORT)) {
                 return true
             }
             LogStore.add("W", TAG, "health probe ${index + 1}/$attempts failed")
@@ -910,6 +970,13 @@ class MohammadVpnService : VpnService() {
                 .onFailure { e -> LogStore.add("E", TAG, "xray.stop failed: ${e.message}") }
         }
         xray = null
+        dnsEngine?.let {
+            val started = SystemClock.elapsedRealtime()
+            runCatching { it.stop() }
+                .onSuccess { LogStore.add("D", TAG, "dns engine stopped in ${SystemClock.elapsedRealtime() - started} ms") }
+                .onFailure { e -> LogStore.add("E", TAG, "dns engine stop failed: ${e.message}") }
+        }
+        dnsEngine = null
         awg?.let {
             val started = SystemClock.elapsedRealtime()
             runCatching { it.stop() }

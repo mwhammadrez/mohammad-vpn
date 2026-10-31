@@ -1,9 +1,11 @@
 package ir.mohammad.vpn.net
 
 import android.content.Context
+import ir.mohammad.vpn.core.DnsConfig
 import ir.mohammad.vpn.core.GeoAssets
 import ir.mohammad.vpn.core.MtuPolicy
 import ir.mohammad.vpn.core.XrayConfig
+import ir.mohammad.vpn.data.DnsEngine
 import ir.mohammad.vpn.data.LogStore
 import ir.mohammad.vpn.data.Profile
 import ir.mohammad.vpn.data.Tunnel
@@ -89,7 +91,7 @@ object RealDelay {
                 is Plan.Refused -> Result(null, p.reason)
                 Plan.ThroughLiveTunnel -> probe(XrayConfig.SOCKS_PORT, timeoutMs)
                 Plan.TemporaryCore -> withTemporaryCore(context, profile) { port ->
-                    probe(port, timeoutMs)
+                    probe(port, if (profile.core == "DNS") maxOf(timeoutMs, 25_000) else timeoutMs)
                 }
             }
         }
@@ -124,8 +126,11 @@ object RealDelay {
         profile: Profile,
         block: (Int) -> Result,
     ): Result {
+        if (profile.core == "DNS") {
+            return withDnsEngine(context, profile, block)
+        }
         if (profile.core != "XRAY") {
-            return Result(null, "delay test is implemented for Xray profiles only")
+            return Result(null, "delay test is implemented for Xray and DNS profiles only")
         }
         val mtu = profile.mtu ?: Tunnel.defaultMtu.takeIf { it > 0 } ?: MtuPolicy.DEFAULT_MTU
         val config = runCatching {
@@ -157,6 +162,27 @@ object RealDelay {
             Result(null, "core refused the config: ${t.message ?: t.javaClass.simpleName}")
         } finally {
             runCatching { core.stop() }
+        }
+    }
+
+    /**
+     * Same shape as the Xray path: start one engine on a spare port, measure, stop it. A cold DNS
+     * session spends a second or two on session setup and MTU discovery, hence the longer wait.
+     */
+    private fun withDnsEngine(context: Context, profile: Profile, block: (Int) -> Result): Result {
+        val settings = profile.dns ?: return Result(null, "dns settings missing")
+        val handle = runCatching {
+            DnsEngine.start(context, settings, DnsConfig.PROBE_PORT) { }
+        }.getOrElse { return Result(null, "engine refused the profile: ${it.message}") }
+
+        return try {
+            if (!DnsEngine.awaitPort(DnsConfig.PROBE_PORT, 20_000)) {
+                Result(null, "engine did not open its port")
+            } else {
+                block(DnsConfig.PROBE_PORT)
+            }
+        } finally {
+            runCatching { handle.stop() }
         }
     }
 

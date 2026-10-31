@@ -5,6 +5,28 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.15.0 — DNS tunnel as a second path (M6-DNS)
+
+### Added
+- **A DNS-tunnel profile type.** Where a network permits nothing but DNS on port 53, this path carries
+  the traffic inside DNS queries to a domain whose nameserver is your own server.
+- Engine: MasterDnsVPN (MIT), built from a pinned commit and shipped inside the APK. It runs as a child
+  process behind the same bridge as Xray, so nothing else in the app changed.
+- `dns://domain?key=…&method=…&resolvers=a,b` imports into a profile, validated before use.
+
+### Notes
+- It is slow by design — tens to hundreds of KB/s. Use it when nothing else connects, not for video.
+- The key length must match the cipher (16/24/32); a mismatch is now caught at bundle load instead of
+  turning into "connecting…" forever.
+- The key is never written to the log.
+
+### Verified
+- Engine and server, both built here, carried an HTTP request through a real session: **204 in 0.30 s**.
+- **Not verified:** anything on a device, or through a real ISP resolver. That needs a delegated domain
+  and a VPS that accepts UDP 53.
+
+---
+
 ## 0.14.7 — test every profile at once (M4-U3)
 
 ### Added

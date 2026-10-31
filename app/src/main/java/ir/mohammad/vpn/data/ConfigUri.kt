@@ -1,6 +1,7 @@
 package ir.mohammad.vpn.data
 
 import android.net.Uri
+import ir.mohammad.vpn.core.DnsConfig
 import ir.mohammad.vpn.core.FinalMaskRules
 import ir.mohammad.vpn.core.TlsFingerprint
 import org.json.JSONArray
@@ -26,7 +27,7 @@ object ConfigUri {
 
     const val DEFAULT_FINGERPRINT = "chrome"
 
-    private val SUPPORTED = setOf("vless", "vmess", "trojan", "ss")
+    private val SUPPORTED = setOf("vless", "vmess", "trojan", "ss", "dns")
 
     class InvalidConfig(message: String) : Exception(message)
 
@@ -47,6 +48,7 @@ object ConfigUri {
             "vmess" -> parseVmess(text)
             "trojan" -> parseTrojan(text)
             "ss" -> parseShadowsocks(text)
+            "dns" -> parseDns(text)
             "" -> throw InvalidConfig("not a share link: expected scheme:// at the start")
             else -> throw InvalidConfig("unsupported scheme \"$scheme\" (supported: vless, vmess, trojan, ss)")
         }
@@ -215,6 +217,54 @@ object ConfigUri {
                 xray = xray,
                 awg = null,
                 fingerprint = fingerprintFor(security, param(q, "fp"), warnings),
+            ),
+            warnings,
+        )
+    }
+
+    /* ------------------------------------------------------------------ dns */
+
+    /**
+     * `dns://v.example.com?key=<hex>&method=3&resolvers=1.1.1.1,8.8.8.8`
+     *
+     * The authority is the tunnel domain, not a server address: queries go to resolvers, and the
+     * authoritative nameserver for that domain is the tunnel server (D-113).
+     */
+    private fun parseDns(text: String): Parsed {
+        val uri = Uri.parse(text)
+        val domain = uri.host?.takeIf { it.isNotBlank() }
+            ?: throw InvalidConfig("dns: missing tunnel domain")
+        val q = query(uri)
+        val method = param(q, "method")?.toIntOrNull() ?: DnsConfig.DEFAULT_METHOD
+        val warnings = mutableListOf<String>()
+
+        val resolvers = (param(q, "resolvers") ?: "")
+            .split(',', ';')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        val settings = JSONObject()
+            .put("domain", domain)
+            .put("method", method)
+            .apply { param(q, "key")?.let { put("key", it.trim()) } }
+            .put("resolvers", JSONArray(resolvers))
+            .apply { param(q, "balancing")?.toIntOrNull()?.let { put("balancing", it) } }
+            .apply { param(q, "duplication")?.toIntOrNull()?.let { put("duplication", it) } }
+
+        DnsConfig.validate(settings)?.let { throw InvalidConfig(it) }
+        if (resolvers.isEmpty()) warnings.add("no resolvers in the link; add them before connecting")
+
+        return Parsed(
+            Profile(
+                id = idFor(text),
+                name = nameOf(uri, "dns $domain"),
+                protocol = "DNS",
+                core = "DNS",
+                host = domain,
+                port = 53,
+                xray = null,
+                awg = null,
+                dns = settings,
             ),
             warnings,
         )

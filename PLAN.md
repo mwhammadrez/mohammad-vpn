@@ -20,7 +20,7 @@ diagnostics, and M7 exists to deliver M1–M6 to installed users without a relea
 | M4-N | Tile reliability, notification, telemetry | — | 0.14.2 | live notification, working counters | **yes** (shade) |
 | M4-C | Config compatibility + `oob` dialMode | — | 0.14.3 | the current bundle can actually start | **yes** (DPI) |
 | M4-U | Paste import + real-delay test | — | 0.14.5 | user can try any config and see if it works | **yes** (device) |
-| M6-DNS | DNS tunnel as the second path (candidate) | M6 | — | works where only DNS survives | **yes** (domain + UDP 53) |
+| M6-DNS | DNS tunnel as the second path | M6 | 0.15.0 | works where only DNS survives | **yes** (domain + UDP 53) |
 | M4 | State machine + path policy | #5, #6, #7 | 0.15.0 | multi-path, honest states | no |
 | M5 | Pre-flight netcheck | #8 | 0.16.0 | fewer wrong assumptions | **yes** (measurement) |
 | M6 | Second path (WS+TLS via CDN) | #10 | 0.17.0 | works when the IP dies | **yes** (survival) |
@@ -154,6 +154,26 @@ M4's fallback — the release note must say so.
 **Rollback:** revert; v1 bundles and `security:none` still work.
 
 ---
+
+## M6-DNS — DNS tunnel as the second path (0.15.0)
+
+**Goal.** A path that still works when every port except 53 is closed.
+
+**Engine.** MasterDnsVPN (MIT), pinned at `4144e54`, built by `scripts/build-dns-engine.sh` into
+`jniLibs/arm64-v8a/libmdvpn_client.so` (5.5 MB, ~2 MB in the APK). No code from WhiteDNS, which is
+proprietary (D-112); the technique is not the licence.
+
+**Shape.** Child process publishing a local SOCKS5 listener → the existing `TunBridge` → the existing
+`VpnService`. Nothing above the bridge knows which core answered.
+
+**Covers:** FR-D1 … FR-D8, AC-D1 … AC-D3.
+
+**Verified on this host:** the engine and its server, both built here, completed a real session
+(AES-128-GCM, MTU discovery 111/1500, session id 1) and carried an HTTP request end to end:
+`204` in 0.30 s.
+
+**Not verified:** anything on a phone, and anything through a real ISP resolver — that needs a
+delegated domain and a VPS accepting UDP 53 (operator action).
 
 ## M4-U — Paste import and real delay (0.14.5)
 

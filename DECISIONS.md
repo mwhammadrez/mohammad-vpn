@@ -889,3 +889,27 @@ Technique and architecture are free to learn from; the licence covers the expres
 Sequencing: M6, i.e. after the state machine and netcheck, and only if the operator supplies a domain
 with an `NS` delegation and a VPS that accepts UDP 53.
 Cost measured, not guessed: arm64 engine binary 5.3 MB, APK 14.3 → ~19.6 MB against a 20 MB budget.
+
+## D-113 — The DNS path is a child process behind the existing bridge
+**Date:** 2026-10-31 · **Source:** `docs/AUDIT_WHITEDNS.md`; M6-DNS
+Engine: **MasterDnsVPN** (MIT, pinned `4144e544`), because it has the smallest transport header, real
+multipath and per-resolver MTU, and is the most active of the three MIT derivatives. WhiteDNS's app is
+proprietary and none of its code, naming, UI or config format is used (D-112).
+Shape: the engine is a Go executable shipped as `libmdvpn_client.so`; `useLegacyPackaging = true` (which
+the app already needed) extracts it to `nativeLibraryDir`, the only place Android executes from. The
+app starts it with a generated TOML, waits for its SOCKS5 port, and points the **existing** `TunBridge`
+at it. No JNI, no gomobile, no second data path to maintain.
+Ports: 10809 for VPN mode, 11809 for the delay probe, so a probe never binds over the live listener.
+Rejected alternative: tun2proxy as a second bridge, as the reference app does. Our bridge already
+speaks SOCKS5 and does not care who answers.
+Costs: +2 MB in the APK (5.5 MB on disk), one more process to supervise, and a session that takes
+seconds to come up. That is why a DNS profile is a fallback and never the default.
+
+## D-114 — The DNS key must match the cipher, and is never logged
+**Date:** 2026-10-31 · **Source:** `internal/security/encryption_key.go` (engine)
+The engine derives the cipher from the key length: 16 for AES-128-GCM, 24 for AES-192, 32 for
+AES-256/ChaCha20, and the key is hex text. A wrong length is accepted by the client and rejected by the
+server at session setup — which on a phone looks like "connecting forever". It is now a bundle error
+naming the expected length.
+`DnsConfig.diagnostic` prints domain, cipher name and resolver count; the key never reaches the log,
+matching NFR-5.
