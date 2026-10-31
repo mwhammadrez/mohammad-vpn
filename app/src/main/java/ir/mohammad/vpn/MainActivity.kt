@@ -269,20 +269,37 @@ class MainActivity : ComponentActivity() {
         if (Tunnel.selected?.id != profile.id) selectProfile(profile)
         when (DnsMode.from(prefs().getString("dns_mode", null))) {
             DnsMode.PROXY -> {
+                // Never two cores: a live VPN is stopped before the proxy starts.
+                if (Tunnel.state.value !is TunnelState.Disconnected) {
+                    LogStore.add("I", "APP", "stopping the tunnel before starting the proxy")
+                    requestDisconnect()
+                }
                 LogStore.add("I", "APP", "starting DNS proxy for ${profile.name}")
                 DnsProxyService.start(this, profile)
             }
-            DnsMode.VPN -> requestConnect()
+            DnsMode.VPN -> requestDisconnectIfProxy()
         }
     }
 
+    /** Stops a running DNS proxy so a VPN connect cannot end up with two cores. */
+    private fun requestDisconnectIfProxy() {
+        val proxy = ProxyState.state.value
+        if (proxy.running || proxy.starting) {
+            LogStore.add("I", "APP", "stopping the DNS proxy before the tunnel starts")
+            DnsProxyService.stop(this)
+        }
+        requestConnect()
+    }
+
     fun stopDns() {
-        DnsProxyService.stop(this)
+        val proxy = ProxyState.state.value
+        if (proxy.running || proxy.starting) DnsProxyService.stop(this)
         if (Tunnel.state.value !is TunnelState.Disconnected) requestDisconnect()
     }
 
     fun stopDnsProxy() {
-        DnsProxyService.stop(this)
+        val proxy = ProxyState.state.value
+        if (proxy.running || proxy.starting) DnsProxyService.stop(this)
     }
 
     private companion object {
@@ -325,12 +342,21 @@ fun MohammadApp() {
     val topBar: @Composable () -> Unit = {
         TopBar(
             mode = appMode,
-            version = "v0.15.0",
+            version = "v" + (runCatching {
+                activity.packageManager.getPackageInfo(activity.packageName, 0).versionName
+            }.getOrNull() ?: ""),
             menuOpen = modeMenuOpen,
             onToggleMenu = { modeMenuOpen = !modeMenuOpen },
             onPickMode = { picked ->
                 modeMenuOpen = false
                 if (picked != appMode) {
+                    // Never two cores: leaving a mode stops whatever it started.
+                    val sessionLive = proxy.running || proxy.starting ||
+                        state is TunnelState.Connected || state is TunnelState.Connecting
+                    if (sessionLive) {
+                        activity.stopDns()
+                        LogStore.add("I", "APP", "mode switch stopped the running session")
+                    }
                     appMode = picked
                     activity.prefs().edit { putString("app_mode", picked.storageKey) }
                     LogStore.add("I", "APP", "mode ${picked.label}")
@@ -347,7 +373,7 @@ fun MohammadApp() {
             dnsMode = dnsMode,
             tunnelState = state,
             proxy = proxy,
-            logs = logs,
+            logs = logs.filter { it.tag == "DNS" || it.tag == "DNS-PROXY" },
             onPickDnsMode = { picked ->
                 if (picked != dnsMode) {
                     if (proxy.running || proxy.starting) activity.stopDnsProxy()
@@ -370,6 +396,17 @@ fun MohammadApp() {
                 clipboard.setText(androidx.compose.ui.text.AnnotatedString(proxy.address))
                 LogStore.add("I", "APP", "proxy address copied")
             },
+            onPaste = {
+                val raw = clipboard.getText()?.text
+                if (raw.isNullOrBlank()) {
+                    importMessage = "Clipboard is empty"
+                } else {
+                    val (message, count) = activity.importLinks(raw)
+                    importMessage = message
+                    if (count > 0) profiles = Tunnel.profiles
+                }
+            },
+            importMessage = importMessage,
             topBar = topBar,
         )
         return@MohammadApp
@@ -379,7 +416,7 @@ fun MohammadApp() {
         state = state,
         traffic = traffic,
         logs = logs,
-        profiles = profiles,
+        profiles = profiles.filter { it.core != "DNS" },
         selected = selected,
         pingMs = pingMs,
         pingBusy = pingBusy,
@@ -466,6 +503,11 @@ fun MohammadApp() {
                     profiles = Tunnel.profiles
                     selected = Tunnel.selected
                     pingMs = null
+                    if (Tunnel.selected?.core == "DNS") {
+                        appMode = AppMode.DNS
+                        activity.prefs().edit { putString("app_mode", AppMode.DNS.storageKey) }
+                        LogStore.add("I", "APP", "dns profile imported; switched to Mode 2")
+                    }
                 }
             }
         },

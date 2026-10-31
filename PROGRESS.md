@@ -51,7 +51,7 @@ SDK 36, NDK 28.2.13676358, Go 1.27.3, 3 GiB RAM, **no device, no `/dev/kvm`**.
 |---|---|---:|---|
 | Version | `./gradlew --version` | 0 | Gradle 8.14.6, JVM 17.0.21, Kotlin 2.0.21 |
 | Clean build | `./gradlew clean :app:assembleDebug` | 0 | `app-debug.apk` **14.3 MB** (limit 20) |
-| Unit | `./gradlew :app:testDebugUnitTest` | 0 | **319 tests, 319 passed, 0 skipped** (after M4-U3) |
+| Unit | `./gradlew :app:testDebugUnitTest` | 0 | **335 tests, 335 passed, 0 skipped** (after M6-UI) |
 | Lint | `./gradlew :app:lintDebug` | 0 | **0 errors, 17 warnings** |
 | Placeholder | `./scripts/check-no-placeholders` | 0 | `No banned markers found` |
 | APK size | `./scripts/apk-size-check` | 0 | 14.3 MB, within 20 MB |

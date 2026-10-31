@@ -8,6 +8,7 @@ import ir.mohammad.vpn.core.XrayConfig
 import ir.mohammad.vpn.data.DnsEngine
 import ir.mohammad.vpn.data.LogStore
 import ir.mohammad.vpn.data.Profile
+import ir.mohammad.vpn.data.ProxyState
 import ir.mohammad.vpn.data.Tunnel
 import ir.mohammad.vpn.data.TunnelState
 import ir.mohammad.vpn.vpn.SocksProbe
@@ -41,7 +42,8 @@ object RealDelay {
     private const val CORE_START_TIMEOUT_MS = 4_000
 
     sealed interface Plan {
-        data object ThroughLiveTunnel : Plan
+        /** A session is already carrying this profile; measure through the port it listens on. */
+        data class ThroughLive(val port: Int) : Plan
         data object TemporaryCore : Plan
         data class Refused(val reason: String) : Plan
     }
@@ -51,10 +53,17 @@ object RealDelay {
     }
 
     /** Pure decision step, so the rules are testable without a device. */
-    fun plan(connected: Boolean, selectedId: String?, profileId: String): Plan = when {
-        !connected -> Plan.TemporaryCore
-        selectedId == profileId -> Plan.ThroughLiveTunnel
-        else -> Plan.Refused("disconnect first: another profile is carrying the tunnel")
+    fun plan(
+        connected: Boolean,
+        selectedId: String?,
+        profileId: String,
+        proxyRunning: Boolean = false,
+        proxyProfileId: String? = null,
+    ): Plan = when {
+        connected && selectedId == profileId -> Plan.ThroughLive(XrayConfig.SOCKS_PORT)
+        proxyRunning && proxyProfileId == profileId -> Plan.ThroughLive(DnsConfig.SOCKS_PORT)
+        connected || proxyRunning -> Plan.Refused("stop the running session first: another profile is live")
+        else -> Plan.TemporaryCore
     }
 
     /**
@@ -72,8 +81,9 @@ object RealDelay {
     ) {
         val connected = Tunnel.state.value is TunnelState.Connected
         val liveId = Tunnel.selected?.id
+        val proxy = ProxyState.state.value
         profiles.forEachIndexed { index, profile ->
-            val result = when (plan(connected, liveId, profile.id)) {
+            val result = when (plan(connected, liveId, profile.id, proxy.running, proxy.profileId)) {
                 is Plan.Refused -> Result(null, SKIPPED)
                 else -> measure(context, profile, timeoutMs)
             }
@@ -87,9 +97,10 @@ object RealDelay {
     suspend fun measure(context: Context, profile: Profile, timeoutMs: Int = CONNECT_TIMEOUT_MS): Result =
         withContext(Dispatchers.IO) {
             val connected = Tunnel.state.value is TunnelState.Connected
-            when (val p = plan(connected, Tunnel.selected?.id, profile.id)) {
+            val proxy = ProxyState.state.value
+            when (val p = plan(connected, Tunnel.selected?.id, profile.id, proxy.running, proxy.profileId)) {
                 is Plan.Refused -> Result(null, p.reason)
-                Plan.ThroughLiveTunnel -> probe(XrayConfig.SOCKS_PORT, timeoutMs)
+                is Plan.ThroughLive -> probe(p.port, if (profile.core == "DNS") maxOf(timeoutMs, 25_000) else timeoutMs)
                 Plan.TemporaryCore -> withTemporaryCore(context, profile) { port ->
                     probe(port, if (profile.core == "DNS") maxOf(timeoutMs, 25_000) else timeoutMs)
                 }

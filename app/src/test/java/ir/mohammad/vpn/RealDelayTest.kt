@@ -110,9 +110,25 @@ class RealDelayTest {
     @Test
     fun `the plan refuses a second core while another profile is live`() {
         assertEquals(RealDelay.Plan.TemporaryCore, RealDelay.plan(false, "a", "b"))
-        assertEquals(RealDelay.Plan.ThroughLiveTunnel, RealDelay.plan(true, "a", "a"))
+        assertEquals(
+            RealDelay.Plan.ThroughLive(10808),
+            RealDelay.plan(true, "a", "a"),
+        )
         val refused = RealDelay.plan(true, "a", "b")
         assertTrue(refused is RealDelay.Plan.Refused)
-        assertTrue((refused as RealDelay.Plan.Refused).reason.contains("disconnect"))
+        assertTrue((refused as RealDelay.Plan.Refused).reason.contains("session"))
+    }
+
+    @Test
+    fun `a running DNS proxy is measured through its own port`() {
+        assertEquals(
+            RealDelay.Plan.ThroughLive(10809),
+            RealDelay.plan(connected = false, selectedId = null, profileId = "d", proxyRunning = true, proxyProfileId = "d"),
+        )
+        // A different profile cannot borrow the live proxy.
+        assertTrue(
+            RealDelay.plan(false, null, "other", proxyRunning = true, proxyProfileId = "d")
+                is RealDelay.Plan.Refused,
+        )
     }
 }

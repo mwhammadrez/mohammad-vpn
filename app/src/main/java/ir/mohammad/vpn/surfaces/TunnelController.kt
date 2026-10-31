@@ -36,6 +36,12 @@ object TunnelController {
 
     fun connect(context: Context): Outcome {
         if (!hasProfile()) return Outcome.NEEDS_SETUP
+        // The tile and the widget can reach this from anywhere; a DNS proxy already holding the
+        // engine must not end up beside a tunnel (D-105).
+        val proxy = ir.mohammad.vpn.data.ProxyState.state.value
+        if (proxy.running || proxy.starting) {
+            ir.mohammad.vpn.proxy.DnsProxyService.stop(context)
+        }
         if (!permissionGranted(context)) return Outcome.NEEDS_PERMISSION
         ContextCompat.startForegroundService(
             context,

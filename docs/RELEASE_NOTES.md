@@ -5,6 +5,26 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.15.2 — Mode 2, reviewed (M6-UI review)
+
+Eight defects found by reading the mode code against its own rules, all fixed:
+
+- The version under the title was a literal, so it stayed `v0.15.0` after a build.
+- Switching Mode 1 ⇄ Mode 2 left the previous session running — two cores, which is exactly what
+  D-105 forbids. Switching now stops it.
+- The tile and the widget could start a tunnel beside a live DNS proxy. All three entry points now
+  stop the proxy first.
+- Starting the proxy while a tunnel was up had the same problem from the other side.
+- A running proxy was ignored by the delay test, which started a second engine instead of measuring
+  through the live port.
+- Mode 1 listed DNS profiles. The two environments now hold their own kinds.
+- The DNS screen had no way to add a profile; it now has PASTE, and importing a `dns://` link in
+  Mode 1 switches to Mode 2 automatically.
+- Stopping the proxy used `startService`, which Android 8+ refuses from the background. It uses
+  `stopService`, and a second START while an engine is alive is ignored instead of racing for the port.
+
+---
+
 ## 0.15.1 — Mode 2 (M6-UI)
 
 ### Added

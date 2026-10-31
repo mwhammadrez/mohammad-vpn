@@ -51,8 +51,13 @@ class DnsProxyService : Service() {
             return START_NOT_STICKY
         }
 
+        if (engine != null) {
+            LogStore.add("D", TAG, "start ignored: an engine is already running")
+            return START_STICKY
+        }
+
         startForegroundCompat(profile)
-        ProxyState.starting(profile.name, DnsConfig.SOCKS_PORT)
+        ProxyState.starting(profile.id, profile.name, DnsConfig.SOCKS_PORT)
         return try {
             engine = DnsEngine.start(this, profile.dns, DnsConfig.SOCKS_PORT) { line ->
                 if (line.contains("[ERROR]", true) || line.contains("[WARN]", true)) {
@@ -64,7 +69,7 @@ class DnsProxyService : Service() {
             if (!DnsEngine.awaitPort(DnsConfig.SOCKS_PORT, 15_000)) {
                 throw IllegalStateException("engine did not open its SOCKS port")
             }
-            ProxyState.running(profile.name, DnsConfig.SOCKS_PORT)
+            ProxyState.running(profile.id, profile.name, DnsConfig.SOCKS_PORT)
             LogStore.add("I", TAG, "proxy ready on 127.0.0.1:${DnsConfig.SOCKS_PORT}")
             START_STICKY
         } catch (t: Throwable) {
@@ -149,8 +154,12 @@ class DnsProxyService : Service() {
             }
         }
 
+        /**
+         * `stopService` rather than an ACTION_STOP intent: stopping is allowed from the background,
+         * while starting a service from a widget or tile callback is not (Android 8+ restrictions).
+         */
         fun stop(context: Context) {
-            context.startService(Intent(context, DnsProxyService::class.java).setAction(ACTION_STOP))
+            runCatching { context.stopService(Intent(context, DnsProxyService::class.java)) }
         }
     }
 }

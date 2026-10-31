@@ -73,6 +73,8 @@ fun DnsScreen(
     onSelectProfile: (Profile) -> Unit,
     onToggle: () -> Unit,
     onCopyAddress: () -> Unit,
+    onPaste: () -> Unit = {},
+    importMessage: String? = null,
     topBar: @Composable () -> Unit = {},
 ) {
     val busy = tunnelState is TunnelState.Connecting ||
@@ -171,7 +173,7 @@ fun DnsScreen(
             )
         }
 
-        ProfileList(dnsProfiles, selected, onSelectProfile)
+        ProfileList(dnsProfiles, selected, onSelectProfile, onPaste, importMessage)
 
         Console(logs)
     }
@@ -320,21 +322,51 @@ private fun PowerGlyph(connected: Boolean, color: Color) {
 }
 
 @Composable
-private fun ProfileList(profiles: List<Profile>, selected: Profile?, onSelect: (Profile) -> Unit) {
+private fun ProfileList(
+    profiles: List<Profile>,
+    selected: Profile?,
+    onSelect: (Profile) -> Unit,
+    onPaste: () -> Unit,
+    importMessage: String?,
+) {
     Glass(shape = 18.dp) {
         Column(Modifier.padding(vertical = 10.dp)) {
-            Text(
-                "DNS PROFILES",
-                fontFamily = ChakraSemi,
-                fontSize = 9.sp,
-                letterSpacing = 1.4.sp,
-                color = Palette.TextSecondary,
-                modifier = Modifier.padding(horizontal = 14.dp),
-            )
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "DNS PROFILES",
+                    fontFamily = ChakraSemi,
+                    fontSize = 9.sp,
+                    letterSpacing = 1.4.sp,
+                    color = Palette.TextSecondary,
+                )
+                Spacer(Modifier.weight(1f))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(Palette.Violet.copy(alpha = 0.16f))
+                        .border(1.dp, Palette.BorderViolet, RoundedCornerShape(9.dp))
+                        .clickable(onClick = onPaste)
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                ) {
+                    Text("PASTE", fontFamily = ChakraSemi, fontSize = 9.sp, letterSpacing = 1.2.sp, color = Palette.Violet)
+                }
+            }
+            if (importMessage != null) {
+                Text(
+                    importMessage,
+                    fontFamily = Chakra,
+                    fontSize = 9.sp,
+                    color = Palette.TextMuted,
+                    modifier = Modifier.padding(horizontal = 14.dp).padding(top = 4.dp),
+                )
+            }
             Spacer(Modifier.height(6.dp))
             if (profiles.isEmpty()) {
                 Text(
-                    "No DNS profile. Paste a dns:// link in Mode 1.",
+                    "No DNS profile yet — paste a dns:// link.",
                     fontFamily = Chakra,
                     fontSize = 10.sp,
                     color = Palette.TextMuted,

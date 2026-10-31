@@ -928,3 +928,20 @@ failure mode and its own controls.
   we did not.
 * Switching mode or proxy/vpn stops whatever the other one started — two cores at once is still
   forbidden (D-105).
+
+## D-116 — One session at a time, enforced at every entry point
+**Date:** 2026-10-31 · **Source:** M6-UI review
+D-105 said "never two cores"; the review found three ways to break it: switching modes left the old
+session running, the widget/tile could start a tunnel beside a live proxy, and starting the proxy with
+a tunnel up had the same effect from the other side. All three now stop the other session first.
+Also: stopping a service uses `stopService`, never an ACTION_STOP `startService` — the latter is
+refused from the background on Android 8+, which would have made the notification's STOP action fail
+exactly when the screen is off. A second START while an engine is alive is ignored rather than racing
+for the same port.
+
+## D-117 — The two modes hold their own profiles
+**Date:** 2026-10-31 · **Source:** M6-UI review
+Mode 1 lists everything except DNS profiles; Mode 2 lists only DNS profiles. A tunnel profile has no
+meaning in the DNS environment and vice versa, and showing it there only invites the wrong tap.
+Importing a `dns://` link switches to Mode 2, because that is the only place the new profile can be
+used.

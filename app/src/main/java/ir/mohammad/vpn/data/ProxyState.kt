@@ -16,6 +16,7 @@ object ProxyState {
         val running: Boolean = false,
         val starting: Boolean = false,
         val port: Int = 0,
+        val profileId: String = "",
         val profileName: String = "",
         val error: String? = null,
     ) {
@@ -25,12 +26,12 @@ object ProxyState {
     private val _state = MutableStateFlow(Proxy())
     val state: StateFlow<Proxy> = _state.asStateFlow()
 
-    fun starting(profileName: String, port: Int) {
-        _state.value = Proxy(starting = true, port = port, profileName = profileName)
+    fun starting(profileId: String, profileName: String, port: Int) {
+        _state.value = Proxy(starting = true, port = port, profileId = profileId, profileName = profileName)
     }
 
-    fun running(profileName: String, port: Int) {
-        _state.value = Proxy(running = true, port = port, profileName = profileName)
+    fun running(profileId: String, profileName: String, port: Int) {
+        _state.value = Proxy(running = true, port = port, profileId = profileId, profileName = profileName)
     }
 
     fun stopped() {
