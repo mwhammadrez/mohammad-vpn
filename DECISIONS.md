@@ -586,3 +586,17 @@ Why it exists separately from `BundleParseTest`: that file tests *field validati
 *cardinality*. A single-server assumption usually shows up as "the first profile is the only one",
 which no field-level test would catch.
 Still open until M4: policy behaviour with 1/2/N paths (`PathPolicyTest`, AC-40).
+
+## D-80 — The deployed bundle pinned MTU 1500, so M1 could not help installed users
+**Date:** 2026-10-31 · **Source:** inspection of the operator bundle shipped in 0.8.0
+The bundle that the operator actually distributes sets `"defaultMtu": 1500`. `MtuPolicy` honours an
+explicit bundle value over its 1400 default (that is what an operator override means), so releasing
+0.14.0 unchanged would have left every existing user on 1500 — the suspected cause would have survived
+the fix, and the milestone would have looked like it failed.
+Resolution for the trial build handed to the operator: the bundle was re-encrypted with the same
+password and exactly one field changed, `defaultMtu: 1500 → 1400`. Nothing else in the profile was
+touched.
+Durable fix: M7 (signed remote config) makes this a publish, not a re-encryption. Until then, any MTU
+change must be re-encrypted into the bundle.
+Consequence for tests: the policy is correct, but "the fix is in effect" depends on the bundle. A
+release checklist item should assert `defaultMtu` of the bundle about to ship.

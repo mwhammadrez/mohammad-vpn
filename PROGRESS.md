@@ -108,6 +108,14 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
   must exist in sources or be planned. It caught two AC rows with shorthand instead of a command.
 - Gate: **100/100 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
 
+### 2026-10-31 · trial build for the operator (0.14.0)
+- Inspected the bundle shipped in the public 0.8.0 APK: decrypts, **1 profile**, VLESS over WS,
+  `security: none`, and **`defaultMtu: 1500`** — which overrode M1's new default (D-80).
+- Re-encrypted that bundle with the same password and only `defaultMtu` changed to 1400; embedded it
+  in a local build. `app-debug.apk` now contains `assets/operator/bundle.enc`.
+- Gate: 169/169 tests (the shipped-bundle test now runs the success path), APK 14.3 MB.
+- The password and the bundle are git-ignored; `git check-ignore` confirms both.
+
 ### 2026-10-31 · D-78 constraint harness (pre-M4)
 - `NoHardcodedEndpointsTest`: scans production string literals for UUIDs, non-infrastructure IPs,
   unknown hostnames, 43-char base64url and 8–16 char hex. Added as AC-39 and to the continuous gate.
