@@ -1,0 +1,55 @@
+package ir.mohammad.vpn
+
+import ir.mohammad.vpn.core.TlsFingerprint
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * SPEC TLS-2 / catalog 65, 87.
+ *
+ * The allow-list is not copied from documentation: it is the set of names the pinned Xray-core
+ * actually resolves in `transport/internet/tls/tls.go` (PresetFingerprints + ModernFingerprints +
+ * OtherFingerprints), minus `unsafe`, whose value stays nil and is therefore rejected at runtime.
+ * Pinned source: xray-core v26.10.29, commit 0afec66085a85191e9dd2a4a6646c7c9a94688d1.
+ */
+class TlsFingerprintTest {
+
+    @Test
+    fun `the allow list matches the pinned core`() {
+        // 62 = 11 preset (12 minus unsafe) + 11 modern + 40 other, de-duplicated.
+        assertTrue("expected 62 names, got ${TlsFingerprint.VALID.size}", TlsFingerprint.VALID.size == 62)
+    }
+
+    @Test
+    fun `browser presets are accepted`() {
+        listOf("chrome", "firefox", "safari", "ios", "android", "edge", "random", "randomized")
+            .forEach { assertTrue("$it must be accepted", TlsFingerprint.isValid(it)) }
+    }
+
+    @Test
+    fun `unsafe is refused because the core never assigns it a value`() {
+        assertFalse(TlsFingerprint.isValid("unsafe"))
+    }
+
+    @Test
+    fun `an unknown name is refused`() {
+        assertFalse(TlsFingerprint.isValid("chrome_999"))
+        assertFalse(TlsFingerprint.isValid(""))
+        assertFalse(TlsFingerprint.isValid("CHROME"))
+    }
+
+    @Test
+    fun `core accepted but discouraged names are still formally valid`() {
+        // These resolve in the pinned core, so rejecting them would reject a bundle the core accepts.
+        assertTrue(TlsFingerprint.isValid("hellogolang"))
+        assertTrue(TlsFingerprint.isValid("hellofirefox_55"))
+        assertFalse("golang is valid but must not be recommended", TlsFingerprint.isRecommended("hellogolang"))
+    }
+
+    @Test
+    fun `recommended set is a subset of the valid set`() {
+        assertTrue(TlsFingerprint.VALID.containsAll(TlsFingerprint.RECOMMENDED))
+        assertTrue(TlsFingerprint.RECOMMENDED.contains("chrome"))
+    }
+}

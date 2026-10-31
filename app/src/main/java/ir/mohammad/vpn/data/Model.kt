@@ -3,6 +3,7 @@ package ir.mohammad.vpn.data
 import android.content.Context
 import ir.mohammad.vpn.BuildConfig
 import ir.mohammad.vpn.core.MtuPolicy
+import ir.mohammad.vpn.core.TlsFingerprint
 import org.json.JSONObject
 import javax.crypto.Cipher
 import javax.crypto.SecretKeyFactory
@@ -28,6 +29,8 @@ data class Profile(
     val awg: JSONObject?,
     /** Optional per-profile override; null means "use the bundle default". SPEC MTU-1. */
     val mtu: Int? = null,
+    /** uTLS ClientHello to present. Required whenever `security` is tls or reality. SPEC TLS-2. */
+    val fingerprint: String? = null,
 )
 
 /** Decrypted operator bundle plus its defaults. */
@@ -170,15 +173,18 @@ object OperatorBundleLoader {
                 null
             }
 
+            val profileFingerprint = o.optString("fingerprint").takeIf { it.isNotBlank() }
+
             val xray = o.optJSONObject("xray")
             val awg = o.optJSONObject("awg")
             if (core == "XRAY") {
                 if (xray == null) throw BundleException("xray outbound missing")
                 validateXray(protocol, xray)
+                validateTransport(xray, profileFingerprint)
             }
             if (core == "AMNEZIAWG" && awg == null) throw BundleException("awg settings missing")
 
-            result.add(Profile(id, name, protocol, core, host, port, xray, awg, profileMtu))
+            result.add(Profile(id, name, protocol, core, host, port, xray, awg, profileMtu, profileFingerprint))
         }
 
         val defaultId = root.optString("defaultProfileId").takeIf { it.isNotBlank() }
@@ -193,6 +199,42 @@ object OperatorBundleLoader {
         val geoipUrl = geo?.optString("geoip")?.takeIf { it.isNotBlank() } ?: DEFAULT_GEOIP_URL
 
         return OperatorBundle(result, defaultId, dns, mtu, tunIpv6, tunIndex, geositeUrl, geoipUrl)
+    }
+
+    /**
+     * SPEC TLS-2, TLS-3, TLS-6.
+     *
+     * A profile that turns on TLS without naming a fingerprint silently inherits Go's default
+     * ClientHello, which no browser produces. That is a validation error here rather than a silent
+     * default, because a silent default is how the app ended up emitting the loud one.
+     */
+    private fun validateTransport(xray: JSONObject, profileFingerprint: String?) {
+        val stream = xray.optJSONObject("streamSettings")
+        val security = stream?.optString("security", "none")?.lowercase() ?: "none"
+
+        if (security !in setOf("none", "tls", "reality")) {
+            throw BundleException("unsupported security: $security")
+        }
+        if (security == "none") {
+            if (profileFingerprint != null) {
+                throw BundleException("fingerprint requires security tls or reality")
+            }
+            return
+        }
+        if (security == "reality" && stream?.optJSONObject("realitySettings") == null) {
+            throw BundleException("realitySettings missing for security=reality")
+        }
+
+        val fromSettings = when (security) {
+            "tls" -> stream?.optJSONObject("tlsSettings")?.optString("fingerprint")
+            else -> stream?.optJSONObject("realitySettings")?.optString("fingerprint")
+        }?.takeIf { it.isNotBlank() }
+
+        val effective = profileFingerprint ?: fromSettings
+            ?: throw BundleException("fingerprint missing for security=$security")
+        if (!TlsFingerprint.isValid(effective)) {
+            throw BundleException("unsupported fingerprint: $effective")
+        }
     }
 
     /** Only the Xray-accepted subset is allowed for Hysteria2 (SPEC FR-29). */

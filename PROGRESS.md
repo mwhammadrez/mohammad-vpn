@@ -1,7 +1,7 @@
 # PROGRESS.md — Mohammad (`ir.mohammad.vpn`)
 
 **Last updated:** 2026-10-31 (UTC)
-**Current phase:** M1 complete → M2 not started
+**Current phase:** M2 complete → M3 not started
 **Current release:** 0.11.2 (versionCode 29)
 
 > **Correction notice (2026-10-31).** This file was frozen at Phase 1 ("no application code exists
@@ -18,7 +18,7 @@
 |---|---|---|---|---|
 | M0 | Harness correction | ✅ done | green | gates + AC→test mapping + `BundleLoadTest` fixture |
 | M1 | MTU / MSS / `sockopt` | ✅ done | green | config verified; device behaviour NOT VERIFIED |
-| M2 | uTLS fingerprint | ⬜ not started | — | cheapest detection win |
+| M2 | uTLS fingerprint | ✅ done | green | allow-list from the pinned core |
 | M3 | REALITY + Vision | ⬜ not started | — | ships together with M4 |
 | M4 | State machine + path policy | ⬜ not started | — | largest milestone |
 | M5 | Pre-flight netcheck | ⬜ not started | — | measurement, not guesswork |
@@ -43,7 +43,7 @@ SDK 36, NDK 28.2.13676358, Go 1.27.3, 3 GiB RAM, **no device, no `/dev/kvm`**.
 |---|---|---:|---|
 | Version | `./gradlew --version` | 0 | Gradle 8.14.6, JVM 17.0.21, Kotlin 2.0.21 |
 | Clean build | `./gradlew clean :app:assembleDebug` | 0 | `app-debug.apk` **14.3 MB** (limit 20) |
-| Unit | `./gradlew :app:testDebugUnitTest` | 0 | **119 tests, 119 passed, 0 skipped** (after M1) |
+| Unit | `./gradlew :app:testDebugUnitTest` | 0 | **138 tests, 138 passed, 0 skipped** (after M2) |
 | Lint | `./gradlew :app:lintDebug` | 0 | **0 errors, 15 warnings** |
 | Placeholder | `./scripts/check-no-placeholders` | 0 | `No banned markers found` |
 | APK size | `./scripts/apk-size-check` | 0 | 14.3 MB, within 20 MB |
@@ -108,6 +108,19 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
   must exist in sources or be planned. It caught two AC rows with shorthand instead of a command.
 - Gate: **100/100 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
 
+### 2026-10-31 · M2 — uTLS fingerprint (0.13.0)
+- `core/TlsFingerprint`: 62-name allow-list **parsed from the pinned Xray source**
+  (`transport/internet/tls/tls.go`), not from documentation; `unsafe` excluded because the core never
+  assigns it a value (D-69).
+- `Profile.fingerprint` added (additive). Validation: required for `tls`/`reality`, rejected when
+  `security: none`, checked against the allow-list; `reality` now requires a `realitySettings` object
+  (D-70, D-71).
+- `XrayConfig` writes the profile-level fingerprint into `tlsSettings` or `realitySettings`.
+- `golden/security-none.json` captured from the **M1** build first; the golden test proves M2 changed
+  zero bytes for existing profiles (D-72).
+- Gate: **138/138 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
+- **NOT VERIFIED:** whether the new ClientHello actually survives a specific ISP's classifier.
+
 ### 2026-10-31 · M1 — MTU / MSS / `sockopt` (0.12.0)
 - `core/MtuPolicy`: resolution profile → bundle → **1400**, strict 1200–1500 validation, `segmentSize`,
   and the `mtu resolved:` diagnostic line. 8 tests.
@@ -132,9 +145,10 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
 
 ## Next action
 
-**M2 — uTLS fingerprint (0.13.0).** Awaiting operator approval. Scope: TLS-2, TLS-7, AC-9, AC-11.
-`fingerprint` becomes required whenever `security` is `tls` or `reality`, validated against the
-allow-list of the pinned core; a golden test keeps `security:none` output byte-identical.
+**M3 — REALITY + XTLS Vision (0.14.0).** Awaiting operator approval. Scope: TLS-1, TLS-3, TLS-4,
+TLS-5, CFG-3, AC-8, AC-10. Full `realitySettings` validation (`serverName`, `publicKey`, `shortId`),
+`xtls-rprx-vision` flow only with REALITY, and a hard rejection of REALITY + `finalmask.fragment`.
+Release note must state that M3 ships together with M4's fallback (D-49).
 
 ## Known blockers
 

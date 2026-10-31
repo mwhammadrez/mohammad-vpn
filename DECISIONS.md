@@ -466,3 +466,45 @@ belongs to M5 (pre-flight netcheck), which is the only place allowed to lower th
 Doing it now would add a probe before there is a policy to cache or bound it.
 Consequence: MTU-1…MTU-8 are verified as *configuration*, not as *behaviour*; the device register in
 `SPEC.md §11` keeps "effective MTU on a real Iranian mobile path" as `NOT VERIFIED`.
+
+## D-69 — The fingerprint allow-list is generated from the pinned core, not from docs
+**Date:** 2026-10-31 · **Source:** M2; xray-core v26.10.29 @ 0afec66
+`TlsFingerprint.VALID` is exactly the set of names `GetFingerprint` can resolve in
+`transport/internet/tls/tls.go`: `PresetFingerprints` + `ModernFingerprints` + `OtherFingerprints`,
+de-duplicated — **62 names**. It was produced by parsing the pinned source, not transcribed from
+xtls.github.io, which lists only the twelve GUI presets.
+`unsafe` is deliberately excluded: it is a key of `PresetFingerprints` whose value stays `nil` because
+`init()` never assigns it, so the core rejects it at connect time. Accepting it in validation would
+only move the failure later, where it looks like a network problem.
+Consequence: `hellogolang` and the `hello*_55` family are formally valid. Rejecting them would reject a
+bundle the core accepts, so they are allowed but not in `RECOMMENDED`.
+Maintenance: the list goes stale when the core is re-pinned. Regeneration is a scripted parse of the
+same file; the pin lives in D-08.
+
+## D-70 — A fingerprint is mandatory, and a profile-level value wins
+**Date:** 2026-10-31 · **Source:** M2, SPEC TLS-2
+`security ∈ {tls, reality}` without an effective fingerprint is a `BundleException`, never a silent
+default. The effective value is `profile.fingerprint` if present, otherwise
+`tlsSettings.fingerprint` / `realitySettings.fingerprint` from the transport JSON.
+A profile-level `fingerprint` with `security: none` is rejected as meaningless rather than ignored:
+silently dropping operator intent is the same defect class as silently substituting a default.
+The renderer writes a profile-level value into the matching settings block, so one field changes the
+ClientHello without hand-editing transport JSON.
+
+## D-71 — `security: reality` requires a `realitySettings` object at parse time
+**Date:** 2026-10-31 · **Source:** M2, pre-empting SPEC TLS-3
+M2 only renders a fingerprint, but accepting `security: reality` with no settings block would emit
+`"realitySettings": {"fingerprint": …}` — a config the core cannot use, discovered on a device rather
+than in a test. The parser now requires the block to exist. Full field validation
+(`serverName`, `publicKey`, `shortId`) is M3.
+
+## D-72 — The `security:none` golden is byte-for-byte and is not a snapshot
+**Date:** 2026-10-31 · **Source:** M2, SPEC TLS-6 / AC-11
+`app/src/test/resources/golden/security-none.json` was captured from the **M1** build before any M2
+change and is compared with `assertEquals` against the full rendered string. It is the proof that M2
+did not perturb the path every installed user is on today.
+It is not a Roborazzi-style snapshot: there is no "record" mode in the gate. Regenerating it requires
+changing the file by hand and justifying the diff here.
+Known limitation: `org.json` backs `JSONObject` with a hash map, so key order is stable for a given
+JDK and library version but not guaranteed across upgrades. If a JDK bump reorders keys, regenerate and
+record why — do not loosen the assertion to a structural comparison without a decision.

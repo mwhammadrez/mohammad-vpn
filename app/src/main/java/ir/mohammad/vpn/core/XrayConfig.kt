@@ -96,6 +96,23 @@ object XrayConfig {
      *
      * Every field is merged, never overwritten: an explicit operator value wins.
      */
+    /**
+     * SPEC TLS-2. A profile-level fingerprint wins over whatever the settings block carries, so the
+     * operator can change it in one place without editing the transport JSON.
+     */
+    private fun applyFingerprint(outbound: JSONObject, profile: Profile) {
+        val fingerprint = profile.fingerprint ?: return
+        val stream = outbound.optJSONObject("streamSettings") ?: return
+        when (stream.optString("security", "none").lowercase()) {
+            "tls" -> stream
+                .optJSONObject("tlsSettings")
+                ?.put("fingerprint", fingerprint)
+            "reality" -> stream
+                .optJSONObject("realitySettings")
+                ?.put("fingerprint", fingerprint)
+        }
+    }
+
     private fun applySockopt(outbound: JSONObject, mtu: Int) {
         val stream = outbound.optJSONObject("streamSettings")
             ?: JSONObject().also { outbound.put("streamSettings", it) }
@@ -120,6 +137,7 @@ object XrayConfig {
     ): String {
         val outbound = JSONObject(profile.xray.toString()).apply { put("tag", "proxy") }
         applyTuning(outbound, tuning)
+        applyFingerprint(outbound, profile)
         applySockopt(outbound, mtu)
 
         val sniffOverride = JSONArray().put("http").put("tls")
