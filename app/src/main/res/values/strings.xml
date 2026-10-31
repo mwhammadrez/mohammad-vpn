@@ -32,4 +32,15 @@
     <string name="surface_desc_connected">Mohammad is connected. Tap to disconnect.</string>
     <string name="surface_desc_disconnecting">Mohammad is closing the tunnel.</string>
     <string name="surface_desc_failed">Mohammad is not connected. Tap to try again.</string>
+
+    <!-- Persistent notification. State words and byte totals only: no endpoint may appear here. -->
+    <string name="notif_title_idle">Not connected</string>
+    <string name="notif_title_connecting">Connecting…</string>
+    <string name="notif_title_connected">Connected</string>
+    <string name="notif_title_disconnecting">Disconnecting…</string>
+    <string name="notif_title_failed">Not connected</string>
+    <string name="notif_title_paused">Paused</string>
+    <string name="notif_action_disconnect">Disconnect</string>
+    <string name="notif_action_pause">Pause</string>
+    <string name="notif_action_resume">Resume</string>
 </resources>

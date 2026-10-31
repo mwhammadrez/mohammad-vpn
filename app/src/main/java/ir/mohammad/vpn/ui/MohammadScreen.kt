@@ -59,6 +59,8 @@ import androidx.compose.ui.unit.sp
 import ir.mohammad.vpn.data.LogEntry
 import ir.mohammad.vpn.data.Profile
 import ir.mohammad.vpn.data.TunnelError
+import ir.mohammad.vpn.data.ByteFormat
+import ir.mohammad.vpn.data.TrafficSnapshot
 import ir.mohammad.vpn.data.TunnelState
 import ir.mohammad.vpn.ui.theme.Chakra
 import ir.mohammad.vpn.ui.theme.ChakraSemi
@@ -73,7 +75,7 @@ import kotlin.math.sin
 @Composable
 fun MohammadScreen(
     state: TunnelState,
-    traffic: Pair<Long, Long>,
+    traffic: TrafficSnapshot,
     logs: List<LogEntry>,
     profiles: List<Profile>,
     selected: Profile?,
@@ -101,8 +103,13 @@ fun MohammadScreen(
             while (true) {
                 delay(1_000)
                 val now = latest.value
-                down.add(((now.second - last.second).coerceAtLeast(0)) / 1024f)
-                up.add(((now.first - last.first).coerceAtLeast(0)) / 1024f)
+                if (now.available && last.available) {
+                    down.add(((now.down - last.down).coerceAtLeast(0)) / 1024f)
+                    up.add(((now.up - last.up).coerceAtLeast(0)) / 1024f)
+                } else {
+                    down.add(0f)
+                    up.add(0f)
+                }
                 if (down.size > 28) down.removeAt(0)
                 if (up.size > 28) up.removeAt(0)
                 last = now
@@ -195,7 +202,7 @@ private fun Header() {
 /* -------------------------------------------------------------------- hero */
 
 @Composable
-private fun Hero(state: TunnelState, profile: Profile?, traffic: Pair<Long, Long>, onToggle: () -> Unit) {
+private fun Hero(state: TunnelState, profile: Profile?, traffic: TrafficSnapshot, onToggle: () -> Unit) {
     val accent = statusColor(state)
     Glass(shape = 26.dp, border = accent.copy(alpha = 0.28f)) {
         BoxWithConstraints {
@@ -227,7 +234,8 @@ private fun Hero(state: TunnelState, profile: Profile?, traffic: Pair<Long, Long
                     softWrap = false,
                 )
                 Text(
-                    "↓ ${human(traffic.second)}   ↑ ${human(traffic.first)}",
+                    "↓ ${ByteFormat.format(traffic, downlink = true)}   " +
+                        "↑ ${ByteFormat.format(traffic, downlink = false)}",
                     fontFamily = Chakra,
                     fontSize = 11.sp,
                     color = Palette.TextSecondary,
@@ -408,15 +416,15 @@ private fun DialCanvas(connected: Boolean, busy: Boolean, accent: Color, phaseNo
 /* ------------------------------------------------------------------- bento */
 
 @Composable
-private fun Bento(down: List<Float>, up: List<Float>, traffic: Pair<Long, Long>) {
+private fun Bento(down: List<Float>, up: List<Float>, traffic: TrafficSnapshot) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             SpeedTile("DOWNLOAD", down, Palette.Mint, Modifier.weight(1f), up = false)
             SpeedTile("UPLOAD", up, Palette.Violet, Modifier.weight(1f), up = true)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            TotalTile("DOWNLOADED", traffic.second, Palette.Mint, Modifier.weight(1f))
-            TotalTile("UPLOADED", traffic.first, Palette.Violet, Modifier.weight(1f))
+            TotalTile("DOWNLOADED", traffic.down, traffic.available, Palette.Mint, Modifier.weight(1f))
+            TotalTile("UPLOADED", traffic.up, traffic.available, Palette.Violet, Modifier.weight(1f))
         }
     }
 }
@@ -491,21 +499,22 @@ private fun Sparkline(samples: List<Float>, accent: Color, modifier: Modifier) {
 }
 
 @Composable
-private fun TotalTile(label: String, bytes: Long, accent: Color, modifier: Modifier) {
-    val gb = bytes / 1_073_741_824.0
+private fun TotalTile(label: String, bytes: Long, available: Boolean, accent: Color, modifier: Modifier) {
+    val (value, unit) = if (available) ByteFormat.split(bytes) else "—" to ""
+    val gb = if (available) bytes / 1_073_741_824.0 else 0.0
     Glass(modifier = modifier, shape = 20.dp) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(label, fontFamily = ChakraSemi, fontSize = 10.sp, letterSpacing = 1.4.sp, color = Palette.TextSecondary)
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
-                    String.format(Locale.US, "%.2f", gb),
+                    value,
                     fontFamily = ChakraSemi,
                     fontWeight = FontWeight.Bold,
                     fontSize = 21.sp,
                     color = Palette.TextPrimary,
                 )
                 Spacer(Modifier.width(4.dp))
-                Text("GB", fontFamily = Chakra, fontSize = 9.sp, color = Palette.TextMuted)
+                Text(unit, fontFamily = Chakra, fontSize = 9.sp, color = Palette.TextMuted)
             }
             Box(
                 Modifier
@@ -838,13 +847,6 @@ private fun errorText(reason: TunnelError): String = when (reason) {
     TunnelError.NetworkUnavailable -> "Waiting for the network"
     TunnelError.PingFailed -> "Ping failed"
     TunnelError.ConfigUnhealthy -> "The tunnel is up but the config answers nothing"
-}
-
-private fun human(bytes: Long): String = when {
-    bytes < 1024 -> "$bytes B"
-    bytes < 1_048_576 -> String.format(Locale.US, "%.1f KB", bytes / 1024.0)
-    bytes < 1_073_741_824 -> String.format(Locale.US, "%.1f MB", bytes / 1_048_576.0)
-    else -> String.format(Locale.US, "%.2f GB", bytes / 1_073_741_824.0)
 }
 
 @Composable

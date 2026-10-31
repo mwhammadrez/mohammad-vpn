@@ -263,7 +263,26 @@ it is testable on the JVM without a device. Android types stay out of policy cod
 | FR-W9 | Both surfaces depend on a projection (`SurfaceState`), never on the state machine directly, so M4's ten states require no change in `widget/` or `tile/`. |
 | FR-W10 | No new Android permission is requested for either surface. |
 
-### 5.14 AmneziaWG (AWG) — `NOT VERIFIED`
+### 5.14 Tile reliability, notification and telemetry (FR-N) — milestone M4-N
+
+| ID | Requirement |
+|---|---|
+| FR-N1 | The tile reflects the real state within one second of any transition: it is pushed from the shared state flow, not only from `onStartListening`, and a bounded staleness refresh (5 s) covers a missed callback. |
+| FR-N2 | A tile tap connects or disconnects through the same entry point as the dial. |
+| FR-N3 | The tile survives process death: a cold process renders the persisted selection instead of "unavailable", and a missed state is pushed on the next listen. |
+| FR-N4 | While a tunnel is active the persistent notification shows the state and live download/upload totals, refreshed at least once per second from the same poll as the in-app tiles. |
+| FR-N5 | The notification offers Disconnect, and it uses the same intent as the dial. |
+| FR-N6 | The notification offers Pause/Resume; pause stops the tunnel and keeps the service and notification alive with a Resume action (see D-90 for why this is the fallback rather than a half-stopped bridge). |
+| FR-N7 | The in-app download tile shows a real, unit-adaptive value when traffic flows. |
+| FR-N8 | The in-app upload tile does the same, from its own field. |
+| FR-N9 | Download and upload are counted separately and never swapped. |
+| FR-N10 | Counters reset when a new session starts and never inherit the previous session's totals; a counter that goes backwards is treated as a reset, never as negative traffic. |
+| FR-N11 | No endpoint, host, UUID, publicKey or shortId appears in the notification, the tile, the widget, telemetry values or their logs. |
+| FR-N12 | The test count never decreases. |
+| FR-N13 | `docs/RESEARCH_TILE_NOTIFICATION_TELEMETRY.md` exists with at least 15 sourced findings. |
+| FR-N14 | When the counter source is unavailable the UI shows `—`, never a fabricated `0`. |
+
+### 5.15 AmneziaWG (AWG) — `NOT VERIFIED`
 
 | ID | Requirement |
 |---|---|
@@ -478,6 +497,20 @@ Every AC names a test class that exists today or is created by the milestone in 
 | AC-35 | placeholder ban | static | `./scripts/check-no-placeholders` | exit 0, no skipped tests | every |
 | AC-36 | build | build | `./gradlew clean :app:assembleDebug` | exit 0 | every |
 | AC-37 | AWG-4 | docs | `grep -R "AmneziaWG.*NOT VERIFIED" README.md docs` | match found | every |
+| AC-N1 | FR-N1 | unit | `--tests "*TileStateSyncTest"` | one push per distinct state; listen always pushes | M4-N |
+| AC-N2 | FR-N2 | integration | `--tests "*TileInteractionTest"` | tile toggles through the shared controller | M4-N |
+| AC-N3 | FR-N3 | Robolectric | `--tests "*SurfaceColdStartTest"` | cold process: tile inactive from persisted profile | M4-N |
+| AC-N4 | FR-N4 | Robolectric | `--tests "*NotificationContentTest"` | title and both volumes; updates per snapshot | M4-N |
+| AC-N5 | FR-N5 | Robolectric | `--tests "*NotificationActionTest"` | Disconnect targets ACTION_DISCONNECT | M4-N |
+| AC-N6 | FR-N6 | Robolectric | `--tests "*NotificationActionTest"` | Pause/Resume swap with the paused flag | M4-N |
+| AC-N7 | FR-N7 | UI | `--tests "*TelemetryTileTest"` | downloaded tile renders a real value | M4-N |
+| AC-N8 | FR-N8 | UI | `--tests "*TelemetryTileTest"` | uploaded tile renders its own value | M4-N |
+| AC-N9 | FR-N9 | unit | `--tests "*TelemetryCounterTest"` | deltas separate, not swapped | M4-N |
+| AC-N10 | FR-N10 | unit | `--tests "*TelemetryCounterTest"` | reset on new connection; no negative delta | M4-N |
+| AC-N11 | FR-N11 | static | `--tests "*SecretLeakTest"` | notification, surfaces and telemetry carry no endpoint | M4-N |
+| AC-N12 | FR-N12 | static | `--tests "*AcTraceabilityTest"` | test count never decreases | every |
+| AC-N13 | FR-N13 | static | `--tests "*ResearchDocTest"` | document exists with ≥15 sourced findings | M4-N |
+| AC-N14 | FR-N14 | unit | `--tests "*TelemetryCounterTest"` | unavailable shows an em dash | M4-N |
 | AC-W1 | FR-W1 | UI | `--tests "*SurfaceStateMapperTest"` | every state maps to one surface state | M4-W |
 | AC-W2 | FR-W3 | integration | `--tests "*WidgetInteractionTest"` | widget tap attaches the shared toggle intent | M4-W |
 | AC-W3 | FR-W2 | unit | `--tests "*TileStateMapperTest"` | only CONNECTED is active; unusable states are unavailable | M4-W |

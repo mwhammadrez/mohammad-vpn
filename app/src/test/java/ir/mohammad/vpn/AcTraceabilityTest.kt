@@ -33,7 +33,7 @@ class AcTraceabilityTest {
 
     @Test
     fun everyAcceptanceCriterionHasACommandAndANumberedRow() {
-        val rows = Regex("""^\|\s*(AC-(?:W)?\d+)\s*\|""", RegexOption.MULTILINE)
+        val rows = Regex("""^\|\s*(AC-(?:[WN])?\d+)\s*\|""", RegexOption.MULTILINE)
             .findAll(spec).map { it.groupValues[1] }.toList()
 
         assertTrue("SPEC.md must declare at least 30 acceptance criteria", rows.size >= 30)
@@ -71,7 +71,7 @@ class AcTraceabilityTest {
 
     @Test
     fun everyAcceptanceCriterionNamesAnOwningMilestone() {
-        val milestoneColumn = Regex("""^\|\s*AC-(?:W)?\d+\s*\|.*\|\s*([A-Za-z0-9-]+)\s*\|$""", RegexOption.MULTILINE)
+        val milestoneColumn = Regex("""^\|\s*AC-(?:[WN])?\d+\s*\|.*\|\s*([A-Za-z0-9-]+)\s*\|$""", RegexOption.MULTILINE)
             .findAll(spec)
             .map { it.groupValues[1] }
             .toList()

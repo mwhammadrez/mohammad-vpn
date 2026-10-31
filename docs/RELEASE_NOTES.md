@@ -5,6 +5,36 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.14.2 — tile reliability, live notification, working telemetry (M4-N)
+
+Three reported defects, fixed at the cause.
+
+### Fixed
+- **Quick-settings tile sometimes stayed inactive after connecting.** The tile only refreshed when the
+  shade opened, so a state change made while the shade was closed was never shown. It now updates from
+  the same state stream as the app, immediately, with a five-second safety refresh.
+- **The in-app download/upload tiles looked empty.** The counters were correct; the display rounded
+  5 MB to "0.00 GB". Values now pick their own unit ("5.0 MB", "1.2 GB"), and show "—" when the
+  counters cannot be read instead of a misleading zero.
+- **Totals carried over between sessions.** They reset when a new connection starts.
+
+### Added
+- A persistent notification with the real state, live download/upload totals updated every second, and
+  two actions: Disconnect, and Pause/Resume.
+- Pause disconnects the tunnel and keeps the notification with a Resume button. A true "stop forwarding
+  but keep the tunnel" pause would need a data-path change that cannot be verified without a device, so
+  it is deliberately not shipped (D-90).
+
+### Unchanged
+- No new permissions; the APK still requests the same five.
+- No change to the data path, MTU, REALITY handling or validation.
+- English only.
+
+### Not verified
+- Shade rendering, notification swipe behaviour and Doze: no device in this workspace.
+
+---
+
 ## 0.14.1 — home-screen widget and quick-settings tile (M4-W)
 
 Adds two ways to connect without opening the app. **No change to VPN behaviour**: the data path, MTU,

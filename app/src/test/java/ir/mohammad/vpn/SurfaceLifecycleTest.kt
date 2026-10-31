@@ -45,11 +45,11 @@ class SurfaceLifecycleTest {
         val controller = Robolectric.buildService(MohammadTileService::class.java)
         val service = controller.create().get()
 
-        assertFalse("must not claim to listen before the platform asks", service.isListening())
+        assertFalse("must not claim to listen before the platform asks", service.isListeningNow())
         service.onStartListening()
-        assertTrue(service.isListening())
+        assertTrue(service.isListeningNow())
         service.onStopListening()
-        assertFalse("a stopped tile must not stay subscribed", service.isListening())
+        assertFalse("a stopped tile must not stay subscribed", service.isListeningNow())
         // onDestroy() is not called: Robolectric's ShadowTileService cannot be cast to ShadowService
         // while tearing the service down. The leak guarantee under test is the listening flag.
     }
@@ -61,7 +61,7 @@ class SurfaceLifecycleTest {
 
         service.onTileAdded()
         service.onTileRemoved()
-        assertFalse(service.isListening())
+        assertFalse(service.isListeningNow())
     }
 
     @Test

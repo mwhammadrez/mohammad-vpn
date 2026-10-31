@@ -682,3 +682,51 @@ consent and a saved profile" without stubbing `VpnService.prepare`, which Robole
 faithfully.
 This is constructor-style injection, not test logic in production: the defaults are the real path and
 only tests pass arguments.
+
+## D-90 — Pause stops the tunnel; it does not half-stop the bridge
+**Date:** 2026-10-31 · **Source:** M4-N Part 2, "or fully disconnects if pause is not feasible"
+A true pause would keep the TUN and the core alive and stop only the forwarding step. That means
+stopping and restarting `TunBridge` mid-session on a live descriptor — a data-path change that cannot be
+verified without a device, in a project whose worst incident (0.7.0) was exactly an unverified data-path
+change. The service therefore disconnects the tunnel on Pause, stays in the foreground, and keeps the
+notification with a Resume action and the totals frozen at their last value.
+Cost: battery is spent on a foreground service with no tunnel. Benefit: no unverifiable networking
+change, and Resume is one tap.
+Revisit only with a device harness that can prove a bridge restart does not leak the fd or drop routes.
+
+## D-91 — Tile sync: dedupe, force on listen, bounded staleness refresh
+**Date:** 2026-10-31 · **Source:** AC-N1; research findings 1.1–1.5
+`TileSyncController` pushes a state once per distinct value, always on `onStartListening`, and on a 5 s
+`forceRefresh` while listening. The service reference is a `WeakReference` in an `AtomicReference` and is
+cleared in `onStopListening`/`onTileRemoved`, so the platform can destroy the service at will.
+Why not update from `requestListeningState` alone: the platform may coalesce or defer it, which is
+exactly the reported "connected but not blue" symptom.
+Why a 5 s refresh is not polling: it re-renders a cached value, it does not read the network or the core.
+
+## D-92 — One snapshot object feeds every surface
+**Date:** 2026-10-31 · **Source:** research 2.4/2.5
+`VpnNotifier.build(state, traffic, paused)` reads its three inputs once and produces an immutable
+notification. The in-app tiles read the same `TrafficSnapshot`. No surface computes its own text.
+
+## D-93 — The telemetry bug was formatting, not counting
+**Date:** 2026-10-31 · **Source:** M4-N Part 3 investigation
+The counters were correct end to end: Xray records `outbound>>>proxy>>>traffic>>>uplink|downlink`, the
+bridge reads them with `GetFeature(stats.ManagerType())`, and the service polled them every 2 s. The
+screen divided by 1 GiB and printed `%.2f GB`, so anything under ~5 MB rendered as `0.00 GB` — which
+reads as "nothing happened".
+`ByteFormat` now picks the unit by magnitude and keeps the rounding stable. The 2 s poll became 1 s so
+the notification can honour its "once per second" promise from the same read.
+No native change was needed; the earlier hypothesis "stats not wired from native" was wrong and is
+recorded here so it is not re-investigated.
+
+## D-94 — "Unavailable" is a value, not a sentinel
+**Date:** 2026-10-31 · **Source:** FR-N14, research 4.4
+`TrafficSnapshot.available` distinguishes "the core is gone" from "zero bytes so far". The UI and the
+notification show `—` for the former. A failed counter read sets it; a successful read clears it.
+
+## D-95 — One existing test fixture was renamed
+**Date:** 2026-10-31 · **Source:** M4-N UI change
+`UiInteractionTest` addressed a profile by its display name `"B"`. Once the telemetry tile gained a
+`B` unit label, the matcher found three nodes and the test failed — correctly, because the query became
+ambiguous. The fixture is now `"Beta"`; the assertion (the selected profile id) is unchanged. Logged
+because test edits require a record, even cosmetic ones.

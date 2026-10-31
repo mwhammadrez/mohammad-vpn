@@ -1,7 +1,7 @@
 # PROGRESS.md — Mohammad (`ir.mohammad.vpn`)
 
 **Last updated:** 2026-10-31 (UTC)
-**Current phase:** M4-W complete → M4 not started
+**Current phase:** M4-N complete → M4 not started
 **Current release:** 0.11.2 (versionCode 29)
 
 > **Correction notice (2026-10-31).** This file was frozen at Phase 1 ("no application code exists
@@ -21,6 +21,7 @@
 | M2 | uTLS fingerprint | ✅ done | green | allow-list from the pinned core |
 | M3 | REALITY + Vision | ✅ done | green | ships together with M4 (D-49) |
 | M4-W | Widget + quick-settings tile | ✅ done | green | two system surfaces, one entry point |
+| M4-N | Tile reliability, notification, telemetry | ✅ done | green | three defects fixed, one surface added |
 | M4 | State machine + path policy | ⬜ not started | — | largest milestone |
 | M5 | Pre-flight netcheck | ⬜ not started | — | measurement, not guesswork |
 | M6 | Second path (WS+TLS via CDN) | ⬜ not started | — | resilience to IP death |
@@ -108,6 +109,18 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
 - `AcTraceabilityTest` added: every AC must have a runnable command, and every referenced test class
   must exist in sources or be planned. It caught two AC rows with shorthand instead of a command.
 - Gate: **100/100 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
+
+### 2026-10-31 · M4-N — tile reliability, notification, telemetry
+- Research first: `docs/RESEARCH_TILE_NOTIFICATION_TELEMETRY.md`, 21 findings with sources.
+- **Tile**: `TileSyncController` (one push per distinct state, forced render on listen, 5 s staleness
+  refresh), weak reference cleared on stop. Root cause: it only rendered from `onStartListening`.
+- **Notification**: `VpnNotifier` — state, both byte totals, Disconnect, Pause/Resume; one immutable
+  snapshot; 1 Hz from the same poll as the UI. Pause = documented disconnect + Resume (D-90).
+- **Telemetry**: the counters were never broken — `%.2f GB` printed 5 MB as `0.00 GB` (D-93).
+  `ByteFormat` is unit-adaptive, `TrafficSnapshot.available` distinguishes zero from unknown, and the
+  counters reset per session.
+- Gate: **263/263 tests, lint 0 errors / 15 warnings, placeholder exit 0.**
+- **NOT VERIFIED:** shade behaviour, notification swiping, Doze — all need a device.
 
 ### 2026-10-31 · M4-W — widget + quick-settings tile
 - `surfaces/`: `SurfaceState` (7 projections), `SurfaceStateMapper`, `TileStateMapper`, `TunnelController`

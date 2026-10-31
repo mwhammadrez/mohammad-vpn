@@ -87,10 +87,29 @@ class SurfaceColdStartTest {
     }
 
     @Test
+    fun `AC-N3 - after process death the tile is inactive, not unavailable`() {
+        prefs.edit().putString("selected_profile", "p1").commit()
+
+        val state = SurfaceStore.currentState(context, permissionGranted = true)
+        assertEquals(SurfaceState.IDLE, state)
+        assertEquals(
+            android.service.quicksettings.Tile.STATE_INACTIVE,
+            ir.mohammad.vpn.surfaces.TileStateMapper.statusFor(state),
+        )
+        assertEquals(state, SurfaceStateMapperSafe.mapForTile(context))
+    }
+
+    @Test
     fun `a tunnel that died with the process is not reported as connected`() {
         prefs.edit().putString("selected_profile", "p1").commit()
         // Process restart: state is whatever the fresh process defaults to.
         assertEquals(TunnelState.Disconnected, Tunnel.state.value)
         assertEquals(SurfaceState.IDLE, SurfaceStore.currentState(context, permissionGranted = true))
     }
+}
+
+/** Small indirection so the AC-N3 test can state the tile's view explicitly. */
+private object SurfaceStateMapperSafe {
+    fun mapForTile(context: Context): SurfaceState =
+        SurfaceStore.currentState(context, permissionGranted = true)
 }

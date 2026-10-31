@@ -69,11 +69,21 @@ object Tunnel {
     @Volatile
     var baselineEgressIp: String? = null
 
-    private val _traffic = MutableStateFlow(0L to 0L)
-    val traffic: StateFlow<Pair<Long, Long>> = _traffic.asStateFlow()
+    private val _traffic = MutableStateFlow(TrafficSnapshot.UNAVAILABLE)
+    val traffic: StateFlow<TrafficSnapshot> = _traffic.asStateFlow()
 
     fun updateTraffic(up: Long, down: Long) {
-        _traffic.value = up to down
+        _traffic.value = TrafficSnapshot(up = up, down = down, available = true)
+    }
+
+    /** The core is gone or the counter read failed; the UI must show "—", not zero. */
+    fun trafficUnavailable() {
+        _traffic.value = TrafficSnapshot.UNAVAILABLE
+    }
+
+    /** Called when a new session starts so the previous session's totals never leak into this one. */
+    fun resetTraffic() {
+        _traffic.value = TrafficSnapshot.ZERO
     }
 
     private val _permissionDenied = MutableStateFlow(false)

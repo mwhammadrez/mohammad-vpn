@@ -17,6 +17,7 @@ diagnostics, and M7 exists to deliver M1–M6 to installed users without a relea
 | M2 | uTLS fingerprint | #3 | 0.13.0 | quieter on the wire | no |
 | M3 | REALITY + Vision | #4 | 0.14.0 | survives protocol filtering | **yes** (survival) |
 | M4-W | Widget + quick-settings tile | — | 0.14.1 | connect from the home screen | **yes** (launcher) |
+| M4-N | Tile reliability, notification, telemetry | — | 0.14.2 | live notification, working counters | **yes** (shade) |
 | M4 | State machine + path policy | #5, #6, #7 | 0.15.0 | multi-path, honest states | no |
 | M5 | Pre-flight netcheck | #8 | 0.16.0 | fewer wrong assumptions | **yes** (measurement) |
 | M6 | Second path (WS+TLS via CDN) | #10 | 0.17.0 | works when the IP dies | **yes** (survival) |
@@ -150,6 +151,42 @@ M4's fallback — the release note must say so.
 **Rollback:** revert; v1 bundles and `security:none` still work.
 
 ---
+
+## M4-N — Tile reliability, notification and telemetry (0.14.2)
+
+**Goal.** Three reported defects and one new surface: a tile that lies about being connected, a
+notification that says nothing useful, and counters that read zero while data flows.
+
+**Covers:** FR-N1 … FR-N14, AC-N1 … AC-N14. Research: `docs/RESEARCH_TILE_NOTIFICATION_TELEMETRY.md`.
+
+**Root causes found before writing code**
+
+| Symptom | Actual cause |
+|---|---|
+| Tile stays inactive after connecting | it only rendered from `onStartListening`; a change while the shade was closed was never pushed (D-91) |
+| In-app tiles show "nothing" | not a counter bug: `%.2f GB` rendered 5 MB as `0.00 GB` (D-93) |
+| Notification is uninformative | it carried two static strings and no actions (D-92) |
+
+**Tasks**
+
+1. `TileSyncController` + weak service reference: one push per distinct state, unconditional push on
+   listen, 5 s staleness refresh, cleared on stop.
+2. `VpnNotifier`: one snapshot → one immutable notification; connection state, both totals, Disconnect
+   and Pause/Resume actions routed through `TunnelController`.
+3. `TrafficSnapshot` with an explicit `available` flag; `ByteFormat` with unit-adaptive, locale-aware
+   output; `TelemetryCounter` for deltas with reset handling.
+4. Service: 1 Hz stats poll feeding both the notification and the UI from one read; counters reset at
+   the top of every connect; `trafficUnavailable()` on a failed read.
+5. UI: adaptive units and `—` when unavailable.
+
+**Tests first:** `TileStateSyncTest`, `NotificationContentTest`, `NotificationActionTest`,
+`TelemetryCounterTest`, `TelemetryTileTest`, `SecretLeakTest`, `ResearchDocTest`.
+
+**Explicitly not done:** pause does not keep a half-stopped bridge (D-90); the ten-state machine, path
+policy and REALITY are untouched.
+
+**Rollback:** revert the M4-N commit; the notification returns to two static strings and the tile to
+`onStartListening`-only rendering.
 
 ## M4-W — Widget + quick-settings tile (0.14.1)
 

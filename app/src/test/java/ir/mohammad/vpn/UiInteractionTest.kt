@@ -44,9 +44,9 @@ class UiInteractionTest {
         compose.setContent {
             MohammadScreen(
                 state = state,
-                traffic = 0L to 0L,
+                traffic = ir.mohammad.vpn.data.TrafficSnapshot.ZERO,
                 logs = emptyList(),
-                profiles = listOf(profile(), profile("p2", "B")),
+                profiles = listOf(profile(), profile("p2", "Beta")),
                 selected = profile(),
                 pingMs = null,
                 pingBusy = false,
@@ -103,7 +103,7 @@ class UiInteractionTest {
     fun `selecting a profile reports that profile`() {
         var picked: Profile? = null
         setScreen(onSelect = { picked = it })
-        compose.onNodeWithText("B").performClick()
+        compose.onNodeWithText("Beta").performClick()
         compose.mainClock.advanceTimeBy(32)
         assertEquals("p2", picked?.id)
     }

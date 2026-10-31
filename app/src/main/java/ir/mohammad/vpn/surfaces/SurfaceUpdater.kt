@@ -30,7 +30,8 @@ object SurfaceUpdater {
         newScope.launch {
             Tunnel.state.collect {
                 MohammadWidgetProvider.updateAll(app)
-                MohammadTileService.refresh(app)
+                // Immediate push when a tile is listening; a re-listen request otherwise.
+                MohammadTileService.notifyStateChanged(app)
             }
         }
     }

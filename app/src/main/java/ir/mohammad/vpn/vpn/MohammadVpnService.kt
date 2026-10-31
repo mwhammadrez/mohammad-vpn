@@ -18,6 +18,7 @@ import ir.mohammad.vpn.core.AwgConfig
 import ir.mohammad.vpn.core.GeoAssets
 import ir.mohammad.vpn.core.MtuPolicy
 import ir.mohammad.vpn.core.RealityRules
+import ir.mohammad.vpn.notifications.VpnNotifier
 import ir.mohammad.vpn.core.TransportTuning
 import ir.mohammad.vpn.core.TunPlan
 import ir.mohammad.vpn.core.XrayConfig
@@ -47,6 +48,8 @@ class MohammadVpnService : VpnService() {
         const val ACTION_DISCONNECT = "ir.mohammad.vpn.action.DISCONNECT"
         /** Sent by the app widget and the quick-settings tile: one action, decided by the service. */
         const val ACTION_TOGGLE = "ir.mohammad.vpn.action.TOGGLE"
+        const val ACTION_PAUSE = "ir.mohammad.vpn.action.PAUSE"
+        const val ACTION_RESUME = "ir.mohammad.vpn.action.RESUME"
 
         /**
          * Resolves a toggle into a concrete action from the current state. Pure so the widget, the
@@ -61,10 +64,11 @@ class MohammadVpnService : VpnService() {
             else -> action
         }
 
-        const val CHANNEL_ID = "mohammad_tunnel"
         const val NOTIFICATION_ID = 1001
         const val CONNECT_TIMEOUT_MS = 15_000L
         const val HEALTH_INTERVAL_MS = 5_000L
+        /** One second: the notification promises a live counter and both read the same poll. */
+        const val STATS_INTERVAL_MS = 1_000L
 
         /** Probe the data path at most this often (health ticks x interval). */
         const val PROBE_EVERY_TICKS = 6
@@ -107,6 +111,7 @@ class MohammadVpnService : VpnService() {
 
     @Volatile private var generation = 0
     @Volatile private var userStopped = false
+    @Volatile private var paused = false
     @Volatile private var attempt = 0
 
     private lateinit var netMonitor: NetMonitor
@@ -132,15 +137,46 @@ class MohammadVpnService : VpnService() {
         val action = resolve(intent?.action, Tunnel.state.value)
         when (action) {
             ACTION_CONNECT -> {
-                createChannel()
-                startForeground(NOTIFICATION_ID, buildNotification("Connecting…", "Starting VPN engine"))
+                paused = false
                 userStopped = false
                 attempt = 0
+                startForeground(
+                    NOTIFICATION_ID,
+                    VpnNotifier.build(this, TunnelState.Connecting, Tunnel.traffic.value, paused = false),
+                )
+                val gen = ++generation
+                submit { connect(gen) }
+            }
+
+            // Documented fallback (D-90): pause stops the tunnel but keeps the service and the
+            // notification alive with a Resume action. A half-stopped bridge is a data-path change we
+            // cannot verify without a device, so it is deliberately not implemented.
+            ACTION_PAUSE -> {
+                paused = true
+                userStopped = true
+                cancelStatsPoll()
+                disconnectBlocking("paused by user")
+                Tunnel.trafficUnavailable()
+                VpnNotifier.post(
+                    this,
+                    VpnNotifier.build(this, Tunnel.state.value, Tunnel.traffic.value, paused = true),
+                )
+            }
+
+            ACTION_RESUME -> {
+                paused = false
+                userStopped = false
+                attempt = 0
+                startForeground(
+                    NOTIFICATION_ID,
+                    VpnNotifier.build(this, TunnelState.Connecting, Tunnel.traffic.value, paused = false),
+                )
                 val gen = ++generation
                 submit { connect(gen) }
             }
 
             ACTION_DISCONNECT -> {
+                paused = false
                 disconnectBlocking("disconnect requested")
                 stopSelf()
             }
@@ -162,6 +198,8 @@ class MohammadVpnService : VpnService() {
 
     private fun connect(gen: Int) {
         val t0 = SystemClock.elapsedRealtime()
+        // A new session never inherits the previous session's totals (AC-N10).
+        Tunnel.resetTraffic()
         Tunnel.connectTimeline = emptyList()
         fun mark(stage: String) {
             Tunnel.connectTimeline = Tunnel.connectTimeline + (stage to (SystemClock.elapsedRealtime() - t0))
@@ -202,7 +240,7 @@ class MohammadVpnService : VpnService() {
         )
 
         synchronized(lock) { Tunnel.update(TunnelState.Connecting) }
-        updateNotification("Connecting…", "Creating tunnel")
+        refreshNotification()
         armConnectTimeout(gen)
 
         val descriptor = try {
@@ -250,7 +288,7 @@ class MohammadVpnService : VpnService() {
                     reconnecting = false
                     LogStore.add("I", "NET", "RECONNECT_SUCCEEDED in ${SystemClock.elapsedRealtime() - t0} ms")
                 }
-                updateNotification("Connected", profile.name)
+                refreshNotification()
                 armHealthCheck()
                 armStatsPoll()
             }
@@ -584,8 +622,8 @@ class MohammadVpnService : VpnService() {
         statsPoll = try {
             scheduler.scheduleWithFixedDelay(
                 { submit { pollStats() } },
-                2_000L,
-                2_000L,
+                STATS_INTERVAL_MS,
+                STATS_INTERVAL_MS,
                 TimeUnit.MILLISECONDS,
             )
         } catch (e: RejectedExecutionException) {
@@ -605,12 +643,19 @@ class MohammadVpnService : VpnService() {
         runCatching { core.queryTraffic() }
             .onSuccess { traffic ->
                 val previous = Tunnel.traffic.value
-                if (traffic.uplink != previous.first || traffic.downlink != previous.second) {
+                if (traffic.uplink != previous.up || traffic.downlink != previous.down) {
                     lastTrafficAt = SystemClock.elapsedRealtime()
                 }
                 Tunnel.updateTraffic(traffic.uplink, traffic.downlink)
+                VpnNotifier.post(
+                    this,
+                    VpnNotifier.build(this, Tunnel.state.value, Tunnel.traffic.value, paused),
+                )
             }
-            .onFailure { LogStore.add("W", TAG, "stats query failed: ${it.message}") }
+            .onFailure {
+                LogStore.add("W", TAG, "stats query failed: ${it.message}")
+                Tunnel.trafficUnavailable()
+            }
         // The raw dump is only needed for diagnostics; rebuilding that string every
         // two seconds costs a JNI round trip and allocations for nothing.
         if (++statsTicks % 3 == 0) {
@@ -697,7 +742,7 @@ class MohammadVpnService : VpnService() {
                 runCatching { setUnderlyingNetworks(null) }
                     .onFailure { LogStore.add("W", TAG, "underlying network clear failed: ${it.message}") }
                 LogStore.add("D", TAG, "holding tunnel open until the network returns")
-                updateNotification("Network lost", "Waiting for connectivity")
+                refreshNotification()
                 synchronized(lock) {
                     if (Tunnel.state.value is TunnelState.Connected) {
                         Tunnel.update(TunnelState.Failed(TunnelError.NetworkUnavailable))
@@ -735,7 +780,7 @@ class MohammadVpnService : VpnService() {
                     "I", "NET",
                     "RECONNECT_STARTED attempt=${action.attempt} in ${action.delayMs} ms",
                 )
-                updateNotification("Reconnecting…", "Attempt ${action.attempt}")
+                refreshNotification()
                 try {
                     retryFuture = scheduler.schedule(
                         { submit { resumeConnect(gen) } },
@@ -786,14 +831,14 @@ class MohammadVpnService : VpnService() {
             // A phone call or a tunnel switch must not kill the service; hold and wait.
             LogStore.add("W", TAG, "retry deferred until the network returns ($reason)")
             waitingForNetwork = true
-            updateNotification("Waiting for network", "Will reconnect automatically")
+            refreshNotification()
             return
         }
         attempt++
         val delay = retryPolicy.delayFor(attempt) ?: return
         val gen = generation
         LogStore.add("I", TAG, "retry $attempt/${retryPolicy.maxAttempts} in $delay ms ($reason)")
-        updateNotification("Reconnecting…", "Attempt $attempt")
+        refreshNotification()
         try {
             retryFuture = scheduler.schedule({ submit { connect(gen) } }, delay, TimeUnit.MILLISECONDS)
         } catch (e: RejectedExecutionException) {
@@ -917,36 +962,15 @@ class MohammadVpnService : VpnService() {
     // ----------------------------------------------------------- notification
 
     private fun createChannel() {
-        val manager = getSystemService(NotificationManager::class.java)
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "VPN tunnel",
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply { setShowBadge(false) }
-        manager.createNotificationChannel(channel)
+        VpnNotifier.ensureChannel(this)
     }
 
-    private fun buildNotification(title: String, text: String): Notification {
-        val launch = PendingIntent.getActivity(
+    /** Re-renders the persistent notification from one snapshot; never builds its own text. */
+    private fun refreshNotification() {
+        VpnNotifier.post(
             this,
-            0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE,
+            VpnNotifier.build(this, Tunnel.state.value, Tunnel.traffic.value, paused),
         )
-        return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setSmallIcon(R.drawable.ic_stat_vpn)
-            .setOngoing(true)
-            .setContentIntent(launch)
-            .build()
-    }
-
-    private fun updateNotification(title: String, text: String) {
-        runCatching {
-            getSystemService(NotificationManager::class.java)
-                .notify(NOTIFICATION_ID, buildNotification(title, text))
-        }
     }
 
     private fun stopForegroundCompat() {

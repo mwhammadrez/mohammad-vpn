@@ -38,7 +38,7 @@ class RenderTest {
         compose.setContent {
             MohammadScreen(
                 state = state,
-                traffic = 12_345_678L to 98_765_432L,
+                traffic = ir.mohammad.vpn.data.TrafficSnapshot(up = 12_345_678L, down = 98_765_432L, available = true),
                 logs = emptyList(),
                 profiles = listOf(profile()),
                 selected = profile(),

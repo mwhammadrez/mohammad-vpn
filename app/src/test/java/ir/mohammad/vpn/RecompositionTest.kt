@@ -34,7 +34,7 @@ class RecompositionTest {
         SideEffect { counter[0]++ }
         MohammadScreen(
             state = state,
-            traffic = 0L to 0L,
+            traffic = ir.mohammad.vpn.data.TrafficSnapshot.ZERO,
             logs = emptyList(),
             profiles = listOf(
                 Profile(
