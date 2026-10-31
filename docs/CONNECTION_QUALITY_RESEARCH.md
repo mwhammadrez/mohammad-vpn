@@ -41,31 +41,31 @@ evidence (E).
 | # | Finding | Source | G | U | C | R | K | E | Total | Verdict |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | `sockopt.happyEyeballs` races A/AAAA | https://xtls.github.io/en/config/transports/sockopt.html | 4 | 5 | 5 | 4 | 5 | 5 | 28 | **Adopt** |
-| 2 | `tcpKeepAliveIdle/Interval` for NAT keepalive | same | 5 | 5 | 5 | 5 | 4 | 5 | 29 | **Adopt** |
-| 3 | `tcpUserTimeout` lower bound | same | 3 | 5 | 5 | 4 | 5 | 4 | 26 | **Adopt** |
-| 4 | `tcpMaxSeg` clamp | same | 3 | 5 | 5 | 4 | 5 | 4 | 26 | **Adopt** |
+| 2 | `tcpKeepAliveIdle/Interval` for NAT keepalive | https://xtls.github.io/en/config/transports/sockopt.html | 5 | 5 | 5 | 5 | 4 | 5 | 29 | **Adopt** |
+| 3 | `tcpUserTimeout` lower bound | https://xtls.github.io/en/config/transports/sockopt.html | 3 | 5 | 5 | 4 | 5 | 4 | 26 | **Adopt** |
+| 4 | `tcpMaxSeg` clamp | https://xtls.github.io/en/config/transports/sockopt.html | 3 | 5 | 5 | 4 | 5 | 4 | 26 | **Adopt** |
 | 5 | `hosts` static entry for server domain | https://xtls.github.io/en/config/dns.html | 3 | 5 | 5 | 5 | 5 | 4 | 27 | **Adopt** |
 | 6 | Parallel dial race across profiles | https://developer.android.com/reference/android/net/ConnectivityManager | 4 | 4 | 5 | 3 | 4 | 4 | 24 | **Adopt** |
 | 7 | `Builder.setMetered()` | https://developer.android.com/reference/android/net/VpnService.Builder | 2 | 5 | 5 | 5 | 5 | 4 | 26 | **Adopt** |
-| 8 | `Builder.setBlocking(true)` | same | 2 | 5 | 4 | 4 | 5 | 3 | 23 | Conditional |
+| 8 | `Builder.setBlocking(true)` | https://developer.android.com/reference/android/net/VpnService.Builder | 2 | 5 | 4 | 4 | 5 | 3 | 23 | Conditional |
 | 9 | `sniffing.routeOnly: true` | https://xtls.github.io/en/config/routing.html | 3 | 3 | 2 | 2 | 4 | 4 | 18 | **Trap with FakeDNS** |
-| 10 | `tcpFastOpen: true` | sockopt docs | 2 | 5 | 5 | 3 | 5 | 2 | 22 | Inert on Android |
-| 11 | `tcpcongestion: bbr` | sockopt docs | 3 | 4 | 3 | 2 | 4 | 3 | 19 | Kernel-dependent |
-| 12 | `tcpMptcp` | sockopt docs | 2 | 3 | 2 | 3 | 4 | 2 | 16 | No |
-| 13 | `addressPortStrategy` (SRV/TXT) | sockopt docs | 2 | 3 | 4 | 3 | 4 | 2 | 18 | No (needs DNS records) |
+| 10 | `tcpFastOpen: true` | https://xtls.github.io/en/config/transports/sockopt.html | 2 | 5 | 5 | 3 | 5 | 2 | 22 | Inert on Android |
+| 11 | `tcpcongestion: bbr` | https://xtls.github.io/en/config/transports/sockopt.html | 3 | 4 | 3 | 2 | 4 | 3 | 19 | Kernel-dependent |
+| 12 | `tcpMptcp` | https://xtls.github.io/en/config/transports/sockopt.html | 2 | 3 | 2 | 3 | 4 | 2 | 16 | No |
+| 13 | `addressPortStrategy` (SRV/TXT) | https://xtls.github.io/en/config/transports/sockopt.html | 2 | 3 | 4 | 3 | 4 | 2 | 18 | No (needs DNS records) |
 | 14 | Xray `observatory`/`burstObservatory` | https://xtls.github.io/en/config/observatory.html | 3 | 4 | 5 | 4 | 3 | 4 | 23 | Only with 2+ profiles |
 | 15 | `policy.levels` timeouts | https://xtls.github.io/en/config/policy.html | 3 | 5 | 5 | 5 | 5 | 4 | 27 | Already tuned; re-check |
 | 16 | DNS `queryStrategy: UseIPv4` for IPv4-only servers | https://xtls.github.io/en/config/dns.html | 3 | 4 | 5 | 4 | 5 | 4 | 25 | Conditional |
-| 17 | `domainStrategy: AsIs` on the proxy outbound | sockopt docs | 3 | 4 | 4 | 3 | 5 | 4 | 23 | Conditional (needs care) |
-| 18 | Pre-resolve server host at app start | Android `InetAddress` | 2 | 4 | 5 | 4 | 5 | 3 | 23 | Nice-to-have |
-| 19 | Health probe on the real target instead of 1.1.1.1 | this repo | 3 | 5 | 5 | 4 | 5 | 4 | 26 | Consider |
-| 20 | Probe parallelism (run probe while dialing) | this repo | 2 | 5 | 5 | 3 | 5 | 3 | 23 | No (adds complexity) |
-| 21 | `VpnService.setUnderlyingNetworks` on every change | Android docs | 4 | 5 | 5 | 5 | 5 | 5 | 29 | Already done (0.7.3) |
-| 22 | `Network.openConnection` for probes | Android docs | 4 | 5 | 5 | 5 | 5 | 5 | 29 | Already done (0.9.1) |
-| 23 | TCP_NODELAY on bridge sockets | gVisor/tun2socks | 2 | 5 | 3 | 3 | 5 | 2 | 20 | gVisor defaults |
-| 24 | Larger gVisor buffers | tun2socks | 3 | 5 | 3 | 3 | 4 | 2 | 20 | Needs benchmarking |
-| 25 | Multi-server latency ranking | Xray observatory | 3 | 4 | 5 | 4 | 3 | 4 | 23 | Phase C |
-| 26 | Connection pre-warming (dial at app start) | — | 2 | 3 | 3 | 2 | 3 | 2 | 15 | No (battery, privacy) |
+| 17 | `domainStrategy: AsIs` on the proxy outbound | https://xtls.github.io/en/config/transports/sockopt.html | 3 | 4 | 4 | 3 | 5 | 4 | 23 | Conditional (needs care) |
+| 18 | Pre-resolve server host at app start | https://developer.android.com/reference/java/net/InetAddress | 2 | 4 | 5 | 4 | 5 | 3 | 23 | Nice-to-have |
+| 19 | Health probe on the real target instead of 1.1.1.1 | `docs/HANDBOOK.txt` §8 | 3 | 5 | 5 | 4 | 5 | 4 | 26 | Consider |
+| 20 | Probe parallelism (run probe while dialing) | `docs/HANDBOOK.txt` §8 | 2 | 5 | 5 | 3 | 5 | 3 | 23 | No (adds complexity) |
+| 21 | `VpnService.setUnderlyingNetworks` on every change | https://developer.android.com/reference/android/net/VpnService | 4 | 5 | 5 | 5 | 5 | 5 | 29 | Already done (0.7.3) |
+| 22 | `Network.openConnection` for probes | https://developer.android.com/reference/android/net/Network | 4 | 5 | 5 | 5 | 5 | 5 | 29 | Already done (0.9.1) |
+| 23 | TCP_NODELAY on bridge sockets | https://github.com/xjasonlyu/tun2socks | 2 | 5 | 3 | 3 | 5 | 2 | 20 | gVisor defaults |
+| 24 | Larger gVisor buffers | https://github.com/xjasonlyu/tun2socks | 3 | 5 | 3 | 3 | 4 | 2 | 20 | Needs benchmarking |
+| 25 | Multi-server latency ranking | https://xtls.github.io/en/config/observatory.html | 3 | 4 | 5 | 4 | 3 | 4 | 23 | Phase C |
+| 26 | Connection pre-warming (dial at app start) | none — no implementation to cite | 2 | 3 | 3 | 2 | 3 | 2 | 15 | **Rejected** (battery, privacy) |
 
 ---
 
@@ -141,21 +141,65 @@ and job scheduling; two lines, no cost.
 
 ---
 
-## 5. Answers to the implied questions
+## 5. The ten questions, answered
 
-1. **Do these work for every config type?** The sockopt changes are transport-level and apply to
-   every outbound Xray speaks (VLESS, VMess, Trojan, Shadowsocks, SOCKS, HTTP). They do **not**
-   apply to AmneziaWG, which has its own socket layer — for AWG the equivalent is its own
-   persistent-keepalive setting.
-2. **What should be automatic?** Items 1–5 are pure config and should be on for every profile.
-   Item 6 (race) should be automatic only when more than one profile exists.
-3. **What stays manual?** Nothing in this list needs a user toggle; that is the point.
-4. **What costs battery?** Only the keep-alive (≈2 packets / 15 s while idle). Everything else is
-   free.
-5. **What must be measured before shipping?** `tcpUserTimeout` and `tcpMaxSeg` change timing
-   behaviour; both need a device run with a lossy link, not just a successful connect.
+The Phase 5 text of the brief was not included in the material provided, so the ten questions
+below are reconstructed from the brief's own sections (2.1 speed, 2.2 stability, plus the hard
+rules). Each answer is an opinion with its reason, not a measurement.
 
----
+**Q1. Should any optimisation be on by default for every profile?**
+Yes — five: `happyEyeballs`, `tcpKeepAliveIdle/Interval`, `tcpUserTimeout`, `tcpMaxSeg`,
+`dns.hosts`. All are config-only, cost nothing, and apply to every Xray protocol. AmneziaWG is
+the exception: it needs its own keepalive, since it never touches Xray's socket layer.
+
+**Q2. How much does connection setup improve?**
+Only the DNS `hosts` entry and Happy Eyeballs touch setup; expect one skipped lookup (typically
+20–80 ms on Iranian mobile) and up to ~300 ms saved when the first address of a dual-stack
+server is unreachable. Everything else improves steady-state, not setup.
+
+**Q3. Does keep-alive really help, or is it cargo cult?**
+It helps against carrier NAT, which is the dominant silent-failure mode on mobile. Xray's default
+is 45 s idle (Chrome's value). CGNAT mappings commonly expire at 30–60 s. Dropping to 25 s idle
+with a 15 s interval costs two small packets per interval and removes a class of "connected but
+dead" states. This is the highest-value single change in this document.
+
+**Q4. Should the app pick a protocol automatically?**
+No. The operator ships one profile per bundle in practice; automatic protocol selection only
+makes sense with a multi-profile bundle, and even then the right primitive is a dial race (item 6),
+not a protocol decision tree. Guessing protocols is how clients become unpredictable.
+
+**Q5. Are there faster handshakes available in the pinned Xray?**
+Yes, but they are transport choices, not client switches: REALITY + Vision on TCP 443 has the
+best handshake behaviour, and 0-RTT/TLS session resumption is handled by the TLS stack for TLS
+transports. Fragment adds latency by design (it splits and delays); it buys reachability, not
+speed, and should stay off when not needed.
+
+**Q6. Is parallel connection racing worth the complexity?**
+Only when more than one profile exists, and capped at two candidates. It converts "primary is
+dead, wait for timeout" into "first success wins". Beyond two it looks like scanning and burns
+battery.
+
+**Q7. Should we lower `tcpUserTimeout` to fail faster?**
+Yes, to 5 000 ms, but this is the one item that can hurt: on a genuinely high-RTT path an early
+abort looks like flapping. It needs a device run on a lossy link before it ships.
+
+**Q8. Should the health probe change?**
+Two candidates: probe the real destination instead of `1.1.1.1` (more representative, but leaks
+the destination into the probe) and probe in parallel with dialing (saves ~200 ms, adds state
+machinery). Recommendation: keep `1.1.1.1` (no operator data in the probe) and leave the timing
+as is; the 200 ms is the price of an honest green state.
+
+**Q9. Does anything here increase APK size, memory or battery?**
+APK and memory: no — all five config changes are JSON fields. Battery: keep-alive sends two small
+packets per 15 s while idle; everything else is neutral. No new dependency is proposed anywhere
+in this report.
+
+**Q10. What is the single highest-impact change, and what must be measured first?**
+Highest impact: keep-alive tuning (Q3). What must be measured first, on a device and on an
+Iranian carrier: (a) whether 25 s idle keeps a CGNAT mapping alive without waking the radio
+excessively, (b) whether 5 s `tcpUserTimeout` aborts on high-RTT paths, (c) whether
+`tcpMaxSeg 1440` changes throughput at MTU 1500. Until those three numbers exist, items 2–4 are
+hypotheses with good provenance, not verified improvements.
 
 ## 6. Roadmap
 
