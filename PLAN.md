@@ -19,6 +19,7 @@ diagnostics, and M7 exists to deliver M1–M6 to installed users without a relea
 | M4-W | Widget + quick-settings tile | — | 0.14.1 | connect from the home screen | **yes** (launcher) |
 | M4-N | Tile reliability, notification, telemetry | — | 0.14.2 | live notification, working counters | **yes** (shade) |
 | M4-C | Config compatibility + `oob` dialMode | — | 0.14.3 | the current bundle can actually start | **yes** (DPI) |
+| M4-U | Paste import + real-delay test | — | 0.14.5 | user can try any config and see if it works | **yes** (device) |
 | M4 | State machine + path policy | #5, #6, #7 | 0.15.0 | multi-path, honest states | no |
 | M5 | Pre-flight netcheck | #8 | 0.16.0 | fewer wrong assumptions | **yes** (measurement) |
 | M6 | Second path (WS+TLS via CDN) | #10 | 0.17.0 | works when the IP dies | **yes** (survival) |
@@ -152,6 +153,30 @@ M4's fallback — the release note must say so.
 **Rollback:** revert; v1 bundles and `security:none` still work.
 
 ---
+
+## M4-U — Paste import and real delay (0.14.5)
+
+**Goal.** The operator can drop any share link into the app and find out, before connecting, whether
+it actually carries traffic.
+
+**Why now.** The previous "ping" was a TCP handshake to `host:port`. It reports 40 ms for a blocked
+account, an expired key, or a CDN edge that never reaches the origin. A number that cannot fail is
+worse than no number.
+
+**Covers:** FR-U1 … FR-U7, AC-U1 … AC-U5.
+
+**Tasks**
+1. `data/ConfigUri.kt` — vless / vmess / trojan / ss, with the core's own JSON shape.
+2. `data/ImportBatch.kt` — clipboard text to profiles, one bad line isolated.
+3. `data/ProfileStore.kt` — persistence, dedupe by id, corrupt entries dropped.
+4. `net/RealDelay.kt` + `SocksProbe.httpTimeToFirstByte` — measure through the proxy.
+5. UI: PASTE in the profiles header, a delay chip per row, per-row state.
+
+**Verification that is real:** the SOCKS5 + HTTP exchange is exercised against a fake proxy in a JVM
+test, including a refused CONNECT and a silent peer. The profile section is rendered on the JVM
+(`profiles_paste.png`).
+
+**Not verified:** the delays themselves against a real server, and the clipboard flow on a device.
 
 ## M4-C — Operator-config compatibility and `oob` (0.14.3)
 

@@ -44,6 +44,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,7 +57,11 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import ir.mohammad.vpn.data.ImportBatch
 import ir.mohammad.vpn.data.LogStore
+import ir.mohammad.vpn.data.ProfileStore
+import ir.mohammad.vpn.net.RealDelay
+import ir.mohammad.vpn.ui.ProfilePing
 import ir.mohammad.vpn.data.OperatorBundleLoader
 import ir.mohammad.vpn.data.Profile
 import ir.mohammad.vpn.data.Tunnel
@@ -68,14 +73,16 @@ import ir.mohammad.vpn.ui.MohammadScreen
 import ir.mohammad.vpn.vpn.MohammadVpnService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalClipboardManager
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import java.net.InetSocketAddress
-import java.net.Socket
 
 class MainActivity : ComponentActivity() {
 
     internal var lastCrash: String? = null
+
+    /** Bundle profiles only; imported ones are re-read from the store. */
+    private var operatorProfiles: List<Profile> = emptyList()
 
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -132,10 +139,16 @@ class MainActivity : ComponentActivity() {
                 if (!ir.mohammad.vpn.core.GeoAssets.isReady(applicationContext)) {
                     LogStore.add("I", "GEO", "rule sets not cached; will download in background")
                 }
+                operatorProfiles = bundle.profiles
+                Tunnel.profiles = operatorProfiles + ProfileStore.load(applicationContext)
                 val savedId = prefs().getString(KEY_SELECTED, null)
-                Tunnel.selected = bundle.profiles.firstOrNull { it.id == savedId }
-                    ?: bundle.profiles.firstOrNull { it.id == bundle.defaultProfileId }
-                    ?: bundle.profiles.firstOrNull()
+                LogStore.add(
+                    "I", "APP",
+                    "imported profiles: ${Tunnel.profiles.size - bundle.profiles.size}",
+                )
+                Tunnel.selected = Tunnel.profiles.firstOrNull { it.id == savedId }
+                    ?: Tunnel.profiles.firstOrNull { it.id == bundle.defaultProfileId }
+                    ?: Tunnel.profiles.firstOrNull()
                 LogStore.add(
                     "I", "APP",
                     "bundle loaded: ${bundle.profiles.size} profile(s), mtu=${bundle.mtu}, dns=${bundle.dnsServers.size}",
@@ -184,6 +197,26 @@ class MainActivity : ComponentActivity() {
         LogStore.add("I", "APP", "selected profile ${profile.id}")
     }
 
+    /**
+     * Imports every share link in [text]. A clipboard usually holds one link, but "select all and
+     * copy" from a channel holds several; both work.
+     *
+     * Returns a message for the UI and the number of profiles imported.
+     */
+    fun importLinks(text: String): Pair<String, Int> {
+        val outcome = ImportBatch.parse(text)
+        outcome.profiles.forEach { profile ->
+            ProfileStore.add(applicationContext, profile)
+            LogStore.add("I", "IMPORT", "imported ${profile.protocol} ${profile.id}")
+        }
+        if (outcome.profiles.isNotEmpty()) {
+            Tunnel.profiles = operatorProfiles + ProfileStore.load(applicationContext)
+            outcome.profiles.lastOrNull()?.let { selectProfile(it) }
+        }
+        outcome.failures.forEach { LogStore.add("W", "IMPORT", it) }
+        return outcome.message to outcome.profiles.size
+    }
+
     fun requestConnect() {
         if (!TunnelController.hasProfile()) {
             Tunnel.update(TunnelState.Failed(TunnelError.NoProfileSelected))
@@ -227,21 +260,28 @@ fun MohammadApp() {
     val traffic by Tunnel.traffic.collectAsStateWithLifecycle()
 
     var selected by remember { mutableStateOf(Tunnel.selected) }
+    var profiles by remember { mutableStateOf(Tunnel.profiles) }
     var pingMs by remember { mutableStateOf<Long?>(null) }
     var pingBusy by remember { mutableStateOf(false) }
+    var importMessage by remember { mutableStateOf<String?>(null) }
+    val pingByProfile = remember { mutableStateMapOf<String, ProfilePing>() }
+    val clipboard = LocalClipboardManager.current
     var crash by remember { mutableStateOf(activity.lastCrash) }
     var fragmentOn by remember { mutableStateOf(activity.prefs().getBoolean("fragment", false)) }
     var fragmentMode by remember { mutableStateOf(activity.prefs().getString("fragmentMode", "tlshello") ?: "tlshello") }
     var muxOn by remember { mutableStateOf(activity.prefs().getBoolean("mux", false)) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Tunnel.profiles) { selected = Tunnel.selected }
+    LaunchedEffect(Tunnel.profiles) {
+        profiles = Tunnel.profiles
+        selected = Tunnel.selected
+    }
 
     MohammadScreen(
         state = state,
         traffic = traffic,
         logs = logs,
-        profiles = Tunnel.profiles,
+        profiles = profiles,
         selected = selected,
         pingMs = pingMs,
         pingBusy = pingBusy,
@@ -281,23 +321,42 @@ fun MohammadApp() {
             pingBusy = true
             pingMs = null
             scope.launch {
-                val ms = measure(profile, 5_000)
-                pingMs = ms
-                if (ms < 0) LogStore.add("W", "APP", "ping failed or timed out")
+                val result = RealDelay.measure(activity, profile)
+                pingMs = result.ms
+                if (!result.ok) LogStore.add("W", "APP", "delay test failed: ${result.reason}")
                 pingBusy = false
             }
         },
+        onPingProfile = { profile ->
+            pingByProfile[profile.id] = ProfilePing(busy = true)
+            scope.launch {
+                val result = RealDelay.measure(activity, profile)
+                pingByProfile[profile.id] = if (result.ok) {
+                    ProfilePing(ms = result.ms)
+                } else {
+                    ProfilePing(error = result.reason)
+                }
+                if (!result.ok) {
+                    LogStore.add("W", "APP", "delay test ${profile.id}: ${result.reason}")
+                }
+                pingMs = result.ms
+            }
+        },
+        onPaste = {
+            val raw = clipboard.getText()?.text
+            if (raw.isNullOrBlank()) {
+                importMessage = "Clipboard is empty"
+            } else {
+                val (message, count) = activity.importLinks(raw)
+                importMessage = message
+                if (count > 0) {
+                    profiles = Tunnel.profiles
+                    selected = Tunnel.selected
+                    pingMs = null
+                }
+            }
+        },
+        pingByProfile = pingByProfile,
+        importMessage = importMessage,
     )
-}
-
-private suspend fun measure(profile: Profile, timeoutMs: Int): Long = withContext(Dispatchers.IO) {
-    val started = System.nanoTime()
-    try {
-        Socket().use { socket ->
-            socket.connect(InetSocketAddress(profile.host, profile.port), timeoutMs)
-        }
-        (System.nanoTime() - started) / 1_000_000
-    } catch (e: Exception) {
-        -1L
-    }
 }

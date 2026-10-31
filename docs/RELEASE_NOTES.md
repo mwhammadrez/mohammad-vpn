@@ -5,6 +5,26 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.14.5 — paste any config, measure what it really does (M4-U)
+
+### Added
+- **PASTE** in the profiles section. One link or a whole column of them: `vless://`, `vmess://`,
+  `trojan://`, `ss://`. A broken line is reported and the rest still import.
+- **Imported profiles persist**, are selectable like operator profiles, and pasting the same link
+  twice replaces it instead of adding a duplicate.
+- **A delay chip on every row.** The number is a real round trip through the proxy, not a TCP
+  handshake to the server.
+
+### Changed
+- The old ping measured `connect()` to the server, which succeeds for a blocked account, an expired
+  key, or a CDN edge that never reaches the origin. It reported 40 ms and carried nothing. It is
+  gone, replaced by the measurement above.
+
+### Not verified
+- The delays themselves against a real server, and the clipboard flow on a device.
+
+---
+
 ## 0.14.4 — `merge`, per-profile `finalMask`, `unsafe` (M4-C, second pass)
 
 ### Added

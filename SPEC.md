@@ -295,7 +295,19 @@ it is testable on the JVM without a device. Android types stay out of policy cod
 | FR-O7 | `merge` is available as a `tcp` mask: it coalesces the first outbound writes. It is allowed with REALITY; `fragment` remains forbidden there (D-76). |
 | FR-O8 | `fingerprint: unsafe` is accepted only with `security: tls`, where the core special-cases it to "no uTLS", and is rejected with REALITY, where the core rejects it too. |
 
-### 5.16 AmneziaWG (AWG) — `NOT VERIFIED`
+### 5.16 Profile import and real-delay measurement (FR-U) — milestone M4-U
+
+| ID | Requirement |
+|---|---|
+| FR-U1 | The profile section offers a Paste action that reads the clipboard and imports every `vless://`, `vmess://`, `trojan://` or `ss://` link it contains, one per line. |
+| FR-U2 | A link that fails to parse is reported by name and does not discard the links beside it. An unsupported scheme is named, never ignored silently. |
+| FR-U3 | Imported profiles persist across restarts, are selectable exactly like operator profiles, and pasting the same link twice replaces rather than duplicates. |
+| FR-U4 | Every profile row carries its own delay action. The result is a *real* round trip through the proxy (SOCKS CONNECT + HTTP request to first byte), not a TCP handshake to the server. |
+| FR-U5 | A real-delay measurement either uses the live tunnel (the tested profile is the one carrying it) or a temporary core on a spare port. It never starts a second core beside a live one. |
+| FR-U6 | Imported profiles are user data: they are never embedded in the APK and never subject to the D-78 source rule, but they are validated before use. |
+| FR-U7 | Defaults are applied where a share link is silent: a TLS or REALITY profile with no `fp` gets `chrome`, and the substitution is logged. |
+
+### 5.17 AmneziaWG (AWG) — `NOT VERIFIED`
 
 | ID | Requirement |
 |---|---|
@@ -517,6 +529,11 @@ Every AC names a test class that exists today or is created by the milestone in 
 | AC-O5 | FR-O6, FR-O7 | unit | `--tests "*FinalMaskConfigTest"` | `merge` renders; unknown type, `merge` on `udp`, out-of-range numbers and REALITY+fragment are rejected | M4-C |
 | AC-O6 | FR-O7 | native | patched core + local listener | three writes arrive as one segment after ~delayMs | M4-C |
 | AC-O7 | FR-O8 | unit | `--tests "*TlsFingerprintTest"` | `unsafe` valid and degraded; rejected with REALITY | M4-C |
+| AC-U1 | FR-U1, FR-U2 | unit | `--tests "*ConfigUriTest" --tests "*ImportBatchTest"` | each scheme parses; broken line isolated; junk counted | M4-U |
+| AC-U2 | FR-U3 | unit | `--tests "*ProfileStoreTest"` | round trip, dedupe by id, corrupt file tolerated | M4-U |
+| AC-U3 | FR-U4 | unit | `--tests "*RealDelayTest"` | SOCKS5 + HTTP measured against a fake proxy; refusal and silence are failures | M4-U |
+| AC-U4 | FR-U5 | unit | `--tests "*RealDelayTest"` | live tunnel / temporary core / refusal decided by a pure function | M4-U |
+| AC-U5 | FR-U1 | render | `--tests "*ProfilesRenderTest"` | paste action and per-row chips render without overflow | M4-U |
 | AC-N1 | FR-N1 | unit | `--tests "*TileStateSyncTest"` | one push per distinct state; listen always pushes | M4-N |
 | AC-N2 | FR-N2 | integration | `--tests "*TileInteractionTest"` | tile toggles through the shared controller | M4-N |
 | AC-N3 | FR-N3 | Robolectric | `--tests "*SurfaceColdStartTest"` | cold process: tile inactive from persisted profile | M4-N |

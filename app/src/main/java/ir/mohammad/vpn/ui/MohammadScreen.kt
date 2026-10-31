@@ -92,6 +92,10 @@ fun MohammadScreen(
     onToggle: () -> Unit,
     onSelect: (Profile) -> Unit,
     onPing: () -> Unit,
+    onPingProfile: (Profile) -> Unit = {},
+    onPaste: () -> Unit = {},
+    pingByProfile: Map<String, ProfilePing> = emptyMap(),
+    importMessage: String? = null,
 ) {
     MohammadTheme {
         val down = remember { mutableStateListOf<Float>() }
@@ -130,7 +134,7 @@ fun MohammadScreen(
                 if (crashReport != null) CrashCard(crashReport, onDismissCrash)
                 Hero(state, selected, traffic, onToggle)
                 Bento(down, up, traffic)
-                Nodes(profiles, selected, state, onSelect)
+                Nodes(profiles, selected, state, onSelect, onPaste, onPingProfile, pingByProfile, importMessage)
                 Actions(pingMs, pingBusy, onPing)
                 Evasion(fragmentOn, fragmentMode, muxOn, onFragment, onFragmentMode, onMux)
                 Console(logs)
@@ -538,13 +542,48 @@ private fun TotalTile(label: String, bytes: Long, available: Boolean, accent: Co
 /* ------------------------------------------------------------------ nodes */
 
 @Composable
-private fun Nodes(profiles: List<Profile>, selected: Profile?, state: TunnelState, onSelect: (Profile) -> Unit) {
+private fun Nodes(
+    profiles: List<Profile>,
+    selected: Profile?,
+    state: TunnelState,
+    onSelect: (Profile) -> Unit,
+    onPaste: () -> Unit,
+    onPingProfile: (Profile) -> Unit,
+    pingByProfile: Map<String, ProfilePing>,
+    importMessage: String?,
+) {
     Glass(shape = 22.dp) {
         Column(Modifier.padding(vertical = 14.dp)) {
             Row(Modifier.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("PROFILES", fontFamily = ChakraSemi, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Palette.TextSecondary)
                 Spacer(Modifier.weight(1f))
                 Text("${profiles.size}", fontFamily = Chakra, fontSize = 10.sp, color = Palette.TextMuted)
+                Spacer(Modifier.width(10.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(Palette.Emerald.copy(alpha = 0.16f))
+                        .border(1.dp, Palette.BorderEmerald, RoundedCornerShape(9.dp))
+                        .clickable(onClick = onPaste)
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                ) {
+                    Text(
+                        "PASTE",
+                        fontFamily = ChakraSemi,
+                        fontSize = 9.sp,
+                        letterSpacing = 1.2.sp,
+                        color = Palette.Mint,
+                    )
+                }
+            }
+            if (importMessage != null) {
+                Text(
+                    importMessage,
+                    fontFamily = Chakra,
+                    fontSize = 10.sp,
+                    color = Palette.TextMuted,
+                    modifier = Modifier.padding(horizontal = 16.dp).padding(top = 6.dp),
+                )
             }
             Spacer(Modifier.height(8.dp))
             if (profiles.isEmpty()) {
@@ -597,6 +636,27 @@ private fun Nodes(profiles: List<Profile>, selected: Profile?, state: TunnelStat
                             color = Palette.TextMuted,
                         )
                     }
+                    val ping = pingByProfile[profile.id]
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0x0DFFFFFF))
+                            .clickable(enabled = ping?.busy != true) { onPingProfile(profile) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                    ) {
+                        Text(
+                            ping?.label ?: "test",
+                            fontFamily = Chakra,
+                            fontSize = 9.sp,
+                            color = when {
+                                ping?.busy == true -> Palette.TextMuted
+                                ping?.ms != null -> Palette.Mint
+                                ping?.error != null -> Palette.Rose
+                                else -> Palette.TextSecondary
+                            },
+                        )
+                    }
+                    Spacer(Modifier.width(10.dp))
                     Box(
                         Modifier
                             .size(16.dp)

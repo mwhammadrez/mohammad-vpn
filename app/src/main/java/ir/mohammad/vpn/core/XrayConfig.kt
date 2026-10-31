@@ -176,6 +176,8 @@ object XrayConfig {
         fakeDns: Boolean = true,
         tuning: TransportTuning = TransportTuning(),
         serverHosts: Map<String, String> = emptyMap(),
+        /** Overridable so the delay probe can run a temporary core beside the live one. */
+        socksPort: Int = SOCKS_PORT,
     ): String {
         val outbound = JSONObject(profile.xray.toString()).apply { put("tag", "proxy") }
         applyTuning(outbound, tuning)
@@ -191,7 +193,7 @@ object XrayConfig {
         val socks = JSONObject()
             .put("tag", "socks")
             .put("listen", LOOPBACK)
-            .put("port", SOCKS_PORT)
+            .put("port", socksPort)
             .put("protocol", "socks")
             .put(
                 "settings",

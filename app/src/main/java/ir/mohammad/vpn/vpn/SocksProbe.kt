@@ -16,6 +16,80 @@ object SocksProbe {
      *
      * The target never leaves the process: it is not logged and not reported.
      */
+    /**
+     * Measures a *real* round trip through the proxy: SOCKS5 CONNECT to [host]:[port], then an HTTP
+     * request, stopping the clock at the first byte of the response.
+     *
+     * This is deliberately not a TCP handshake to the server: a handshake proves the port is open,
+     * not that the account, the transport and the route work. Returns milliseconds, or null when the
+     * request fails, times out, or the proxy answers with a non-success SOCKS reply.
+     */
+    fun httpTimeToFirstByte(
+        socksPort: Int,
+        host: String,
+        port: Int,
+        path: String = "/generate_204",
+        hostHeader: String = host,
+        timeoutMs: Int = 8_000,
+    ): Long? = runCatching {
+        val started = System.nanoTime()
+        Socket().use { socket ->
+            socket.tcpNoDelay = true
+            socket.connect(InetSocketAddress("127.0.0.1", socksPort), timeoutMs)
+            socket.soTimeout = timeoutMs
+            val out = socket.getOutputStream()
+            val input = socket.getInputStream()
+
+            out.write(byteArrayOf(0x05, 0x01, 0x00))
+            out.flush()
+            val greeting = ByteArray(2)
+            if (!readFully(input, greeting) || greeting[0] != 0x05.toByte() || greeting[1] != 0x00.toByte()) {
+                return null
+            }
+
+            val request = java.io.ByteArrayOutputStream()
+            request.write(byteArrayOf(0x05, 0x01, 0x00))
+            val literal = parseIpv4(host)
+            if (literal != null) {
+                request.write(byteArrayOf(0x01))
+                request.write(literal)
+            } else {
+                val name = host.toByteArray(Charsets.US_ASCII)
+                if (name.size > 255) return null
+                request.write(byteArrayOf(0x03, name.size.toByte()))
+                request.write(name)
+            }
+            request.write((port ushr 8) and 0xFF)
+            request.write(port and 0xFF)
+            out.write(request.toByteArray())
+            out.flush()
+
+            val head = ByteArray(4)
+            if (!readFully(input, head) || head[0] != 0x05.toByte() || head[1] != 0x00.toByte()) {
+                return null
+            }
+            when (head[3].toInt() and 0xFF) {
+                0x01 -> readFully(input, ByteArray(4 + 2))
+                0x04 -> readFully(input, ByteArray(16 + 2))
+                0x03 -> {
+                    val len = ByteArray(1)
+                    if (!readFully(input, len)) return null
+                    readFully(input, ByteArray((len[0].toInt() and 0xFF) + 2))
+                }
+                else -> return null
+            }
+
+            val line = "GET $path HTTP/1.1\r\nHost: $hostHeader\r\nConnection: close\r\n" +
+                "User-Agent: Mohammad-DelayProbe\r\nAccept: */*\r\n\r\n"
+            out.write(line.toByteArray(Charsets.US_ASCII))
+            out.flush()
+
+            val first = input.read()
+            if (first < 0) return null
+            (System.nanoTime() - started) / 1_000_000
+        }
+    }.getOrNull()
+
     fun probe(port: Int, targetHost: String, targetPort: Int, timeoutMs: Int = 1_500): Boolean =
         runCatching {
             Socket().use { socket ->

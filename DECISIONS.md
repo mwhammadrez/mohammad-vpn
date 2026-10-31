@@ -805,3 +805,33 @@ We now mirror the core exactly: accepted with `security: tls` and flagged `DEGRA
 loudest hello available, and it exists only for a server that breaks under every uTLS fingerprint);
 rejected with `security: reality`, with a message that names the reason.
 Allow-list is therefore **62** names, not 61.
+
+## D-104 — An imported link with no `fp` gets `chrome`
+**Date:** 2026-10-31 · **Source:** M4-U
+D-70 requires a fingerprint whenever TLS is on. A share link often omits `fp`, and refusing the link
+would make the import feature useless for exactly the configs people share. So the importer fills
+`chrome` — the value every uTLS client defaults to — and records a warning in the log, which is where
+the substitution is visible.
+Scope: imports only. The operator bundle still fails hard on a missing fingerprint, because there the
+value is a deliberate choice.
+
+## D-105 — Never two cores at once
+**Date:** 2026-10-31 · **Source:** M4-U
+A real-delay test can need a core of its own. The rule: if the tunnel is up and carries the tested
+profile, measure through it; if the tunnel is up but carries *another* profile, refuse and say why; if
+the tunnel is down, start one temporary core on port 11808 and stop it in a `finally`.
+Why refuse instead of starting a second instance: two `core.Instance`s in one process share
+process-wide state (log handler, dispatcher assumptions), the outcome is undocumented, and a phone is
+the wrong place to discover what breaks. The refusal is a one-line message, not a silent "fail".
+
+## D-106 — "Real delay" means first byte through the proxy
+**Date:** 2026-10-31 · **Source:** M4-U, replaces the TCP-handshake ping entirely
+The clock starts before the SOCKS5 CONNECT and stops at the first byte of the HTTP response, through
+the core, to a public no-content endpoint from the server's side of the world. This exercises the
+account, the transport, the route and the remote resolver together.
+What it is not: an ICMP ping, a TCP handshake, or a measure of throughput. A node can be slow here and
+still be the right choice; what it cannot be is *silent*.
+The old handshake ping was deleted rather than kept beside it: two numbers where one lies is worse
+than one number.
+Cost: one extra connect per test (a few hundred ms on a cold start), and an AMNEZIAWG profile reports
+"not implemented" instead of a made-up number.

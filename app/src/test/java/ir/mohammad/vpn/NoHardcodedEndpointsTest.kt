@@ -39,8 +39,12 @@ class NoHardcodedEndpointsTest {
         "198.18.0.0",   // fakedns pool base
     )
 
-    /** Infrastructure hosts, not operator servers. */
-    private val allowedHosts = setOf("github.com")
+    /**
+     * Infrastructure hosts, not operator servers: the rule-set download and the two public
+     * no-content endpoints the delay probe measures through the tunnel. Neither is a server the app
+     * connects to for carrying traffic, and neither is secret.
+     */
+    private val allowedHosts = setOf("github.com", "cp.cloudflare.com", "www.gstatic.com")
 
     private val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     private val ipv4 = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")
