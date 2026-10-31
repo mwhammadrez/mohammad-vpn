@@ -857,3 +857,23 @@ HTTP 204 through the real server (1.08–1.32 s). From this host, not from Iran.
 Copied blocks arrive concatenated (`…#H3vless://…`). Splitting only on newlines lost two of three
 links. Splitting on a scheme boundary must be line-aware and must not cut `vless://` at its own
 `ss://` — the lookbehind in `ImportBatch.SCHEME_BOUNDARY` is what prevents that.
+
+## D-109 — One button measures everything, one at a time
+**Date:** 2026-10-31 · **Source:** operator request
+`TEST ALL n` walks the profile list sequentially and writes each result into that row as it finishes.
+Sequential, because every measurement may start a core and D-105 forbids two. When the tunnel is up,
+only the profile carrying it is measured; the rest are marked skipped rather than shown a number that
+was never taken. The per-row chip stays for a single re-test.
+
+## D-110 — Emit `finalmask`, the core's own spelling
+**Date:** 2026-10-31 · **Source:** `infra/conf/transport_internet.go:56`
+The core's JSON tag is `finalmask`. Go's decoder is case-insensitive, so `finalMask` also worked — which
+is precisely why both spellings had crept in (the global fragment toggle wrote one, the profile mask
+the other). The renderer now writes `finalmask` and accepts either when deciding whether the transport
+already carries one. Behaviour is unchanged; the rendered config stops being ambiguous.
+
+## D-111 — Two upstream features are not ported, on purpose
+**Date:** 2026-10-31 · **Source:** `docs/AUDIT_PATTNG_PARITY.md`
+`https+one` DoH schemes and the corresponding ECH fetch change only how a DoH server is queried. Every
+DNS entry this client renders is an IP literal, and no `echConfig` is ever set, so both are dead code
+here. Trigger to revisit: the first DoH server address in a bundle or an imported profile.

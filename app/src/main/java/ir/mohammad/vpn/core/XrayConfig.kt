@@ -151,7 +151,11 @@ object XrayConfig {
         val mask = profile.finalMask ?: return
         val stream = outbound.optJSONObject("streamSettings")
             ?: JSONObject().also { outbound.put("streamSettings", it) }
-        if (!stream.has("finalMask")) stream.put("finalMask", JSONObject(mask.toString()))
+        // The core's field is `finalmask` (all lower case). Go's decoder would also accept
+        // `finalMask`, but emitting the exact name keeps the rendered config honest.
+        if (!stream.has("finalmask") && !stream.has("finalMask")) {
+            stream.put("finalmask", JSONObject(mask.toString()))
+        }
     }
 
     private fun applySockopt(outbound: JSONObject, mtu: Int, profile: Profile) {

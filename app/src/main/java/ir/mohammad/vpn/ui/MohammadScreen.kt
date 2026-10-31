@@ -96,6 +96,7 @@ fun MohammadScreen(
     onPaste: () -> Unit = {},
     pingByProfile: Map<String, ProfilePing> = emptyMap(),
     importMessage: String? = null,
+    pingProgress: Pair<Int, Int>? = null,
 ) {
     MohammadTheme {
         val down = remember { mutableStateListOf<Float>() }
@@ -135,7 +136,7 @@ fun MohammadScreen(
                 Hero(state, selected, traffic, onToggle)
                 Bento(down, up, traffic)
                 Nodes(profiles, selected, state, onSelect, onPaste, onPingProfile, pingByProfile, importMessage)
-                Actions(pingMs, pingBusy, onPing)
+                Actions(pingMs, pingBusy, onPing, pingProgress, profiles.size)
                 Evasion(fragmentOn, fragmentMode, muxOn, onFragment, onFragmentMode, onMux)
                 Console(logs)
             }
@@ -679,18 +680,29 @@ private fun Actions(
     pingMs: Long?,
     pingBusy: Boolean,
     onPing: () -> Unit,
+    progress: Pair<Int, Int>?,
+    profileCount: Int,
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         GhostButton(
             text = when {
-                pingBusy -> "PINGING…"
-                pingMs != null && pingMs >= 0 -> "PING ${pingMs}MS"
-                pingMs != null -> "PING FAILED"
-                else -> "TEST PING"
+                pingBusy && progress != null -> "TESTING ${progress.first}/${progress.second}…"
+                pingBusy -> "TESTING…"
+                profileCount > 0 -> "TEST ALL $profileCount"
+                else -> "TEST ALL"
             },
-            enabled = !pingBusy,
+            enabled = !pingBusy && profileCount > 0,
             onClick = onPing,
             modifier = Modifier.weight(1f),
+        )
+    }
+    if (!pingBusy && pingMs != null) {
+        Text(
+            "selected profile: ${pingMs}ms",
+            fontFamily = Chakra,
+            fontSize = 10.sp,
+            color = Palette.TextMuted,
+            modifier = Modifier.padding(top = 6.dp),
         )
     }
 }

@@ -264,6 +264,7 @@ fun MohammadApp() {
     var pingMs by remember { mutableStateOf<Long?>(null) }
     var pingBusy by remember { mutableStateOf(false) }
     var importMessage by remember { mutableStateOf<String?>(null) }
+    var pingProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     val pingByProfile = remember { mutableStateMapOf<String, ProfilePing>() }
     val clipboard = LocalClipboardManager.current
     var crash by remember { mutableStateOf(activity.lastCrash) }
@@ -317,14 +318,29 @@ fun MohammadApp() {
             pingMs = null
         },
         onPing = {
-            val profile = selected ?: return@MohammadScreen
+            if (pingBusy || profiles.isEmpty()) return@MohammadScreen
             pingBusy = true
             pingMs = null
+            pingProgress = 0 to profiles.size
+            profiles.forEach { pingByProfile[it.id] = ProfilePing(busy = true) }
             scope.launch {
-                val result = RealDelay.measure(activity, profile)
-                pingMs = result.ms
-                if (!result.ok) LogStore.add("W", "APP", "delay test failed: ${result.reason}")
+                val snapshot = profiles
+                RealDelay.measureAll(activity, snapshot) { index, total, profile, result ->
+                    pingByProfile[profile.id] = if (result.ok) {
+                        ProfilePing(ms = result.ms)
+                    } else {
+                        ProfilePing(error = result.reason)
+                    }
+                    if (result.ok) {
+                        pingMs = result.ms
+                    } else if (result.reason != RealDelay.SKIPPED) {
+                        LogStore.add("W", "APP", "delay test ${profile.name}: ${result.reason}")
+                    }
+                    pingProgress = (index + 1) to total
+                }
+                LogStore.add("I", "APP", "delay test finished for ${snapshot.size} profile(s)")
                 pingBusy = false
+                pingProgress = null
             }
         },
         onPingProfile = { profile ->
@@ -358,5 +374,6 @@ fun MohammadApp() {
         },
         pingByProfile = pingByProfile,
         importMessage = importMessage,
+        pingProgress = pingProgress,
     )
 }

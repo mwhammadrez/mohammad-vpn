@@ -31,7 +31,7 @@ class FinalMaskConfigTest {
 
     private fun profile(mask: JSONObject? = null, streamHasMask: Boolean = false): Profile {
         val stream = JSONObject().put("network", "ws").put("security", "none")
-        if (streamHasMask) stream.put("finalMask", JSONObject().put("tcp", JSONArray()))
+        if (streamHasMask) stream.put("finalmask", JSONObject().put("tcp", JSONArray()))
         return Profile(
             id = "p1", name = "A", protocol = "VLESS", core = "XRAY",
             host = "h.example", port = 443,
@@ -54,7 +54,7 @@ class FinalMaskConfigTest {
 
     @Test
     fun `a merge mask reaches the core`() {
-        val rendered = stream(profile(mergeMask())) .getJSONObject("finalMask")
+        val rendered = stream(profile(mergeMask())) .getJSONObject("finalmask")
         val tcp = rendered.getJSONArray("tcp").getJSONObject(0)
         assertEquals("merge", tcp.getString("type"))
         assertEquals(1, tcp.getJSONObject("settings").getInt("times"))
@@ -64,12 +64,12 @@ class FinalMaskConfigTest {
     @Test
     fun `a mask already in the transport JSON is not overwritten`() {
         val rendered = stream(profile(mergeMask(), streamHasMask = true))
-        assertEquals(0, rendered.getJSONObject("finalMask").getJSONArray("tcp").length())
+        assertEquals(0, rendered.getJSONObject("finalmask").getJSONArray("tcp").length())
     }
 
     @Test
     fun `no mask means no key`() {
-        assertFalse(stream(profile()).has("finalMask"))
+        assertFalse(stream(profile()).has("finalmask"))
     }
 
     @Test

@@ -25,6 +25,7 @@
 | M4-C | Config compatibility + `oob` + `merge` | ✅ done | green | core patched, current bundle can start |
 | M4-U | Paste import + real-delay test | ✅ done | green | any link can be tried before connecting |
 | M4-U2 | Import fidelity: encryption, httpupgrade, fm | ✅ done | green | real links now import correctly |
+| M4-U3 | Parity audit + test-all | ✅ done | green | every PattNG core feature accounted for |
 | M4 | State machine + path policy | ⬜ not started | — | largest milestone |
 | M5 | Pre-flight netcheck | ⬜ not started | — | measurement, not guesswork |
 | M6 | Second path (WS+TLS via CDN) | ⬜ not started | — | resilience to IP death |
@@ -48,8 +49,8 @@ SDK 36, NDK 28.2.13676358, Go 1.27.3, 3 GiB RAM, **no device, no `/dev/kvm`**.
 |---|---|---:|---|
 | Version | `./gradlew --version` | 0 | Gradle 8.14.6, JVM 17.0.21, Kotlin 2.0.21 |
 | Clean build | `./gradlew clean :app:assembleDebug` | 0 | `app-debug.apk` **14.3 MB** (limit 20) |
-| Unit | `./gradlew :app:testDebugUnitTest` | 0 | **161 tests, 161 passed, 0 skipped** (after the D-78 guard) |
-| Lint | `./gradlew :app:lintDebug` | 0 | **0 errors, 15 warnings** |
+| Unit | `./gradlew :app:testDebugUnitTest` | 0 | **319 tests, 319 passed, 0 skipped** (after M4-U3) |
+| Lint | `./gradlew :app:lintDebug` | 0 | **0 errors, 17 warnings** |
 | Placeholder | `./scripts/check-no-placeholders` | 0 | `No banned markers found` |
 | APK size | `./scripts/apk-size-check` | 0 | 14.3 MB, within 20 MB |
 | Go vet | `go vet ./...` (core-go) | 0 | no findings |
@@ -112,6 +113,14 @@ is `NOT VERIFIED` except where `STATUS.md` cites a captured log.
 - `AcTraceabilityTest` added: every AC must have a runnable command, and every referenced test class
   must exist in sources or be planned. It caught two AC rows with shorthand instead of a command.
 - Gate: **100/100 tests, lint 0 errors / 15 warnings, APK 14.3 MB, placeholder exit 0.**
+
+### 2026-10-31 · M4-U3 — full parity audit and test-all
+- Audited their fork commit by commit (`docs/AUDIT_PATTNG_PARITY.md`): 5 non-upstream features; 3 ported,
+  1 equivalent, 2 deliberately not ported (DoH `+one`, ECH `+one` — dead code without DoH).
+- `TEST ALL n` measures every profile sequentially; skipped where another profile is live (D-109).
+- Import now understands `xhttp`/`splithttp` and carries `fm` for trojan too; a fragment mask on a
+  REALITY link is dropped with a warning instead of breaking the handshake.
+- Renderer emits the core's exact `finalmask` key (D-110).
 
 ### 2026-10-31 · M4-U2 — the importer was lossy
 - Operator pasted three working links; none worked in the app. Cause: `encryption` forced to `none`

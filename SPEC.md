@@ -306,7 +306,8 @@ it is testable on the JVM without a device. Android types stay out of policy cod
 | FR-U5 | A real-delay measurement either uses the live tunnel (the tested profile is the one carrying it) or a temporary core on a spare port. It never starts a second core beside a live one. |
 | FR-U6 | Imported profiles are user data: they are never embedded in the APK and never subject to the D-78 source rule, but they are validated before use. |
 | FR-U7 | Defaults are applied where a share link is silent: a TLS or REALITY profile with no `fp` gets `chrome`, and the substitution is logged. |
-| FR-U8 | Every attribute that changes the wire format is carried through: `encryption` (including VLESS post-quantum keys), transport-specific blocks (`httpupgrade` is not `ws`), and `fm` (the finalMask). A substituted default is a bug, not a convenience. |
+| FR-U8 | Every attribute that changes the wire format is carried through: `encryption` (including VLESS post-quantum keys), transport-specific blocks (`httpupgrade` is not `ws`, `xhttp` is its own block), and `fm` (the finalMask). A substituted default is a bug, not a convenience. |
+| FR-U9 | One action measures every profile in turn and reports each result in place. Profiles that cannot be measured while another one carries the tunnel are marked as skipped, never given a number. |
 
 ### 5.17 AmneziaWG (AWG) — `NOT VERIFIED`
 
@@ -537,6 +538,7 @@ Every AC names a test class that exists today or is created by the milestone in 
 | AC-U5 | FR-U1 | render | `--tests "*ProfilesRenderTest"` | paste action and per-row chips render without overflow | M4-U |
 | AC-U6 | FR-U8 | unit | `--tests "*ConfigUriTest"` | encryption preserved; httpupgrade has its own block; fm becomes finalMask | M4-U |
 | AC-U7 | FR-U8 | native | render the imported config, run it, request through it | the core accepts it and a request returns 204 | M4-U |
+| AC-U8 | FR-U9 | render | `--tests "*ProfilesRenderTest"` | per-row chips update while "TESTING i/n" is shown | M4-U |
 | AC-N1 | FR-N1 | unit | `--tests "*TileStateSyncTest"` | one push per distinct state; listen always pushes | M4-N |
 | AC-N2 | FR-N2 | integration | `--tests "*TileInteractionTest"` | tile toggles through the shared controller | M4-N |
 | AC-N3 | FR-N3 | Robolectric | `--tests "*SurfaceColdStartTest"` | cold process: tile inactive from persisted profile | M4-N |

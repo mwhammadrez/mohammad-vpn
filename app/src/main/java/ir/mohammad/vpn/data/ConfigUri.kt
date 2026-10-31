@@ -102,7 +102,7 @@ object ConfigUri {
             awg = null,
             fingerprint = fingerprintFor(security, param(q, "fp"), warnings),
             flow = param(q, "flow"),
-            finalMask = finalMask(param(q, "fm"), warnings),
+            finalMask = finalMask(param(q, "fm"), security, warnings),
         )
         return Parsed(profile, warnings)
     }
@@ -147,6 +147,7 @@ object ConfigUri {
                 xray = xray,
                 awg = null,
                 fingerprint = fingerprintFor(security, param(q, "fp"), warnings),
+                finalMask = finalMask(param(q, "fm"), security, warnings),
             ),
             warnings,
         )
@@ -323,6 +324,13 @@ object ConfigUri {
                     .apply { param(q, "host")?.let { put("host", it) } },
             )
             "grpc" -> stream.put("grpcSettings", JSONObject().put("serviceName", param(q, "serviceName") ?: ""))
+            // XHTTP (formerly SplitHTTP) is what the core recommends over HTTPUpgrade now.
+            "xhttp", "splithttp" -> stream.put(
+                "xhttpSettings",
+                JSONObject()
+                    .put("path", param(q, "path") ?: "/")
+                    .apply { param(q, "host")?.let { put("host", it) } },
+            )
             "h2", "http" -> stream.put(
                 "httpSettings",
                 JSONObject().put("path", param(q, "path") ?: "/").apply {
@@ -371,7 +379,7 @@ object ConfigUri {
      * the ClientHello. Dropping it changes how the handshake looks on the wire, which is the whole
      * point of the link.
      */
-    private fun finalMask(raw: String?, warnings: MutableList<String>): JSONObject? {
+    private fun finalMask(raw: String?, security: String, warnings: MutableList<String>): JSONObject? {
         if (raw.isNullOrBlank()) return null
         val mask = runCatching { JSONObject(raw) }.getOrElse {
             warnings.add("fm is not valid JSON; fragment setting ignored")
@@ -381,6 +389,17 @@ object ConfigUri {
         if (problem != null) {
             warnings.add("$problem; fragment setting ignored")
             return null
+        }
+        // D-76: splitting the ClientHello breaks REALITY authentication. Drop the mask and keep the
+        // profile usable instead of importing a config that cannot complete its handshake.
+        if (security == "reality") {
+            val tcp = mask.optJSONArray("tcp")
+            val fragment = tcp != null && (0 until tcp.length())
+                .any { tcp.optJSONObject(it)?.optString("type") == "fragment" }
+            if (fragment) {
+                warnings.add("reality cannot use the fragment mask; ignored")
+                return null
+            }
         }
         return mask
     }

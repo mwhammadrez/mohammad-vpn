@@ -1,6 +1,7 @@
 package ir.mohammad.vpn
 
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -49,7 +50,7 @@ class ProfilesRenderTest {
                 profiles = listOf(operator, pasted, pending),
                 selected = pasted,
                 pingMs = 184,
-                pingBusy = false,
+                pingBusy = true,
                 onToggle = {},
                 onSelect = {},
                 onPing = {},
@@ -61,9 +62,11 @@ class ProfilesRenderTest {
                     pending.id to ProfilePing(busy = true),
                 ),
                 importMessage = "imported 2, skipped 1 unrecognised",
+                pingProgress = 2 to 3,
             )
         }
         compose.mainClock.advanceTimeBy(600)
         compose.onRoot().captureRoboImage("build/reports/surfaces/profiles_paste.png")
+        compose.onNodeWithText("TESTING 2/3…").assertExists()
     }
 }

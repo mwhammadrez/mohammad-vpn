@@ -5,6 +5,23 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.14.7 — test every profile at once (M4-U3)
+
+### Added
+- **TEST ALL n.** One tap measures every profile in turn and fills each row's chip as it finishes.
+  Sequential by design; profiles that cannot be measured while another one is live are marked as
+  skipped, never given a number that was not taken.
+- `xhttp` / `splithttp` links import with their own settings block, and `fm` is now honoured on
+  trojan links as well.
+
+### Fixed
+- A REALITY link carrying a fragment mask is imported without the mask (and with a log line) instead
+  of producing a handshake that can never complete.
+- The renderer writes `finalmask`, the core's exact key, so a profile mask and the global fragment
+  toggle cannot disagree about spelling.
+
+---
+
 ## 0.14.6 — imports are faithful now (M4-U2)
 
 ### Fixed

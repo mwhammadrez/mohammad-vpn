@@ -55,6 +55,33 @@ object RealDelay {
         else -> Plan.Refused("disconnect first: another profile is carrying the tunnel")
     }
 
+    /**
+     * Measures every profile in turn. Sequential on purpose: each measurement may start a core, and
+     * two cores in one process is exactly what D-105 forbids.
+     *
+     * When the tunnel is up, only the profile carrying it can be measured; the rest are reported as
+     * skipped instead of being given a made-up number.
+     */
+    suspend fun measureAll(
+        context: Context,
+        profiles: List<Profile>,
+        timeoutMs: Int = CONNECT_TIMEOUT_MS,
+        onEach: (index: Int, total: Int, profile: Profile, result: Result) -> Unit,
+    ) {
+        val connected = Tunnel.state.value is TunnelState.Connected
+        val liveId = Tunnel.selected?.id
+        profiles.forEachIndexed { index, profile ->
+            val result = when (plan(connected, liveId, profile.id)) {
+                is Plan.Refused -> Result(null, SKIPPED)
+                else -> measure(context, profile, timeoutMs)
+            }
+            onEach(index, profiles.size, profile, result)
+        }
+    }
+
+    /** Marks a profile that was not measured because another one is carrying the tunnel. */
+    const val SKIPPED = "skipped: another profile is live"
+
     suspend fun measure(context: Context, profile: Profile, timeoutMs: Int = CONNECT_TIMEOUT_MS): Result =
         withContext(Dispatchers.IO) {
             val connected = Tunnel.state.value is TunnelState.Connected

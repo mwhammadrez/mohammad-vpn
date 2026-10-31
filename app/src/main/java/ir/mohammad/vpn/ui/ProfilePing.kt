@@ -10,6 +10,7 @@ data class ProfilePing(
         get() = when {
             busy -> "…"
             ms != null -> "${ms}ms"
+            error != null && error.startsWith("skipped") -> "—"
             error != null -> "fail"
             else -> "—"
         }

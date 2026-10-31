@@ -190,6 +190,38 @@ class ConfigUriTest {
     }
 
     @Test
+    fun `xhttp gets its own block`() {
+        val parsed = ConfigUri.parse(
+            "vless://11111111-2222-3333-4444-555555555555@x.example.com:443" +
+                "?type=xhttp&path=%2Fapi&host=edge.example.com&security=tls",
+        )
+        val stream = parsed.profile.xray!!.getJSONObject("streamSettings")
+        assertEquals("xhttp", stream.getString("network"))
+        assertEquals("/api", stream.getJSONObject("xhttpSettings").getString("path"))
+        assertEquals("edge.example.com", stream.getJSONObject("xhttpSettings").getString("host"))
+    }
+
+    @Test
+    fun `a fragment mask is dropped for reality instead of breaking the handshake`() {
+        val mask = """{"tcp":[{"type":"fragment","settings":{"packets":"tlshello"}}]}"""
+        val encoded = java.net.URLEncoder.encode(mask, "UTF-8")
+        val parsed = ConfigUri.parse(
+            "vless://11111111-2222-3333-4444-555555555555@r.example.com:443" +
+                "?security=reality&sni=a.example.com&pbk=${"A".repeat(43)}&sid=ab12&fm=$encoded",
+        )
+        assertNull(parsed.profile.finalMask)
+        assertTrue(parsed.warnings.any { it.contains("reality") })
+    }
+
+    @Test
+    fun `trojan links carry fm too`() {
+        val mask = """{"tcp":[{"type":"merge","settings":{"times":1}}]}"""
+        val encoded = java.net.URLEncoder.encode(mask, "UTF-8")
+        val parsed = ConfigUri.parse("trojan://pw@t.example.com:443?security=tls&fm=$encoded")
+        assertEquals("merge", parsed.profile.finalMask!!.getJSONArray("tcp").getJSONObject(0).getString("type"))
+    }
+
+    @Test
     fun `the same link always yields the same id`() {
         val link = "vless://11111111-2222-3333-4444-555555555555@x.example.com:443?security=none"
         assertEquals(ConfigUri.parse(link).profile.id, ConfigUri.parse(link).profile.id)
