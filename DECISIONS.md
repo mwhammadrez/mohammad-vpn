@@ -576,3 +576,13 @@ risk was latent rather than live — but a future call site would have built an 
 did not match the route plan. Both removed.
 Test sources are exempt from the scan: fixtures need concrete values, and the rule is about
 production. Fixtures use `.invalid` hosts and generated keys, never the operator's data.
+
+## D-79 — Multi-profile parsing is proven, not assumed
+**Date:** 2026-10-31 · **Source:** SRC-1/SRC-5 (D-78)
+`MultiProfileTest` covers a 1-profile bundle, a 2-profile bundle, and a 5-profile bundle with mixed
+cores (four XRAY protocols plus one AMNEZIAWG), asserting order, per-profile hosts, default
+resolution, empty-list rejection and duplicate rejection at a non-zero index.
+Why it exists separately from `BundleParseTest`: that file tests *field validation*, this one tests
+*cardinality*. A single-server assumption usually shows up as "the first profile is the only one",
+which no field-level test would catch.
+Still open until M4: policy behaviour with 1/2/N paths (`PathPolicyTest`, AC-40).
