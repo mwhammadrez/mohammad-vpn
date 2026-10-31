@@ -877,3 +877,15 @@ already carries one. Behaviour is unchanged; the rendered config stops being amb
 `https+one` DoH schemes and the corresponding ECH fetch change only how a DoH server is queried. Every
 DNS entry this client renders is an IP literal, and no `echConfig` is ever set, so both are dead code
 here. Trigger to revisit: the first DoH server address in a bundle or an imported profile.
+
+## D-112 — WhiteDNS is a reference, the MIT engine is the candidate
+**Date:** 2026-10-31 · **Source:** `docs/AUDIT_WHITEDNS.md`
+`WhiteDNS-Android` is source-available proprietary: the licence forbids exactly the intended use (a
+different app, fork or derivative). Its tunnelling code is not its own anyway — it ships MasterDnsVPN,
+StormDNS, CottenDns and Lantern Soar as executables and gives them a UI.
+Decision: **no code, naming, UI or config format from WhiteDNS.** If a DNS path is built, it is built
+on an MIT engine (MasterDnsVPN first choice: most active, smallest header, per-resolver MTU).
+Technique and architecture are free to learn from; the licence covers the expression, not the idea.
+Sequencing: M6, i.e. after the state machine and netcheck, and only if the operator supplies a domain
+with an `NS` delegation and a VPS that accepts UDP 53.
+Cost measured, not guessed: arm64 engine binary 5.3 MB, APK 14.3 → ~19.6 MB against a 20 MB budget.

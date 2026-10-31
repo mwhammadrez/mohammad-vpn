@@ -20,6 +20,7 @@ diagnostics, and M7 exists to deliver M1–M6 to installed users without a relea
 | M4-N | Tile reliability, notification, telemetry | — | 0.14.2 | live notification, working counters | **yes** (shade) |
 | M4-C | Config compatibility + `oob` dialMode | — | 0.14.3 | the current bundle can actually start | **yes** (DPI) |
 | M4-U | Paste import + real-delay test | — | 0.14.5 | user can try any config and see if it works | **yes** (device) |
+| M6-DNS | DNS tunnel as the second path (candidate) | M6 | — | works where only DNS survives | **yes** (domain + UDP 53) |
 | M4 | State machine + path policy | #5, #6, #7 | 0.15.0 | multi-path, honest states | no |
 | M5 | Pre-flight netcheck | #8 | 0.16.0 | fewer wrong assumptions | **yes** (measurement) |
 | M6 | Second path (WS+TLS via CDN) | #10 | 0.17.0 | works when the IP dies | **yes** (survival) |
