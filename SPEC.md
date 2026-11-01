@@ -332,6 +332,7 @@ it is testable on the JVM without a device. Android types stay out of policy cod
 | FR-D6 | The bridge consumes the engine's local SOCKS5 listener exactly as it consumes Xray's; nothing above the bridge knows which core is behind it. |
 | FR-D7 | A DNS profile is measured by the same real-delay probe as any other, on a spare port, with a longer timeout because session setup and MTU discovery are slow. |
 | FR-D8 | A `dns://domain?key=…&method=…&resolvers=a,b` link imports into a DNS profile and is validated by the same rules. |
+| FR-D9 | A `masterdns://` link (WhiteDNS export) imports into a DNS profile. `cottendns://` and `soar://` are refused by name, because this build ships one engine and importing a profile it cannot run would be a lie. |
 
 ### 5.18 AmneziaWG (AWG) — `NOT VERIFIED`
 

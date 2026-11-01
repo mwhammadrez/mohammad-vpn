@@ -42,17 +42,15 @@ class DnsConfigTest {
     }
 
     @Test
-    fun `the key length must match the cipher`() {
-        assertNull(DnsConfig.validate(settings(method = 3, key = "0011223344556677")))     // 16 for AES-128
-        assertNull(DnsConfig.validate(settings(method = 4, key = "0".repeat(24))))          // 24 for AES-192
-        assertNull(DnsConfig.validate(settings(method = 5, key = "0".repeat(32))))          // 32 for AES-256
-        assertTrue(DnsConfig.validate(settings(method = 3, key = "0".repeat(32))) != null)
-        assertTrue(DnsConfig.validate(settings(method = 5, key = "0".repeat(16))) != null)
-    }
-
-    @Test
-    fun `a key must be hex, not arbitrary text`() {
-        assertTrue(DnsConfig.validate(settings(key = "zz11223344556677")) != null)
+    fun `the key is whatever the server handed out`() {
+        // The client hashes the key (SHA-256 for AES-256/ChaCha20, MD5 for AES-128), so length is not
+        // a client-side rule. Public profiles ship 64-character hex keys for AES-256-GCM.
+        assertNull(DnsConfig.validate(settings(method = 3, key = "0011223344556677")))
+        assertNull(DnsConfig.validate(settings(method = 5, key = "59619224cdcc24eb52a1f503b291e39ce6cba3c3e0f85a59d282c9bbbb85619c")))
+        assertNull(DnsConfig.validate(settings(method = 5, key = "a".repeat(32))))
+        // Only genuinely unusable keys are refused.
+        assertTrue(DnsConfig.validate(settings(method = 5, key = "")) != null)
+        assertTrue(DnsConfig.validate(settings(method = 5, key = "has space")) != null)
     }
 
     @Test

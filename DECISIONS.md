@@ -945,3 +945,15 @@ Mode 1 lists everything except DNS profiles; Mode 2 lists only DNS profiles. A t
 meaning in the DNS environment and vice versa, and showing it there only invites the wrong tap.
 Importing a `dns://` link switches to Mode 2, because that is the only place the new profile can be
 used.
+
+## D-118 — The DNS key has no client-side length, and links name their engine
+**Date:** 2026-11-01 · **Source:** three public WhiteDNS profiles that failed to import
+`DnsConfig` required 16/24/32 characters depending on the cipher, reasoned from the server's key file.
+The client does not work that way: `deriveKey` hashes whatever text it is given (SHA-256 for AES-256 and
+ChaCha20, MD5 for AES-128). Every real profile — the public ones ship 64-character hex for AES-256 —
+was refused at bundle load. The rule is now: a key must exist when the cipher is not `none`, and must
+be a single token.
+The same links exposed a second gap: `masterdns://`, `cottendns://` and `soar://` are three different
+engines behind one export format. Only `masterdns` is bundled here, so it imports, and the other two are
+refused **by name** with the reason. Importing them would produce a profile that cannot connect, which
+is the failure mode this project keeps trying to delete.

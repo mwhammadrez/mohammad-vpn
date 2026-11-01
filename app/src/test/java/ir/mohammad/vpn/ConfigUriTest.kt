@@ -236,11 +236,53 @@ class ConfigUriTest {
     }
 
     @Test
-    fun `a dns link with a bad key is refused`() {
+    fun `a dns link without a key is refused`() {
         val failure = runCatching {
-            ConfigUri.parse("dns://v.example.com?key=short&method=3&resolvers=1.1.1.1")
+            ConfigUri.parse("dns://v.example.com?method=3&resolvers=1.1.1.1")
         }.exceptionOrNull()
         assertTrue(failure is ConfigUri.InvalidConfig)
+        assertTrue(failure!!.message!!.contains("key"))
+    }
+
+    @Test
+    fun `a whitedns masterdns link becomes a DNS profile`() {
+        val payload = org.json.JSONObject().put(
+            "profile",
+            org.json.JSONObject()
+                .put("engine", "masterdns")
+                .put("name", "public 3 · MasterDNS")
+                .put(
+                    "server",
+                    org.json.JSONObject()
+                        .put("domain", "mdns-1.example.whitedns.download")
+                        .put("encryption_key", "a".repeat(64))
+                        .put("encryption_method", 5),
+                ),
+        ).toString()
+        val link = "masterdns://" + java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(payload.toByteArray())
+
+        val parsed = ConfigUri.parse(link)
+        assertEquals("DNS", parsed.profile.core)
+        assertEquals("public 3 · MasterDNS", parsed.profile.name)
+        assertEquals("mdns-1.example.whitedns.download", parsed.profile.host)
+        assertEquals(5, parsed.profile.dns!!.getInt("method"))
+        assertEquals(2, parsed.profile.dns!!.getJSONArray("resolvers").length())
+    }
+
+    @Test
+    fun `links for engines this build does not ship are refused by name`() {
+        val payload = org.json.JSONObject().put(
+            "profile",
+            org.json.JSONObject()
+                .put("engine", "cottendns")
+                .put("server", org.json.JSONObject().put("domain", "cot.example.whitedns.download")),
+        ).toString()
+        val link = "cottendns://" + java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(payload.toByteArray())
+        val failure = runCatching { ConfigUri.parse(link) }.exceptionOrNull()
+        assertTrue(failure is ConfigUri.InvalidConfig)
+        assertTrue(failure!!.message!!.contains("cottendns"))
     }
 
     @Test

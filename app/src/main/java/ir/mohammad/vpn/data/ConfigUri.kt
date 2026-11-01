@@ -27,7 +27,7 @@ object ConfigUri {
 
     const val DEFAULT_FINGERPRINT = "chrome"
 
-    private val SUPPORTED = setOf("vless", "vmess", "trojan", "ss", "dns")
+    private val SUPPORTED = setOf("vless", "vmess", "trojan", "ss", "dns", "masterdns", "cottendns", "soar")
 
     class InvalidConfig(message: String) : Exception(message)
 
@@ -49,6 +49,9 @@ object ConfigUri {
             "trojan" -> parseTrojan(text)
             "ss" -> parseShadowsocks(text)
             "dns" -> parseDns(text)
+            "masterdns" -> parseWhiteDns(text, "masterdns")
+            "cottendns" -> parseWhiteDns(text, "cottendns")
+            "soar" -> parseWhiteDns(text, "soar")
             "" -> throw InvalidConfig("not a share link: expected scheme:// at the start")
             else -> throw InvalidConfig("unsupported scheme \"$scheme\" (supported: vless, vmess, trojan, ss)")
         }
@@ -258,6 +261,76 @@ object ConfigUri {
             Profile(
                 id = idFor(text),
                 name = nameOf(uri, "dns $domain"),
+                protocol = "DNS",
+                core = "DNS",
+                host = domain,
+                port = 53,
+                xray = null,
+                awg = null,
+                dns = settings,
+            ),
+            warnings,
+        )
+    }
+
+    /* ---------------------------------------------------------- whitedns links */
+
+    /**
+     * `masterdns://<base64 json>` and its siblings, as WhiteDNS exports them:
+     * `{ profile: { engine, server: { domain, encryption_key, encryption_method }, resolvers } }`.
+     *
+     * Only `masterdns` maps onto the engine this app ships. `cottendns` and `soar` are different
+     * engines with their own binaries; refusing them by name is better than importing a profile that
+     * silently cannot connect.
+     */
+    private fun parseWhiteDns(text: String, scheme: String): Parsed {
+        val body = text.substringAfter("://").trim()
+        val json = runCatching {
+            JSONObject(String(decodeBase64(body), Charsets.UTF_8))
+        }.getOrElse { throw InvalidConfig("$scheme: body is not base64 JSON") }
+
+        val profile = json.optJSONObject("profile") ?: throw InvalidConfig("$scheme: profile missing")
+        val engine = profile.optString("engine").ifBlank { scheme }
+        if (engine != "masterdns" && scheme != "masterdns") {
+            throw InvalidConfig(
+                "$scheme links need the ${engine} engine, which this build does not include; " +
+                    "only masterdns is bundled",
+            )
+        }
+
+        val server = profile.optJSONObject("server")
+            ?: throw InvalidConfig("$scheme: server missing")
+        val domain = server.optString("domain").trim()
+        if (domain.isBlank()) throw InvalidConfig("$scheme: server.domain missing")
+
+        val key = server.optString("encryption_key").trim()
+        val method = server.optInt("encryption_method", DnsConfig.DEFAULT_METHOD)
+
+        val resolvers = mutableListOf<String>()
+        profile.optJSONArray("resolvers")?.let { array ->
+            for (i in 0 until array.length()) {
+                array.optString(i).trim().takeIf { it.isNotEmpty() }?.let { resolvers.add(it) }
+            }
+        }
+        val warnings = mutableListOf<String>()
+        if (resolvers.isEmpty()) {
+            val fallback = listOf("1.1.1.1", "8.8.8.8")
+            resolvers.addAll(fallback)
+            warnings.add("no resolvers in the link; using ${fallback.joinToString()}")
+        }
+
+        val settings = JSONObject()
+            .put("domain", domain)
+            .put("method", method)
+            .put("key", key)
+            .put("resolvers", JSONArray(resolvers))
+        DnsConfig.validate(settings)?.let { throw InvalidConfig(it) }
+
+        val name = profile.optString("name").takeIf { it.isNotBlank() } ?: "masterdns ${domain.take(18)}"
+        return Parsed(
+            Profile(
+                id = idFor(text),
+                name = name,
                 protocol = "DNS",
                 core = "DNS",
                 host = domain,

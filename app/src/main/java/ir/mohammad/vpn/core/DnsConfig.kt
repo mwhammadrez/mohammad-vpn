@@ -34,14 +34,20 @@ object DnsConfig {
     )
 
     /**
-     * The engine derives its cipher from this length; a key of the wrong size is rejected by the
-     * server at session setup, which on a phone looks like "connecting forever". Check it here.
+     * The client hashes whatever key text it is given (`deriveKey`: SHA-256 for ChaCha20/AES-256,
+     * MD5 for AES-128), so there is no required length on this side — the server's key file is the
+     * one with a fixed size. Real public profiles hand out 64-character hex keys for AES-256-GCM;
+     * demanding 32 here rejected every one of them (found by testing against a live server).
+     *
+     * The only rules that matter: a key exists when the method is not `none`, and it is a single
+     * token (no spaces, quotes or newlines that would break the TOML line).
      */
-    fun requiredKeyLength(method: Int): Int = when (method) {
-        0 -> 0
-        3 -> 16
-        4 -> 24
-        else -> 32
+    fun keyProblem(method: Int, key: String): String? {
+        if (method == 0) return null
+        if (key.isEmpty()) return "dns key missing"
+        if (key.any { it.isWhitespace() }) return "dns key contains whitespace"
+        if (key.length > 128) return "dns key is too long"
+        return null
     }
 
     fun validate(settings: JSONObject?): String? {
@@ -54,17 +60,7 @@ object DnsConfig {
         val method = settings.optInt("method", DEFAULT_METHOD)
         if (method !in METHODS.keys) return "dns method must be 0..5"
 
-        val key = settings.optString("key")
-        val required = requiredKeyLength(method)
-        if (required > 0) {
-            if (key.isBlank()) return "dns key missing"
-            if (key.length != required) {
-                return "dns key must be $required characters for ${METHODS[method]}"
-            }
-            if (!key.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) {
-                return "dns key must be hex"
-            }
-        }
+        keyProblem(method, settings.optString("key"))?.let { return it }
 
         val resolvers = resolverList(settings)
         if (resolvers.isEmpty()) return "dns resolvers missing"

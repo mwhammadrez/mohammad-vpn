@@ -5,6 +5,29 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.15.4 — real DNS profiles import, and a key rule that was wrong
+
+### Fixed
+- **The key-length rule rejected every real profile.** The client hashes whatever key it is given
+  (SHA-256 for AES-256/ChaCha20, MD5 for AES-128); only the *server's* key file has a fixed size.
+  Requiring 16/24/32 characters here refused the 64-character hex keys that public servers hand out.
+  Now only an empty key or one containing whitespace is refused.
+
+### Added
+- `masterdns://<base64>` links (the WhiteDNS export format) import into a DNS profile.
+- `cottendns://` and `soar://` are recognised and refused **by name**: they need engines this build
+  does not ship, and a profile that cannot connect is worse than a clear message.
+
+### Checked against public servers
+Three public WhiteDNS profiles were tried from this host with the matching engine — ours for
+`masterdns`, and CottenDns built from its own source for `cottendns`. Both were rejected at MTU
+discovery with no answer from the authoritative server, while that server answers SOA queries in
+0.13 s. The same client and the same generated config against a server on this machine establish a
+session and carry traffic (`204` in 0.30 s). So the code path is sound; those public endpoints did not
+accept this host.
+
+---
+
 ## 0.15.3 — a DNS profile can no longer hijack the Mode 1 dial
 
 ### Fixed
