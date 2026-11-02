@@ -108,15 +108,15 @@ class RealDelayTest {
     }
 
     @Test
-    fun `the plan refuses a second core while another profile is live`() {
+    fun `a second profile is measured directly, never with a second core`() {
         assertEquals(RealDelay.Plan.TemporaryCore, RealDelay.plan(false, "a", "b"))
         assertEquals(
             RealDelay.Plan.ThroughLive(10808),
             RealDelay.plan(true, "a", "a"),
         )
-        val refused = RealDelay.plan(true, "a", "b")
-        assertTrue(refused is RealDelay.Plan.Refused)
-        assertTrue((refused as RealDelay.Plan.Refused).reason.contains("session"))
+        // While another profile carries the tunnel, this one is measured by a plain handshake bound
+        // to the underlying network: still no second core (D-105), but a real number.
+        assertEquals(RealDelay.Plan.Direct, RealDelay.plan(true, "a", "b"))
     }
 
     @Test
@@ -125,10 +125,10 @@ class RealDelayTest {
             RealDelay.Plan.ThroughLive(10809),
             RealDelay.plan(connected = false, selectedId = null, profileId = "d", proxyRunning = true, proxyProfileId = "d"),
         )
-        // A different profile cannot borrow the live proxy.
-        assertTrue(
-            RealDelay.plan(false, null, "other", proxyRunning = true, proxyProfileId = "d")
-                is RealDelay.Plan.Refused,
+        // A different profile cannot borrow the live proxy; it gets its own direct measurement.
+        assertEquals(
+            RealDelay.Plan.Direct,
+            RealDelay.plan(false, null, "other", proxyRunning = true, proxyProfileId = "d"),
         )
     }
 }

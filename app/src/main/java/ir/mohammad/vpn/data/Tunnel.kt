@@ -35,6 +35,18 @@ object Tunnel {
     @Volatile
     var profiles: List<Profile> = emptyList()
 
+    /**
+     * Bumped whenever [profiles] is replaced from outside a composition (remote config arrives after
+     * the first frame). The screen watches this instead of the plain list, which Compose cannot see.
+     */
+    private val _profilesRevision = MutableStateFlow(0)
+    val profilesRevision: StateFlow<Int> = _profilesRevision.asStateFlow()
+
+    fun publishProfiles(list: List<Profile>) {
+        profiles = list
+        _profilesRevision.value = _profilesRevision.value + 1
+    }
+
     @Volatile
     var selected: Profile? = null
 

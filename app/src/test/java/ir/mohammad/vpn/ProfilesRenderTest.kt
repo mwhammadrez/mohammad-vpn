@@ -77,6 +77,6 @@ class ProfilesRenderTest {
         compose.mainClock.advanceTimeBy(600)
         compose.onRoot().captureRoboImage("build/reports/surfaces/profiles_paste.png")
         compose.onNodeWithText("TESTING 2/3…").assertExists()
-        compose.onNodeWithText("Mode 2").assertExists()
+        compose.onNodeWithText("Mode 2 · Meli").assertExists()
     }
 }

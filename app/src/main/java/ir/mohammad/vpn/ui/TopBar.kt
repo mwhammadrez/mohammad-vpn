@@ -63,7 +63,11 @@ fun TopBar(
             }
             Spacer(Modifier.width(12.dp))
             Box(Modifier.size(7.dp).clip(CircleShape).background(
-                if (mode == AppMode.DNS) Palette.Violet else Palette.Mint,
+                when (mode) {
+                    AppMode.DNS -> Palette.Violet
+                    AppMode.PANEL -> Palette.Amber
+                    else -> Palette.Mint
+                },
             ))
             Spacer(Modifier.width(8.dp))
             Text(
@@ -79,10 +83,18 @@ fun TopBar(
         }
 
         Text(
-            if (mode == AppMode.DNS) "Mode 2 · DNS tunnel" else "Mode 1 · Xray",
+            when (mode) {
+                AppMode.DNS -> "Mode 2 · Meli"
+                AppMode.PANEL -> "Mode 3 · Panel"
+                else -> "Mode 1 · Xray"
+            },
             fontFamily = Chakra,
             fontSize = 10.sp,
-            color = if (mode == AppMode.DNS) Palette.Violet else Palette.TextMuted,
+            color = when (mode) {
+                AppMode.DNS -> Palette.Violet
+                AppMode.PANEL -> Palette.Amber
+                else -> Palette.TextMuted
+            },
             modifier = Modifier.padding(start = 42.dp, top = 2.dp),
         )
 
@@ -104,11 +116,17 @@ fun TopBar(
                     accent = Palette.Mint,
                 ) { onPickMode(AppMode.XRAY) }
                 ModeRow(
-                    title = "Mode 2",
+                    title = "Mode 2 · Meli",
                     subtitle = "DNS tunnel · slow, survives DNS-only networks",
                     active = mode == AppMode.DNS,
                     accent = Palette.Violet,
                 ) { onPickMode(AppMode.DNS) }
+                ModeRow(
+                    title = "Mode 3 · Panel",
+                    subtitle = "VLESS/Trojan panel on your own Cloudflare",
+                    active = mode == AppMode.PANEL,
+                    accent = Palette.Amber,
+                ) { onPickMode(AppMode.PANEL) }
             }
         }
     }

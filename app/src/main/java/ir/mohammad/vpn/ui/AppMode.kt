@@ -13,7 +13,8 @@ import ir.mohammad.vpn.data.Profile
  */
 enum class AppMode(val storageKey: String, val label: String, val short: String) {
     XRAY("xray", "Mode 1", "XRAY"),
-    DNS("dns", "Mode 2", "DNS TUNNEL");
+    DNS("dns", "Mode 2 · Meli", "DNS TUNNEL"),
+    PANEL("panel", "Mode 3 · Panel", "PANEL");
 
     companion object {
         fun from(value: String?): AppMode = entries.firstOrNull { it.storageKey == value } ?: XRAY

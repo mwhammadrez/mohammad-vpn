@@ -82,6 +82,9 @@ fun DnsScreen(
         proxy.starting
     val connected = proxy.running || tunnelState is TunnelState.Connected
 
+    // Without the inset the header — the only way back to Mode 1/3 — sits under the status bar and
+    // cannot be tapped. Mode 1 and Mode 3 already do this.
+    Box(Modifier.fillMaxSize().background(Palette.BgDeep).systemBarsPadding()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -176,6 +179,7 @@ fun DnsScreen(
         ProfileList(dnsProfiles, selected, onSelectProfile, onPaste, importMessage)
 
         Console(logs)
+    }
     }
 }
 

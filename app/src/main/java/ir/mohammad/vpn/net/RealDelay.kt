@@ -1,6 +1,9 @@
 package ir.mohammad.vpn.net
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import ir.mohammad.vpn.core.DnsConfig
 import ir.mohammad.vpn.core.GeoAssets
 import ir.mohammad.vpn.core.MtuPolicy
@@ -26,12 +29,12 @@ import java.net.Socket
  * succeeds against a CDN edge that will never reach the origin. That is why the old number was
  * misleading: a node could show 40 ms and carry no traffic.
  *
- * Two paths:
- *  - the tunnel is up and the tested profile is the one carrying it: measure through the live core;
- *  - the tunnel is down: start a temporary core on [PROBE_PORT], measure, stop it.
- *
- * A second core beside a live one is refused on purpose (D-105): two instances share process-wide
- * state, and a phone is not the place to find out what breaks.
+ * Three paths:
+ *  - the tested profile is the one carrying the session: measure through the live core;
+ *  - another profile is live: a second core is still refused (D-105), but a plain TCP handshake to
+ *    that server, bound to the underlying Wi-Fi/cellular network so it does not enter the tunnel,
+ *    gives the number every other client shows for a config that is not carrying traffic;
+ *  - nothing is live: start a temporary core on [PROBE_PORT], measure, stop it.
  */
 object RealDelay {
 
@@ -44,8 +47,11 @@ object RealDelay {
     sealed interface Plan {
         /** A session is already carrying this profile; measure through the port it listens on. */
         data class ThroughLive(val port: Int) : Plan
+
+        /** Another profile owns the tunnel: measure the server's own handshake, outside the tunnel. */
+        data object Direct : Plan
+
         data object TemporaryCore : Plan
-        data class Refused(val reason: String) : Plan
     }
 
     data class Result(val ms: Long?, val reason: String? = null) {
@@ -62,7 +68,7 @@ object RealDelay {
     ): Plan = when {
         connected && selectedId == profileId -> Plan.ThroughLive(XrayConfig.SOCKS_PORT)
         proxyRunning && proxyProfileId == profileId -> Plan.ThroughLive(DnsConfig.SOCKS_PORT)
-        connected || proxyRunning -> Plan.Refused("stop the running session first: another profile is live")
+        connected || proxyRunning -> Plan.Direct
         else -> Plan.TemporaryCore
     }
 
@@ -84,28 +90,60 @@ object RealDelay {
         val proxy = ProxyState.state.value
         profiles.forEachIndexed { index, profile ->
             val result = when (plan(connected, liveId, profile.id, proxy.running, proxy.profileId)) {
-                is Plan.Refused -> Result(null, SKIPPED)
+                Plan.Direct -> directHandshake(context, profile, timeoutMs)
                 else -> measure(context, profile, timeoutMs)
             }
             onEach(index, profiles.size, profile, result)
         }
     }
 
-    /** Marks a profile that was not measured because another one is carrying the tunnel. */
-    const val SKIPPED = "skipped: another profile is live"
+
 
     suspend fun measure(context: Context, profile: Profile, timeoutMs: Int = CONNECT_TIMEOUT_MS): Result =
         withContext(Dispatchers.IO) {
             val connected = Tunnel.state.value is TunnelState.Connected
             val proxy = ProxyState.state.value
             when (val p = plan(connected, Tunnel.selected?.id, profile.id, proxy.running, proxy.profileId)) {
-                is Plan.Refused -> Result(null, p.reason)
+                Plan.Direct -> directHandshake(context, profile, timeoutMs)
                 is Plan.ThroughLive -> probe(p.port, if (profile.core == "DNS") maxOf(timeoutMs, 25_000) else timeoutMs)
                 Plan.TemporaryCore -> withTemporaryCore(context, profile) { port ->
                     probe(port, if (profile.core == "DNS") maxOf(timeoutMs, 25_000) else timeoutMs)
                 }
             }
         }
+
+    /**
+     * A TCP handshake to the profile's own server, deliberately *outside* the tunnel.
+     *
+     * While a tunnel is up, every ordinary socket is captured by the TUN and comes out at the other
+     * server's exit — so the number would describe the wrong route, or hang. Binding the socket to
+     * the underlying network (`Network.bindSocket`) restores the honest measurement, which is what
+     * other clients display when you ping a config that is not the active one.
+     */
+    private fun directHandshake(context: Context, profile: Profile, timeoutMs: Int): Result {
+        if (profile.host.isBlank() || profile.port !in 1..65535) return Result(null, "no address")
+        val started = System.nanoTime()
+        return try {
+            Socket().use { socket ->
+                underlyingNetwork(context)?.let { network -> runCatching { network.bindSocket(socket) } }
+                socket.tcpNoDelay = true
+                socket.connect(InetSocketAddress(profile.host, profile.port), timeoutMs)
+                Result((System.nanoTime() - started) / 1_000_000)
+            }
+        } catch (e: Exception) {
+            Result(null, "no answer on ${profile.host}:${profile.port}")
+        }
+    }
+
+    /** The first network that is not the VPN itself: Wi-Fi, cellular, Ethernet. */
+    private fun underlyingNetwork(context: Context): Network? {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return null
+        return manager.allNetworks.firstOrNull { network ->
+            val caps = manager.getNetworkCapabilities(network) ?: return@firstOrNull false
+            caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+        }
+    }
 
     private fun probe(port: Int, timeoutMs: Int): Result {
         val started = System.nanoTime()

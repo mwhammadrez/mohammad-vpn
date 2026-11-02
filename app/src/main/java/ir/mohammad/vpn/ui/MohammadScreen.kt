@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -97,6 +98,8 @@ fun MohammadScreen(
     pingByProfile: Map<String, ProfilePing> = emptyMap(),
     importMessage: String? = null,
     pingProgress: Pair<Int, Int>? = null,
+    refreshingConfigs: Boolean = false,
+    onRefreshConfigs: () -> Unit = {},
     topBar: @Composable () -> Unit = { Header() },
 ) {
     MohammadTheme {
@@ -136,7 +139,7 @@ fun MohammadScreen(
                 if (crashReport != null) CrashCard(crashReport, onDismissCrash)
                 Hero(state, selected, traffic, onToggle)
                 Bento(down, up, traffic)
-                Nodes(profiles, selected, state, onSelect, onPaste, onPingProfile, pingByProfile, importMessage)
+                Nodes(profiles, selected, state, onSelect, onPaste, onPingProfile, pingByProfile, importMessage, refreshingConfigs, onRefreshConfigs)
                 Actions(pingMs, pingBusy, onPing, pingProgress, profiles.size)
                 Evasion(fragmentOn, fragmentMode, muxOn, onFragment, onFragmentMode, onMux)
                 Console(logs)
@@ -553,6 +556,8 @@ private fun Nodes(
     onPingProfile: (Profile) -> Unit,
     pingByProfile: Map<String, ProfilePing>,
     importMessage: String?,
+    refreshingConfigs: Boolean = false,
+    onRefreshConfigs: () -> Unit = {},
 ) {
     Glass(shape = 22.dp) {
         Column(Modifier.padding(vertical = 14.dp)) {
@@ -560,7 +565,26 @@ private fun Nodes(
                 Text("PROFILES", fontFamily = ChakraSemi, fontSize = 10.sp, letterSpacing = 1.6.sp, color = Palette.TextSecondary)
                 Spacer(Modifier.weight(1f))
                 Text("${profiles.size}", fontFamily = Chakra, fontSize = 10.sp, color = Palette.TextMuted)
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(8.dp))
+                // Pulls the signed config list again right now, instead of waiting for the hourly check.
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .clickable(enabled = !refreshingConfigs) { onRefreshConfigs() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (refreshingConfigs) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(13.dp),
+                            strokeWidth = 1.8.dp,
+                            color = Palette.Mint,
+                        )
+                    } else {
+                        Text("⟳", fontSize = 15.sp, color = Palette.TextSecondary)
+                    }
+                }
+                Spacer(Modifier.width(8.dp))
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(9.dp))

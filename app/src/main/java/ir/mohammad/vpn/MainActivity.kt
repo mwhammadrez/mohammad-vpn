@@ -60,6 +60,7 @@ import androidx.lifecycle.lifecycleScope
 import ir.mohammad.vpn.data.ImportBatch
 import ir.mohammad.vpn.data.LogStore
 import ir.mohammad.vpn.data.ProfileStore
+import ir.mohammad.vpn.data.RemoteConfig
 import ir.mohammad.vpn.data.ProxyState
 import ir.mohammad.vpn.proxy.DnsProxyService
 import ir.mohammad.vpn.net.RealDelay
@@ -70,6 +71,7 @@ import ir.mohammad.vpn.ui.DnsMode
 import ir.mohammad.vpn.ui.DnsScreen
 import ir.mohammad.vpn.ui.ProfilePing
 import ir.mohammad.vpn.ui.TopBar
+import ir.mohammad.vpn.data.OperatorBundle
 import ir.mohammad.vpn.data.OperatorBundleLoader
 import ir.mohammad.vpn.data.Profile
 import ir.mohammad.vpn.data.Tunnel
@@ -78,6 +80,8 @@ import ir.mohammad.vpn.data.TunnelState
 import ir.mohammad.vpn.surfaces.TunnelController
 import ir.mohammad.vpn.diagnostics.CrashRecorder
 import ir.mohammad.vpn.ui.MohammadScreen
+import ir.mohammad.vpn.ui.PanelScreen
+import android.net.Uri
 import ir.mohammad.vpn.vpn.MohammadVpnService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -91,6 +95,9 @@ class MainActivity : ComponentActivity() {
 
     /** Bundle profiles only; imported ones are re-read from the store. */
     private var operatorProfiles: List<Profile> = emptyList()
+
+    /** What the encrypted bundle ships, kept apart so a remote refresh can rebuild the list. */
+    private var bundleProfiles: List<Profile> = emptyList()
 
     private val vpnPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
@@ -130,6 +137,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadProfiles() {
+        // Cached profiles first: reading and verifying the stored envelope takes a few milliseconds,
+        // so the list is never empty while the bundle decrypts and the network is contacted.
+        runCatching { RemoteConfig.cached(applicationContext) }.getOrNull()?.let { cached ->
+            if (cached.profiles.isNotEmpty()) {
+                operatorProfiles = cached.profiles
+                Tunnel.publishProfiles(cached.profiles + ProfileStore.load(applicationContext))
+                Tunnel.selected = Tunnel.profiles.firstOrNull()
+            }
+        }
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
                 runCatching {
@@ -147,7 +163,9 @@ class MainActivity : ComponentActivity() {
                 if (!ir.mohammad.vpn.core.GeoAssets.isReady(applicationContext)) {
                     LogStore.add("I", "GEO", "rule sets not cached; will download in background")
                 }
-                operatorProfiles = bundle.profiles
+                // Remote profiles are part of the operator set: adding a server must never need an APK.
+                val remote = RemoteConfig.cached(applicationContext)
+                operatorProfiles = bundle.profiles + (remote?.profiles ?: emptyList())
                 Tunnel.profiles = operatorProfiles + ProfileStore.load(applicationContext)
                 val savedId = prefs().getString(KEY_SELECTED, null)
                 LogStore.add(
@@ -161,10 +179,55 @@ class MainActivity : ComponentActivity() {
                     "I", "APP",
                     "bundle loaded: ${bundle.profiles.size} profile(s), mtu=${bundle.mtu}, dns=${bundle.dnsServers.size}",
                 )
+                refreshRemoteConfig(bundle)
             }.onFailure { e ->
                 LogStore.add("E", "APP", "configuration unavailable: ${e.javaClass.simpleName}: ${e.message}")
-                Tunnel.update(TunnelState.Failed(TunnelError.InvalidProfile))
+                // The bundle is the floor, but an unreadable bundle must not leave the app with no
+                // profiles at all while a signed remote config is reachable.
+                val remote = RemoteConfig.cached(applicationContext)
+                    ?: withContext(Dispatchers.IO) { RemoteConfig.refresh(applicationContext) }
+                if (remote != null && remote.profiles.isNotEmpty()) {
+                    operatorProfiles = remote.profiles
+                    Tunnel.publishProfiles(operatorProfiles + ProfileStore.load(applicationContext))
+                    Tunnel.selected = Tunnel.profiles.firstOrNull()
+                    LogStore.add("I", "APP", "bundle unavailable; using ${remote.profiles.size} remote profile(s)")
+                } else {
+                    Tunnel.update(TunnelState.Failed(TunnelError.InvalidProfile))
+                }
             }
+        }
+    }
+
+    /**
+     * Fetches the signed remote config off the main thread and swaps the profile list atomically.
+     * A failed fetch changes nothing: the bundle and the last known-good list stay in place (RC-4/6).
+     */
+    private fun refreshRemoteConfig(bundle: OperatorBundle) {
+        if (!RemoteConfig.isConfigured()) return
+        lifecycleScope.launch {
+            val fresh = withContext(Dispatchers.IO) { RemoteConfig.refreshIfDue(applicationContext) } ?: return@launch
+            applyRemote(fresh)
+        }
+    }
+
+    /**
+     * Rebuilds the operator list from bundle + remote and republishes it. Selection survives: the
+     * user does not lose the profile they were using because a refresh landed.
+     */
+    internal fun applyRemote(snapshot: RemoteConfig.Snapshot) {
+        val selectedId = Tunnel.selected?.id
+        operatorProfiles = bundleProfiles + snapshot.profiles
+        Tunnel.publishProfiles(operatorProfiles + ProfileStore.load(applicationContext))
+        Tunnel.selected = Tunnel.profiles.firstOrNull { it.id == selectedId } ?: Tunnel.selected
+        LogStore.add("I", "APP", "remote config v${snapshot.version}: ${snapshot.profiles.size} profile(s)")
+    }
+
+    /** The refresh button on the profiles card: bypasses the hourly gate on purpose. */
+    internal fun refreshRemoteNow(onDone: (Boolean) -> Unit) {
+        lifecycleScope.launch {
+            val fresh = withContext(Dispatchers.IO) { RemoteConfig.refresh(applicationContext) }
+            if (fresh != null) applyRemote(fresh)
+            onDone(fresh != null)
         }
     }
 
@@ -223,6 +286,17 @@ class MainActivity : ComponentActivity() {
         }
         outcome.failures.forEach { LogStore.add("W", "IMPORT", it) }
         return outcome.message to outcome.profiles.size
+    }
+
+    /**
+     * Imports a share link produced by the panel and dials it through the exact same path a pasted
+     * link takes: ProfileStore → Tunnel.selected → TunnelController. No second connect path exists.
+     */
+    fun connectProfileFromLink(link: String): Boolean {
+        val (_, count) = importLinks(link)
+        if (count == 0) return false
+        requestConnect()
+        return true
     }
 
     fun requestConnect() {
@@ -335,6 +409,7 @@ fun MohammadApp() {
     var pingMs by remember { mutableStateOf<Long?>(null) }
     var pingBusy by remember { mutableStateOf(false) }
     var importMessage by remember { mutableStateOf<String?>(null) }
+    var refreshingConfigs by remember { mutableStateOf(false) }
     var pingProgress by remember { mutableStateOf<Pair<Int, Int>?>(null) }
     var appMode by remember { mutableStateOf(AppMode.from(activity.prefs().getString("app_mode", null))) }
     var dnsMode by remember { mutableStateOf(DnsMode.from(activity.prefs().getString("dns_mode", null))) }
@@ -348,7 +423,9 @@ fun MohammadApp() {
     var muxOn by remember { mutableStateOf(activity.prefs().getBoolean("mux", false)) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Tunnel.profiles) {
+    val profilesRevision by Tunnel.profilesRevision.collectAsStateWithLifecycle()
+
+    LaunchedEffect(profilesRevision) {
         profiles = Tunnel.profiles
         selected = Tunnel.selected
     }
@@ -364,10 +441,13 @@ fun MohammadApp() {
             onPickMode = { picked ->
                 modeMenuOpen = false
                 if (picked != appMode) {
-                    // Never two cores: leaving a mode stops whatever it started.
+                    // Never two cores: XRAY and DNS both own an engine, so swapping between them
+                    // stops whatever is running. The panel screen owns no engine, so a tunnel
+                    // started from it survives entering or leaving Mode 3.
+                    val bothOwnACore = picked != AppMode.PANEL && appMode != AppMode.PANEL
                     val sessionLive = proxy.running || proxy.starting ||
                         state is TunnelState.Connected || state is TunnelState.Connecting
-                    if (sessionLive) {
+                    if (sessionLive && bothOwnACore) {
                         activity.stopDns()
                         LogStore.add("I", "APP", "mode switch stopped the running session")
                     }
@@ -377,6 +457,17 @@ fun MohammadApp() {
                 }
             },
         )
+    }
+
+    if (appMode == AppMode.PANEL) {
+        PanelScreen(
+            onOpenUrl = { url ->
+                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+            },
+            onConnect = { link -> activity.connectProfileFromLink(link) },
+            topBar = topBar,
+        )
+        return@MohammadApp
     }
 
     if (appMode == AppMode.DNS) {
@@ -480,7 +571,7 @@ fun MohammadApp() {
                     }
                     if (result.ok) {
                         pingMs = result.ms
-                    } else if (result.reason != RealDelay.SKIPPED) {
+                    } else {
                         LogStore.add("W", "APP", "delay test ${profile.name}: ${result.reason}")
                     }
                     pingProgress = (index + 1) to total
@@ -527,6 +618,16 @@ fun MohammadApp() {
         pingByProfile = pingByProfile,
         importMessage = importMessage,
         pingProgress = pingProgress,
+        refreshingConfigs = refreshingConfigs,
+        onRefreshConfigs = {
+            if (!refreshingConfigs) {
+                refreshingConfigs = true
+                activity.refreshRemoteNow { ok ->
+                    refreshingConfigs = false
+                    if (!ok) importMessage = "No newer config list (offline or unchanged)"
+                }
+            }
+        },
         topBar = topBar,
     )
 }
