@@ -285,6 +285,7 @@ dialog .dlg-foot{padding:12px 20px 18px;display:flex;gap:8px;justify-content:fle
       <div><b>پنل مدیریت</b><span>VLESS · Trojan</span></div>
     </div>
     <button class="nav active" data-tab="users" onclick="tab('users')"><svg class="ic"><use href="#i-users"/></svg><span>کاربران</span></button>
+    <button class="nav" data-tab="ips" onclick="tab('ips')"><svg class="ic"><use href="#i-link"/></svg><span>آی‌پی تمیز</span></button>
     <button class="nav" data-tab="configs" onclick="tab('configs')"><svg class="ic"><use href="#i-layers"/></svg><span>کانفیگ‌ها</span></button>
     <button class="nav" data-tab="app" onclick="tab('app')"><svg class="ic"><use href="#i-link"/></svg><span>اتصال اپ</span></button>
     <button class="nav" data-tab="settings" onclick="tab('settings')"><svg class="ic"><use href="#i-sliders"/></svg><span>تنظیمات</span></button>
@@ -309,6 +310,12 @@ dialog .dlg-foot{padding:12px 20px 18px;display:flex;gap:8px;justify-content:fle
         <div class="stat"><div class="lbl"><svg class="ic"><use href="#i-link"/></svg>آدرس نود</div><b id="s-node" style="font-size:12.5px;word-break:break-all;direction:ltr;text-align:right">—</b></div>
       </div>
 
+      <div id="ip-warn" class="card hidden" style="border-color:#7a5b12;background:#1d1607">
+        <b style="color:#f5b544">استخر آی‌پی تمیز خالی است.</b>
+        <span class="muted"> بدون آن، لینک‌ها به دامنه وصل می‌شوند و در ایران معمولاً کار نمی‌کنند.</span>
+        <button class="ghost sm" style="margin-inline-start:8px" onclick="tab('ips')">افزودن آی‌پی</button>
+      </div>
+
       <div class="card">
         <h2><svg class="ic" style="color:var(--acc)"><use href="#i-plus"/></svg>افزودن کاربر</h2>
         <div class="muted">حجم و روز را خالی بگذار تا نامحدود باشد.</div>
@@ -318,6 +325,25 @@ dialog .dlg-foot{padding:12px 20px 18px;display:flex;gap:8px;justify-content:fle
           <div><label class="fld">اعتبار (روز)</label><input id="u-days" type="number" min="0" step="1" placeholder="۰"></div>
           <div><button onclick="addUser(this)"><svg class="ic"><use href="#i-plus"/></svg>افزودن</button></div>
         </div>
+        <details style="margin-top:10px">
+          <summary class="muted" style="cursor:pointer;padding:6px 0">تنظیمات پیشرفته</summary>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:8px">
+            <div><label class="fld">پروتکل</label><select id="u-proto" style="width:100%">
+              <option value="both">VLESS + Trojan</option><option value="vless">VLESS</option><option value="trojan">Trojan</option>
+            </select></div>
+            <div><label class="fld">سقف درخواست</label><input id="u-req" type="number" min="0" placeholder="۰"></div>
+            <div><label class="fld">دستگاه همزمان</label><input id="u-ip-limit" type="number" min="0" placeholder="۰"></div>
+            <div><label class="fld">استخر آی‌پی</label><select id="u-pool" style="width:100%"><option value="">پیش‌فرض</option></select></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px">
+            <div><label class="fld">ریست حجم (روز)</label><input id="u-reset-vol" type="number" min="0" placeholder="۰"></div>
+            <div><label class="fld">ریست درخواست (روز)</label><input id="u-reset-req" type="number" min="0" placeholder="۰"></div>
+            <div style="grid-column:span 2"><label class="fld">یادداشت</label><input id="u-note" placeholder="اختیاری"></div>
+          </div>
+          <label class="muted" style="display:flex;align-items:center;gap:6px;margin-top:10px">
+            <input id="u-start" type="checkbox"> شروع اعتبار از اولین اتصال
+          </label>
+        </details>
         <p class="err" id="u-msg"></p>
       </div>
 
@@ -328,11 +354,39 @@ dialog .dlg-foot{padding:12px 20px 18px;display:flex;gap:8px;justify-content:fle
         </div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>کاربر</th><th>وضعیت</th><th>مصرف</th><th>انقضا</th><th style="width:150px">عملیات</th></tr></thead>
+            <thead><tr><th>کاربر</th><th>وضعیت</th><th>مصرف</th><th>انقضا</th><th>آی‌پی</th><th style="width:150px">عملیات</th></tr></thead>
             <tbody id="rows"></tbody>
           </table>
         </div>
         <div id="u-empty"></div>
+      </div>
+    </section>
+
+    <!-- ───────── آی‌پی تمیز ───────── -->
+    <section id="pane-ips" class="hidden">
+      <div class="head"><div><h1>آی‌پی تمیز</h1><p>لینک‌ها به این آی‌پی‌ها وصل می‌شوند، ولی SNI و Host همان دامنه‌ی نود می‌مانند.</p></div></div>
+
+      <div class="card">
+        <h2><svg class="ic" style="color:var(--acc)"><use href="#i-plus"/></svg>افزودن استخر</h2>
+        <div style="display:grid;grid-template-columns:220px 180px 1fr;gap:10px;align-items:end">
+          <div><label class="fld">نام استخر</label><input id="ip-name" placeholder="همراه اول" autocomplete="off"></div>
+          <div><label class="fld">اپراتور</label><select id="ip-op" style="width:100%">
+            <option value="any">همه</option><option value="mci">همراه اول</option>
+            <option value="irancell">ایرانسل</option><option value="mci_fixed">همراه اول (ثابت)</option>
+          </select></div>
+          <div><label class="fld">آی‌پی‌ها (هر خط یکی؛ <code>#</code> برای توضیح)</label><textarea id="ip-list" placeholder="104.16.0.1&#10;104.17.0.1#cdg" style="min-height:80px;direction:ltr;text-align:left"></textarea></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button onclick="addPool(this)"><svg class="ic"><use href="#i-plus"/></svg>افزودن استخر</button>
+          <button class="ghost" onclick="copyTest('')">کپی دستور تست</button>
+        </div>
+        <p class="err" id="ip-msg"></p>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>استخرها</h2><button class="ghost sm" onclick="loadIps(true)"><svg class="ic"><use href="#i-refresh"/></svg>تازه‌سازی</button></div>
+        <div class="list" id="pool-list"></div>
+        <div id="ip-empty"></div>
       </div>
     </section>
 
@@ -395,6 +449,21 @@ trojan://..." style="margin-top:10px"></textarea>
         <pre id="rc-key">…</pre>
         <div style="margin-top:12px"><button class="sm" onclick="copyEl('rc-key')"><svg class="ic"><use href="#i-copy"/></svg>کپی کلید</button></div>
       </div>
+
+      <div class="card">
+        <h2><svg class="ic" style="color:var(--acc)"><use href="#i-link"/></svg>پیش‌نمایش لینک اشتراک</h2>
+        <p class="muted">همان لینکی که کلاینت می‌گیرد، در پنج قالب. پیش‌فرض base64 است.</p>
+        <div style="display:grid;grid-template-columns:1fr 160px auto auto;gap:10px;align-items:end">
+          <div><label class="fld">کاربر</label><select id="sub-user" style="width:100%"></select></div>
+          <div><label class="fld">قالب</label><select id="sub-format" style="width:100%">
+            <option value="base64">base64</option><option value="plain">plain</option>
+            <option value="clash">Clash</option><option value="singbox">sing-box</option><option value="json">JSON</option>
+          </select></div>
+          <div><button onclick="previewSub()">نمایش</button></div>
+          <div><button class="ghost" onclick="copyEl('sub-preview')">کپی</button></div>
+        </div>
+        <pre id="sub-preview" style="max-height:280px;overflow:auto;direction:ltr;text-align:left">…</pre>
+      </div>
     </section>
 
     <!-- ───────── تنظیمات ───────── -->
@@ -432,7 +501,16 @@ trojan://..." style="margin-top:10px"></textarea>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div><label class="fld">حجم (GB، ۰ = نامحدود)</label><input id="e-gb" type="number" min="0" step="0.5"></div>
       <div><label class="fld">روز اعتبار (۰ = بی‌پایان)</label><input id="e-days" type="number" min="0" step="1"></div>
+      <div><label class="fld">سقف درخواست</label><input id="e-req" type="number" min="0"></div>
+      <div><label class="fld">دستگاه همزمان</label><input id="e-ip-limit" type="number" min="0"></div>
+      <div><label class="fld">ریست حجم (روز)</label><input id="e-reset-vol" type="number" min="0"></div>
+      <div><label class="fld">ریست درخواست (روز)</label><input id="e-reset-req" type="number" min="0"></div>
+      <div><label class="fld">پروتکل</label><select id="e-proto" style="width:100%">
+        <option value="both">VLESS + Trojan</option><option value="vless">VLESS</option><option value="trojan">Trojan</option>
+      </select></div>
+      <div><label class="fld">استخر آی‌پی</label><select id="e-pool" style="width:100%"><option value="">پیش‌فرض</option></select></div>
     </div>
+    <div><label class="fld">یادداشت</label><input id="e-note" placeholder="اختیاری"></div>
     <p class="err" id="e-msg"></p>
   </div>
   <div class="dlg-foot"><button onclick="saveEdit(this)">ذخیره</button><button class="ghost" onclick="closeDlg('userDlg')">انصراف</button></div>
@@ -451,7 +529,7 @@ trojan://..." style="margin-top:10px"></textarea>
 <div id="toast" class="toast"></div>
 
 <script>
-var S = { users: [], configs: [], rc: null, q: '', editUser: null, editCfg: null, editingUserSnapshot: null };
+var S = { users: [], configs: [], pools: [], rc: null, q: '', nodeHost: '', editUser: null, editCfg: null, editingUserSnapshot: null };
 
 function el(id){ return document.getElementById(id); }
 function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
@@ -542,7 +620,7 @@ function showApp(){
   tab('users');
 }
 function tab(name){
-  ['users','configs','app','settings'].forEach(function(p){
+  ['users','ips','configs','app','settings'].forEach(function(p){
     var pane = el('pane-' + p);
     if (pane) pane.classList.toggle('hidden', p !== name);
   });
@@ -550,7 +628,8 @@ function tab(name){
   for (var i = 0; i < navs.length; i++) navs[i].classList.toggle('active', navs[i].getAttribute('data-tab') === name);
   if (name === 'app') loadRc();
   if (name === 'settings') loadSettings();
-  if (name === 'users') loadUsers();
+  if (name === 'users') { loadUsers(); loadIps(); }
+  if (name === 'ips') loadIps();
   if (name === 'configs') loadConfigs();
 }
 
@@ -565,7 +644,9 @@ async function loadUsers(manual){
   renderUsers();
 }
 function blocked(u){
-  return !u.enabled || (u.expires_at && u.expires_at < Date.now()) || (u.limit_bytes > 0 && u.used_bytes >= u.limit_bytes);
+  return !u.enabled || (u.expires_at && u.expires_at < Date.now()) ||
+    (u.limit_bytes > 0 && u.used_bytes >= u.limit_bytes) ||
+    (u.limit_req > 0 && u.used_req >= u.limit_req);
 }
 function renderUsers(){
   var q = (S.q || '').trim().toLowerCase();
@@ -587,6 +668,9 @@ function renderUsers(){
       + '<td><div class="num">' + size(u.used_bytes) + ' <span class="muted">/ ' + limit(u.limit_bytes) + '</span></div>'
         + (u.limit_bytes > 0 ? '<div class="bar ' + barCls + '"><i style="width:' + pct.toFixed(1) + '%"></i></div>' : '') + '</td>'
       + '<td class="muted num">' + faDate(u.expires_at) + '</td>'
+      + '<td class="mono">' + (u.pinned_ip
+          ? esc(u.pinned_ip) + '<br><button class="ghost sm" onclick="releaseIp(' + u.id + ')">آزادسازی</button>'
+          : '—') + '</td>'
       + '<td><div class="ops">'
         + '<button class="icon" title="ویرایش" onclick="openUser(' + u.id + ')"><svg class="ic"><use href="#i-edit"/></svg></button>'
         + '<button class="icon" title="' + (u.enabled ? 'خاموش کردن' : 'روشن کردن') + '" onclick="toggleUser(' + u.id + ')"><svg class="ic"><use href="#i-power"/></svg></button>'
@@ -599,6 +683,12 @@ function renderUsers(){
   el('u-empty').innerHTML = list.length ? '' :
     '<div class="empty"><svg class="ic"><use href="#i-users"/></svg><b>' + (q ? 'چیزی پیدا نشد' : 'هنوز کاربری نساخته‌ای') + '</b>'
     + (q ? 'عبارت دیگری را جست‌وجو کن.' : 'از فرم بالا اولین کاربر را بساز.') + '</div>';
+  var sel = el('sub-user');
+  if (sel) {
+    var prev = sel.value;
+    sel.innerHTML = S.users.map(function(u){ return '<option value="' + u.id + '">' + esc(u.name) + '</option>'; }).join('');
+    if (prev) sel.value = prev;
+  }
   el('s-users').textContent = fa(S.users.length);
   el('s-active').textContent = fa(active);
   el('s-used').textContent = size(used);
@@ -610,10 +700,22 @@ async function addUser(btn){
   if (!/^[A-Za-z0-9_.-]{2,32}$/.test(name)) { el('u-msg').textContent = 'نام: ۲ تا ۳۲ کاراکتر، فقط حروف انگلیسی، عدد، نقطه، خط تیره.'; return; }
   el('u-msg').textContent = '';
   busy(btn, true);
-  var r = await api('/api/users', { method: 'POST', body: JSON.stringify({ name: name, limit_gb: Number(gbv || 0), days: Number(daysv || 0) }) });
+  var body = {
+    name: name, limit_gb: Number(gbv || 0), days: Number(daysv || 0),
+    protocol: el('u-proto').value,
+    limit_req: Number(el('u-req').value || 0),
+    ip_limit: Number(el('u-ip-limit').value || 0),
+    ip_pool_id: el('u-pool').value ? Number(el('u-pool').value) : null,
+    start_on_first_connect: el('u-start').checked,
+    auto_reset_vol_days: Number(el('u-reset-vol').value || 0),
+    auto_reset_req_days: Number(el('u-reset-req').value || 0),
+    note: el('u-note').value
+  };
+  var r = await api('/api/users', { method: 'POST', body: JSON.stringify(body) });
   busy(btn, false);
   if (r.ok) {
-    el('u-name').value = ''; el('u-gb').value = ''; el('u-days').value = '';
+    ['u-name','u-gb','u-days','u-req','u-ip-limit','u-reset-vol','u-reset-req','u-note'].forEach(function(id){ el(id).value = ''; });
+    el('u-start').checked = false;
     toast('کاربر ساخته شد');
     loadUsers();
   } else {
@@ -629,6 +731,13 @@ function openUser(id){
   el('e-name').value = u.name;
   el('e-gb').value = u.limit_bytes ? +(u.limit_bytes / 1073741824).toFixed(2) : 0;
   el('e-days').value = S.editingUserSnapshot.days;
+  el('e-req').value = u.limit_req || 0;
+  el('e-ip-limit').value = u.ip_limit || 0;
+  el('e-reset-vol').value = u.auto_reset_vol_days || 0;
+  el('e-reset-req').value = u.auto_reset_req_days || 0;
+  el('e-proto').value = u.connection_type || 'both';
+  el('e-pool').value = u.ip_pool_id ? String(u.ip_pool_id) : '';
+  el('e-note').value = u.note || '';
   el('e-msg').textContent = '';
   el('userDlg').showModal();
 }
@@ -642,6 +751,13 @@ async function saveEdit(btn){
   if (name) body.name = name;
   if (gb !== Number((S.editingUserSnapshot.gb / 1073741824).toFixed(2))) body.limit_gb = gb;
   if (days !== S.editingUserSnapshot.days) body.days = days;
+  body.limit_req = Number(el('e-req').value || 0);
+  body.ip_limit = Number(el('e-ip-limit').value || 0);
+  body.auto_reset_vol_days = Number(el('e-reset-vol').value || 0);
+  body.auto_reset_req_days = Number(el('e-reset-req').value || 0);
+  body.protocol = el('e-proto').value;
+  body.ip_pool_id = el('e-pool').value ? Number(el('e-pool').value) : null;
+  body.note = el('e-note').value;
   if (!Object.keys(body).length) { el('userDlg').close(); return; }
   busy(btn, true);
   var r = await api('/api/users/' + S.editUser, { method: 'PATCH', body: JSON.stringify(body) });
@@ -801,8 +917,9 @@ async function loadRc(){
 async function loadSettings(){
   var r = await api('/api/settings');
   if (!r.ok) return;
-  el('node-host').value = (r.data && r.data.node_host) || '';
-  el('s-node').textContent = (r.data && r.data.node_host) || '—';
+  S.nodeHost = (r.data && r.data.node_host) || '';
+  el('node-host').value = S.nodeHost;
+  el('s-node').textContent = S.nodeHost || '—';
 }
 async function saveNode(btn){
   var v = el('node-host').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
@@ -820,6 +937,112 @@ async function changePassword(btn){
   busy(btn, false);
   if (r.ok) { el('pw-cur').value = ''; el('pw-new').value = ''; el('pw-msg').textContent = ''; toast('رمز عوض شد'); showAuth('login'); }
   else el('pw-msg').textContent = r.status === 401 ? 'رمز فعلی اشتباه است.' : 'خطا: ' + (r.data.error || r.status);
+}
+
+/* ───────── clean IP pools ───────── */
+async function loadIps(manual){
+  var r = await api('/api/ips');
+  if (!r.ok) { toast('استخرها نیامدند', true); return; }
+  S.pools = r.data.pools || [];
+  renderPools();
+  fillPoolSelect('u-pool');
+  fillPoolSelect('e-pool');
+  var warn = el('ip-warn');
+  if (warn) warn.classList.toggle('hidden', S.pools.some(function(p){ return p.enabled; }));
+  if (manual) toast('تازه شد');
+}
+
+function renderPools(){
+  var html = '';
+  S.pools.forEach(function(p){
+    var list = String(p.ips || '').split(/\r?\n/).filter(function(x){ return x.split('#')[0].trim(); });
+    html += '<div class="item">'
+      + '<div class="top"><b>' + esc(p.name) + '</b>'
+        + '<span class="pill ' + (p.enabled ? 'on' : 'off') + '"><i></i>' + (p.enabled ? 'فعال' : 'خاموش') + '</span>'
+        + '<span class="muted">' + fa(list.length) + ' آی‌پی · ' + esc(p.operator) + '</span>'
+        + '<span style="margin-right:auto"></span>'
+        + '<button class="icon" title="تست" onclick="copyTest(\'' + esc(list[0] || '') + '\')"><svg class="ic"><use href="#i-link"/></svg></button>'
+        + '<button class="icon" title="ویرایش" onclick="editPool(' + p.id + ')"><svg class="ic"><use href="#i-edit"/></svg></button>'
+        + '<button class="icon" title="' + (p.enabled ? 'خاموش' : 'روشن') + '" onclick="togglePool(' + p.id + ')"><svg class="ic"><use href="#i-power"/></svg></button>'
+        + '<button class="icon" title="حذف" style="color:var(--bad)" onclick="delPool(' + p.id + ')"><svg class="ic"><use href="#i-trash"/></svg></button>'
+      + '</div>'
+      + '<div class="mono">' + esc(list.slice(0, 6).join(' · ')) + (list.length > 6 ? ' …' : '') + '</div>'
+      + '</div>';
+  });
+  el('pool-list').innerHTML = html;
+  el('ip-empty').innerHTML = S.pools.length ? '' :
+    '<div class="empty"><svg class="ic"><use href="#i-link"/></svg><b>هنوز استخری نساخته‌ای</b>بدون آی‌پی تمیز، کانفیگ‌ها در ایران معمولاً وصل نمی‌شوند.</div>';
+}
+
+function fillPoolSelect(id){
+  var sel = el(id);
+  if (!sel) return;
+  var value = sel.value;
+  sel.innerHTML = '<option value="">پیش‌فرض</option>' + S.pools.map(function(p){
+    return '<option value="' + p.id + '">' + esc(p.name) + '</option>';
+  }).join('');
+  if (value) sel.value = value;
+}
+
+async function addPool(btn){
+  var name = el('ip-name').value.trim();
+  var ips = el('ip-list').value.trim();
+  if (name.length < 2) { el('ip-msg').textContent = 'نام استخر را بنویس.'; return; }
+  if (!ips) { el('ip-msg').textContent = 'حداقل یک آی‌پی لازم است.'; return; }
+  busy(btn, true);
+  var r = await api('/api/ips', { method: 'POST', body: JSON.stringify({ name: name, operator: el('ip-op').value, ips: ips }) });
+  busy(btn, false);
+  if (r.ok) {
+    el('ip-name').value = ''; el('ip-list').value = ''; el('ip-msg').textContent = '';
+    toast('استخر اضافه شد'); loadIps();
+  } else el('ip-msg').textContent = 'خطا: ' + (r.data.error || r.status);
+}
+
+async function editPool(id){
+  var p = S.pools.filter(function(x){ return x.id === id; })[0];
+  if (!p) return;
+  var name = prompt('نام استخر', p.name);
+  if (name === null) return;
+  var ips = prompt('آی‌پی‌ها (هر خط یکی)', p.ips);
+  if (ips === null) return;
+  var r = await api('/api/ips/' + id, { method: 'PATCH', body: JSON.stringify({ name: name, ips: ips }) });
+  if (!r.ok) toast('خطا: ' + (r.data.error || r.status), true);
+  loadIps();
+}
+
+async function togglePool(id){
+  var p = S.pools.filter(function(x){ return x.id === id; })[0];
+  if (!p) return;
+  var r = await api('/api/ips/' + id, { method: 'PATCH', body: JSON.stringify({ enabled: !p.enabled }) });
+  if (r.ok) loadIps(); else toast('تغییر وضعیت نشد', true);
+}
+
+async function delPool(id){
+  var p = S.pools.filter(function(x){ return x.id === id; })[0];
+  if (!confirm('استخر «' + (p ? p.name : id) + '» حذف شود؟ کاربرانش به استخر پیش‌فرض برمی‌گردند.')) return;
+  var r = await api('/api/ips/' + id, { method: 'DELETE' });
+  if (r.ok) { toast('حذف شد'); loadIps(); loadUsers(); } else toast('حذف نشد', true);
+}
+
+function copyTest(ip){
+  var host = S.nodeHost || 'NODE_HOST';
+  return copyText('curl -s --resolve ' + host + ':443:' + (ip || 'IP') + ' https://' + host + '/health', 'دستور تست کپی شد');
+}
+
+async function releaseIp(id){
+  var r = await api('/api/users/' + id + '/ip', { method: 'POST', body: JSON.stringify({ ip: '' }) });
+  if (r.ok) { toast('آی‌پی آزاد شد'); loadUsers(); } else toast('آزاد نشد', true);
+}
+
+async function previewSub(){
+  var id = Number(el('sub-user').value);
+  var u = S.users.filter(function(x){ return x.id === id; })[0];
+  if (!u) { toast('اول یک کاربر بساز', true); return; }
+  var format = el('sub-format').value;
+  var res = await fetch('/sub/' + encodeURIComponent(u.sub_token) + '?format=' + format, { credentials: 'include' });
+  var text = await res.text();
+  if (format === 'base64') { try { text = atob(text); } catch (e) {} }
+  el('sub-preview').textContent = text;
 }
 
 /* ───────── helpers ───────── */

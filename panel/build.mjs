@@ -12,8 +12,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+// fileURLToPath, not URL.pathname: on Windows the latter yields "/C:/..." and ENOENT.
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'app/src/main/assets/panel');
 
 const page = path.join(root, 'panel/worker/panel-ui.html');
@@ -27,14 +29,18 @@ for (const code of [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) =
 
 const source = fs.readFileSync(panelSrc, 'utf8');
 if (!source.includes('__PANEL_HTML__')) throw new Error('panel-worker.js lost its placeholder');
-const inlined = path.join(root, 'panel/.panel-worker.inline.js');
+// Next to its source, so the relative './lib.js' import resolves while bundling.
+  const inlined = path.join(root, 'panel/worker/.panel-worker.inline.js');
 fs.writeFileSync(inlined, source.replace('__PANEL_HTML__', JSON.stringify(html)));
 
 fs.mkdirSync(out, { recursive: true });
 try {
-  execFileSync('npx', ['--yes', 'esbuild', inlined, '--minify', '--format=esm',
+  // --bundle is required: lib.js is shared by both workers, and the panel uploads a single module
+  // per worker. Without it the output would import './lib.js', which Cloudflare never receives.
+  const flags = ['--bundle', '--minify', '--format=esm', '--external:cloudflare:sockets'];
+  execFileSync('npx', ['--yes', 'esbuild', inlined, ...flags,
     '--outfile=' + path.join(out, 'panel-worker.js')], { stdio: 'inherit' });
-  execFileSync('npx', ['--yes', 'esbuild', proxySrc, '--minify', '--format=esm',
+  execFileSync('npx', ['--yes', 'esbuild', proxySrc, ...flags,
     '--outfile=' + path.join(out, 'proxy-worker.js')], { stdio: 'inherit' });
 } finally {
   fs.unlinkSync(inlined);

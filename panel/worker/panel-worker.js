@@ -9,6 +9,7 @@
  */
 
 import { connect } from 'cloudflare:sockets';
+import { subscription, contentType, profileTitle, pickIp, parseIps } from './lib.js';
 
 const JSON_H = { 'content-type': 'application/json; charset=utf-8' };
 const enc = new TextEncoder();
@@ -108,16 +109,34 @@ const DB = {
   async bySubToken(env, token) {
     return env.DB.prepare('SELECT * FROM users WHERE sub_token = ?').bind(token).first();
   },
-  async addUser(env, { name, limit_gb, days }) {
+  async addUser(env, opts) {
+    const name = opts.name;
     const uuid = uuidv4();
     const sub = randHex(16);
     const password = randHex(10);
     const now = Date.now();
-    const expires = days > 0 ? now + days * 86400000 : 0;
+    const days = Number(opts.days) || 0;
+    const startOnFirst = opts.start_on_first_connect ? 1 : 0;
+    const expires = startOnFirst ? 0 : days > 0 ? now + days * 86400000 : 0;
+    const protocol = ['vless', 'trojan', 'both'].includes(opts.protocol) ? opts.protocol : 'both';
     await env.DB.prepare(
-      'INSERT INTO users (name, uuid, sub_token, trojan_password, trojan_hash, limit_bytes, used_bytes, expires_at, enabled, created_at) VALUES (?,?,?,?,?,?,0,?,1,?)'
+      'INSERT INTO users (name, uuid, sub_token, trojan_password, trojan_hash, limit_bytes, limit_req, ' +
+        'ip_limit, expires_at, expiry_days, start_on_first_connect, auto_reset_vol_days, ' +
+        'auto_reset_req_days, connection_type, ip_pool_id, note, enabled, created_at) ' +
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)',
     )
-      .bind(name, uuid, sub, password, sha224hex(password), Math.round((limit_gb || 0) * 1024 ** 3), expires, now)
+      .bind(
+        name, uuid, sub, password, sha224hex(password),
+        Math.round((Number(opts.limit_gb) || 0) * 1024 ** 3),
+        Math.max(0, Number(opts.limit_req) || 0),
+        Math.max(0, Number(opts.ip_limit) || 0),
+        expires, days, startOnFirst,
+        Math.max(0, Number(opts.auto_reset_vol_days) || 0),
+        Math.max(0, Number(opts.auto_reset_req_days) || 0),
+        protocol, opts.ip_pool_id ? Number(opts.ip_pool_id) : null,
+        String(opts.note || '').slice(0, 200) || null,
+        now,
+      )
       .run();
     return { uuid, sub, password };
   },
@@ -143,17 +162,101 @@ const DB = {
 };
 
 /**
- * Databases created before this build have no `configs` table. Creating it lazily keeps the worker
- * deployable over an existing panel without a migration step.
+ * The panel is deployed over databases that predate this build, so the schema is created lazily and
+ * every new column is added only when `PRAGMA table_info` says it is missing. `CREATE TABLE IF NOT
+ * EXISTS` alone can never add a column.
  */
-let configsTable = null;
-function ensureConfigs(env) {
-  if (!configsTable) {
-    configsTable = env.DB.prepare(
-      'CREATE TABLE IF NOT EXISTS configs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, uri TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, sort INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)',
-    ).run().catch(() => {});
+const schemaReady = new WeakMap();
+
+function ensureSchema(env) {
+  let ready = schemaReady.get(env.DB);
+  if (!ready) {
+    ready = (async () => {
+      await env.DB.prepare(
+        'CREATE TABLE IF NOT EXISTS configs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, uri TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, sort INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)',
+      ).run();
+      await env.DB.prepare(
+        'CREATE TABLE IF NOT EXISTS ip_pools (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, operator TEXT NOT NULL DEFAULT \'any\', ips TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL)',
+      ).run();
+
+      const info = await env.DB.prepare('PRAGMA table_info(users)').all();
+      const have = new Set((info.results || []).map((r) => r.name));
+      const additions = [
+        ['ip_pool_id', 'INTEGER'],
+        ['pinned_ip', 'TEXT'],
+        ['ip_pinned_at', 'INTEGER'],
+        ['limit_req', 'INTEGER NOT NULL DEFAULT 0'],
+        ['used_req', 'INTEGER NOT NULL DEFAULT 0'],
+        ['ip_limit', 'INTEGER NOT NULL DEFAULT 0'],
+        ['active_ips', 'TEXT'],
+        ['expiry_days', 'INTEGER NOT NULL DEFAULT 0'],
+        ['start_on_first_connect', 'INTEGER NOT NULL DEFAULT 0'],
+        ['first_connection_time', 'INTEGER'],
+        ['auto_reset_vol_days', 'INTEGER NOT NULL DEFAULT 0'],
+        ['auto_reset_req_days', 'INTEGER NOT NULL DEFAULT 0'],
+        ['last_reset_vol_time', 'INTEGER'],
+        ['last_reset_req_time', 'INTEGER'],
+        ['auto_rotate_ip', 'INTEGER NOT NULL DEFAULT 1'],
+        ['connection_type', "TEXT NOT NULL DEFAULT 'both'"],
+        ['note', 'TEXT'],
+      ];
+      for (const [name, type] of additions) {
+        if (!have.has(name)) {
+          await env.DB.prepare(`ALTER TABLE users ADD COLUMN ${name} ${type}`).run();
+        }
+      }
+    })().catch((err) => {
+      schemaReady.delete(env.DB);
+      throw err;
+    });
+    schemaReady.set(env.DB, ready);
   }
-  return configsTable;
+  return ready;
+}
+
+/**
+ * Removing or disabling a pool must release every pin it handed out. Users carry no pool id when
+ * they were served by the default pool, so match the pinned address against the pool's own list.
+ */
+async function clearPoolPins(env, poolId) {
+  const pool = await env.DB.prepare('SELECT ips FROM ip_pools WHERE id = ?').bind(poolId).first();
+  await env.DB.prepare('UPDATE users SET ip_pool_id = NULL, pinned_ip = NULL, ip_pinned_at = NULL WHERE ip_pool_id = ?')
+    .bind(poolId).run();
+  if (pool) {
+    for (const ip of parseIps(pool.ips)) {
+      await env.DB.prepare('UPDATE users SET pinned_ip = NULL, ip_pinned_at = NULL WHERE pinned_ip = ?')
+        .bind(ip).run();
+    }
+  }
+}
+
+/** The pool a user belongs to, falling back to the first enabled pool. */
+async function poolFor(env, user) {
+  let pool = null;
+  if (user.ip_pool_id) {
+    pool = await env.DB.prepare('SELECT * FROM ip_pools WHERE id = ? AND enabled = 1')
+      .bind(user.ip_pool_id).first();
+  }
+  if (!pool) {
+    pool = await env.DB.prepare('SELECT * FROM ip_pools WHERE enabled = 1 ORDER BY id ASC LIMIT 1').first();
+  }
+  return pool || null;
+}
+
+/**
+ * The address a link should carry. A pinned IP is sticky: changing it under a connected client
+ * drops that client until it re-reads its subscription. Null means "no pool yet" — the caller falls
+ * back to the domain so the panel still works before any IP is added.
+ */
+async function ipFor(env, user, host) {
+  if (user.pinned_ip) return user.pinned_ip;
+  const pool = await poolFor(env, user);
+  if (!pool) return null;
+  const picked = pickIp(pool.ips, String(user.id) + host);
+  if (!picked) return null;
+  await env.DB.prepare('UPDATE users SET pinned_ip = ?, ip_pinned_at = ? WHERE id = ?')
+    .bind(picked, Date.now(), user.id).run();
+  return picked;
 }
 
 /* ───────────────────────── auth ───────────────────────── */
@@ -235,23 +338,21 @@ function trojanLink(user, host) {
   return `trojan://${user.trojan_password}@${host}:443?${q.toString()}#${encodeURIComponent(user.name)}-trojan`;
 }
 
-function b64(str) {
-  let s = '';
-  const bytes = enc.encode(str);
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-  return btoa(s);
-}
-
 async function handleSub(request, env, token) {
   const user = await DB.bySubToken(env, token);
+  // Expired, over-quota or over-request users must not keep receiving working links: the panel
+  // already shows them as blocked, and the node refuses them at connect time.
   if (!user || !user.enabled || blocked(user)) return new Response('not found', { status: 404 });
+
   const host = (await DB.setting(env, 'node_host')) || env.PROXY_HOST || hostOf(request, env);
-  const links = [vlessLink(user, host), trojanLink(user, host)].join('\n');
-  const body = b64(links);
-  return new Response(body, {
+  const ip = await ipFor(env, user, host);
+  const format = new URL(request.url).searchParams.get('format') || 'base64';
+
+  return new Response(subscription(format, user, host, ip), {
     headers: {
-      'content-type': 'text/plain; charset=utf-8',
+      'content-type': contentType(format),
       'cache-control': 'no-store',
+      'profile-title': profileTitle(user.name),
       'profile-update-interval': '12',
       'subscription-userinfo': `upload=0; download=${user.used_bytes}; total=${user.limit_bytes || 0}; expire=${user.expires_at ? Math.floor(user.expires_at / 1000) : 0}`,
     },
@@ -343,7 +444,9 @@ async function handleRc(request, env) {
  * `/api/overview` called this without ever defining it, so the stats call answered 500.
  */
 function blocked(u) {
-  return (u.expires_at && u.expires_at < Date.now()) || (u.limit_bytes > 0 && u.used_bytes >= u.limit_bytes);
+  return (u.expires_at && u.expires_at < Date.now()) ||
+    (u.limit_bytes > 0 && u.used_bytes >= u.limit_bytes) ||
+    (u.limit_req > 0 && u.used_req >= u.limit_req);
 }
 
 /* ───────────────────────── API ───────────────────────── */
@@ -378,14 +481,38 @@ async function handleApi(request, env, url) {
 
   if (!(await isAuthed(request, env))) return json({ error: 'unauthorized' }, 401);
 
-  if (path === '/api/users' && method === 'GET') return json({ users: await DB.getUsers(env) });
+  if (path === '/api/users' && method === 'GET') {
+    const users = await DB.getUsers(env);
+    // The app's CONNECT button builds its link from `pinned_ip`. Assign the sticky address while
+    // listing users, so the dashboard (and the phone) always has one to hand.
+    const host = (await DB.setting(env, 'node_host')) || env.PROXY_HOST || hostOf(request, env);
+    for (const user of users) {
+      if (!user.pinned_ip) {
+        const ip = await ipFor(env, user, host);
+        if (ip) user.pinned_ip = ip;
+      }
+    }
+    return json({ users });
+  }
   if (path === '/api/users' && method === 'POST') {
     const b = await readJson(request);
     const name = String(b.name || '').trim();
     if (!/^[A-Za-z0-9_.-]{2,32}$/.test(name)) return json({ error: 'bad_name' }, 400);
     const exists = await env.DB.prepare('SELECT id FROM users WHERE name = ?').bind(name).first();
     if (exists) return json({ error: 'duplicate' }, 400);
-    await DB.addUser(env, { name, limit_gb: Number(b.limit_gb) || 0, days: Number(b.days) || 0 });
+    await DB.addUser(env, {
+      name,
+      limit_gb: Number(b.limit_gb) || 0,
+      days: Number(b.days) || 0,
+      limit_req: Number(b.limit_req) || 0,
+      ip_limit: Number(b.ip_limit) || 0,
+      ip_pool_id: b.ip_pool_id || null,
+      start_on_first_connect: b.start_on_first_connect ? 1 : 0,
+      auto_reset_vol_days: Number(b.auto_reset_vol_days) || 0,
+      auto_reset_req_days: Number(b.auto_reset_req_days) || 0,
+      protocol: b.protocol,
+      note: b.note,
+    });
     return json({ ok: true });
   }
 
@@ -406,7 +533,25 @@ async function handleApi(request, env, url) {
       if (!user) return json({ error: 'not_found' }, 404);
       const enabled = b.enabled === undefined ? user.enabled : b.enabled ? 1 : 0;
       const limit = b.limit_gb === undefined ? user.limit_bytes : Math.round(Number(b.limit_gb) * 1024 ** 3);
-      const expires = b.days === undefined ? user.expires_at : Number(b.days) > 0 ? Date.now() + Number(b.days) * 86400000 : 0;
+      const days = b.days === undefined ? user.expiry_days : Math.max(0, Number(b.days) || 0);
+      const expires = b.days === undefined
+        ? user.expires_at
+        : user.start_on_first_connect && !user.first_connection_time
+          ? 0
+          : days > 0 ? Date.now() + days * 86400000 : 0;
+      const limitReq = b.limit_req === undefined ? user.limit_req : Math.max(0, Number(b.limit_req) || 0);
+      const ipLimit = b.ip_limit === undefined ? user.ip_limit : Math.max(0, Number(b.ip_limit) || 0);
+      const poolId = b.ip_pool_id === undefined ? user.ip_pool_id : b.ip_pool_id ? Number(b.ip_pool_id) : null;
+      const resetVol = b.auto_reset_vol_days === undefined ? user.auto_reset_vol_days : Math.max(0, Number(b.auto_reset_vol_days) || 0);
+      const resetReq = b.auto_reset_req_days === undefined ? user.auto_reset_req_days : Math.max(0, Number(b.auto_reset_req_days) || 0);
+      const startOnFirst = b.start_on_first_connect === undefined
+        ? user.start_on_first_connect
+        : b.start_on_first_connect ? 1 : 0;
+      const protocol = b.protocol === undefined
+        ? (user.connection_type || 'both')
+        : (['vless', 'trojan', 'both'].includes(b.protocol) ? b.protocol : 'both');
+      const autoRotate = b.auto_rotate_ip === undefined ? user.auto_rotate_ip : b.auto_rotate_ip ? 1 : 0;
+      const note = b.note === undefined ? user.note : String(b.note || '').slice(0, 200) || null;
       let name = user.name;
       if (b.name !== undefined) {
         name = String(b.name).trim();
@@ -414,11 +559,73 @@ async function handleApi(request, env, url) {
         const clash = await env.DB.prepare('SELECT id FROM users WHERE name = ? AND id != ?').bind(name, id).first();
         if (clash) return json({ error: 'duplicate' }, 400);
       }
-      await env.DB.prepare('UPDATE users SET name = ?, enabled = ?, limit_bytes = ?, expires_at = ? WHERE id = ?')
-        .bind(name, enabled, limit, expires, id)
+      await env.DB.prepare(
+        'UPDATE users SET name = ?, enabled = ?, limit_bytes = ?, limit_req = ?, ip_limit = ?, ' +
+          'expires_at = ?, expiry_days = ?, start_on_first_connect = ?, auto_reset_vol_days = ?, ' +
+          'auto_reset_req_days = ?, connection_type = ?, ip_pool_id = ?, auto_rotate_ip = ?, note = ? ' +
+          'WHERE id = ?',
+      )
+        .bind(
+          name, enabled, limit, limitReq, ipLimit, expires, days, startOnFirst, resetVol, resetReq,
+          protocol, poolId, autoRotate, note, id,
+        )
         .run();
       return json({ ok: true });
     }
+  }
+
+  /* ── clean-IP pools ── */
+  if (path === '/api/ips' && method === 'GET') {
+    const rows = await env.DB.prepare('SELECT * FROM ip_pools ORDER BY id ASC').all();
+    return json({ pools: rows.results || [] });
+  }
+  if (path === '/api/ips' && method === 'POST') {
+    const b = await readJson(request);
+    const name = String(b.name || '').trim().slice(0, 60);
+    const operator = ['any', 'mci', 'irancell', 'mci_fixed'].includes(b.operator) ? b.operator : 'any';
+    const ips = String(b.ips || '').trim();
+    if (name.length < 2) return json({ error: 'bad_name' }, 400);
+    if (!ips) return json({ error: 'no_ips' }, 400);
+    if (ips.length > 20000) return json({ error: 'too_large' }, 400);
+    await env.DB.prepare('INSERT INTO ip_pools (name, operator, ips, enabled, created_at) VALUES (?,?,?,1,?)')
+      .bind(name, operator, ips, Date.now()).run();
+    return json({ ok: true });
+  }
+  const ipPool = path.match(/^\/api\/ips\/(\d+)$/);
+  if (ipPool) {
+    const id = Number(ipPool[1]);
+    if (method === 'PATCH') {
+      const b = await readJson(request);
+      const row = await env.DB.prepare('SELECT * FROM ip_pools WHERE id = ?').bind(id).first();
+      if (!row) return json({ error: 'not_found' }, 404);
+      const name = b.name === undefined ? row.name : String(b.name).trim().slice(0, 60);
+      const operator = b.operator === undefined
+        ? row.operator
+        : (['any', 'mci', 'irancell', 'mci_fixed'].includes(b.operator) ? b.operator : 'any');
+      const ips = b.ips === undefined ? row.ips : String(b.ips).trim();
+      if (!name || !ips) return json({ error: 'bad_pool' }, 400);
+      if (ips.length > 20000) return json({ error: 'too_large' }, 400);
+      const enabled = b.enabled === undefined ? row.enabled : b.enabled ? 1 : 0;
+      await env.DB.prepare('UPDATE ip_pools SET name = ?, operator = ?, ips = ?, enabled = ? WHERE id = ?')
+        .bind(name, operator, ips, enabled, id).run();
+      if (!enabled) await clearPoolPins(env, id);
+      return json({ ok: true });
+    }
+    if (method === 'DELETE') {
+      await clearPoolPins(env, id);
+      await env.DB.prepare('DELETE FROM ip_pools WHERE id = ?').bind(id).run();
+      return json({ ok: true });
+    }
+  }
+  const userIp = path.match(/^\/api\/users\/(\d+)\/ip$/);
+  if (userIp && method === 'POST') {
+    const id = Number(userIp[1]);
+    const b = await readJson(request);
+    const ip = String(b.ip || '').trim();
+    if (ip && !/^[0-9a-fA-F:.]{3,64}$/.test(ip)) return json({ error: 'bad_ip' }, 400);
+    await env.DB.prepare('UPDATE users SET pinned_ip = ?, ip_pinned_at = ? WHERE id = ?')
+      .bind(ip || null, ip ? Date.now() : null, id).run();
+    return json({ ok: true, ip: ip || null });
   }
 
   if (path === '/api/overview' && method === 'GET') {
@@ -513,6 +720,52 @@ async function handleApi(request, env, url) {
   return json({ error: 'not_found' }, 404);
 }
 
+/* ───────────────────────── lazy maintenance ───────────────────────── */
+
+/**
+ * No cron: the panel itself is the clock. A visitor triggers at most one check a minute, and a
+ * best-effort lock keeps two cold isolates from running the same job twice.
+ */
+async function tick(env) {
+  const now = Date.now();
+  const lock = Number(await DB.setting(env, 'tick_lock', '0')) || 0;
+  if (lock && now - lock < 120000) return;
+  await DB.setSetting(env, 'tick_lock', String(now));
+  try {
+    const lastReset = Number(await DB.setting(env, 'last_auto_reset_check', '0')) || 0;
+    if (now - lastReset >= 60000) {
+      await DB.setSetting(env, 'last_auto_reset_check', String(now));
+      await autoReset(env, now);
+    }
+    const lastRotate = Number(await DB.setting(env, 'last_ip_rotate_check', '0')) || 0;
+    if (now - lastRotate >= 300000) {
+      await DB.setSetting(env, 'last_ip_rotate_check', String(now));
+      await rotatePinnedIps(env, now);
+    }
+  } finally {
+    await DB.setSetting(env, 'tick_lock', '0');
+  }
+}
+
+async function autoReset(env, now) {
+  await env.DB.prepare(
+    'UPDATE users SET used_bytes = 0, last_reset_vol_time = ? ' +
+      'WHERE auto_reset_vol_days > 0 AND (last_reset_vol_time IS NULL OR ? - last_reset_vol_time >= auto_reset_vol_days * 86400000)',
+  ).bind(now, now).run();
+  await env.DB.prepare(
+    'UPDATE users SET used_req = 0, last_reset_req_time = ? ' +
+      'WHERE auto_reset_req_days > 0 AND (last_reset_req_time IS NULL OR ? - last_reset_req_time >= auto_reset_req_days * 86400000)',
+  ).bind(now, now).run();
+}
+
+/** A new IP at most once a day: rotating more often would cut connected clients for no gain. */
+async function rotatePinnedIps(env, now) {
+  await env.DB.prepare(
+    'UPDATE users SET pinned_ip = NULL, ip_pinned_at = NULL ' +
+      'WHERE auto_rotate_ip = 1 AND pinned_ip IS NOT NULL AND (ip_pinned_at IS NULL OR ? - ip_pinned_at >= 86400000)',
+  ).bind(now).run();
+}
+
 /* ───────────────────────── panel HTML ───────────────────────── */
 
 const PANEL = __PANEL_HTML__; // inlined from templates/panel-ui.html at build time
@@ -533,7 +786,8 @@ export default {
 async function handleRequest(request, env, ctx) {
     const url = new URL(request.url);
     const p = url.pathname;
-    await ensureConfigs(env);
+    await ensureSchema(env);
+    if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(tick(env).catch(() => {}));
 
     // Visiting the bare host should land on the panel, not on a 404 — that is what people type.
     if (p === '/' || p === '') {

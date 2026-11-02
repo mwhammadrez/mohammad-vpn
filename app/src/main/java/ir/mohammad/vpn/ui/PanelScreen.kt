@@ -134,6 +134,7 @@ fun PanelScreen(
     var notice by remember { mutableStateOf<String?>(null) }
 
     var users by remember { mutableStateOf<List<PanelApi.User>>(emptyList()) }
+    var poolCount by remember { mutableStateOf(0) }
     var loading by remember { mutableStateOf(false) }
     var needPassword by remember { mutableStateOf(false) }
     var password by remember { mutableStateOf("") }
@@ -154,6 +155,9 @@ fun PanelScreen(
         loading = true
         try {
             users = withContext(Dispatchers.IO) { PanelApi.users(acc.baseUrl, s) }
+            poolCount = runCatching {
+                withContext(Dispatchers.IO) { PanelApi.ipPoolCount(acc.baseUrl, s) }
+            }.getOrDefault(0)
             needPassword = false
         } catch (e: PanelApi.PanelException) {
             // A session lasts seven days. The stored password turns that expiry into a silent re-login
@@ -164,6 +168,9 @@ fun PanelScreen(
                     PanelStore.saveSession(context, renewed)
                     session = renewed
                     users = withContext(Dispatchers.IO) { PanelApi.users(acc.baseUrl, renewed) }
+                    poolCount = runCatching {
+                        withContext(Dispatchers.IO) { PanelApi.ipPoolCount(acc.baseUrl, renewed) }
+                    }.getOrDefault(0)
                     needPassword = false
                 } catch (again: Exception) {
                     needPassword = true
@@ -316,6 +323,7 @@ fun PanelScreen(
             else -> PanelDashboard(
                 account = account,
                 users = users,
+                poolCount = poolCount,
                 loading = loading,
                 notice = notice,
                 onShowPanels = { panels = PanelStore.list(context); phase = Phase.FORM },
@@ -370,7 +378,7 @@ fun PanelScreen(
                 onConnect = { user ->
                     val acc = account ?: return@PanelDashboard
                     val host = hostOf(acc.nodeUrl ?: acc.baseUrl)
-                    onConnect(PanelApi.vlessLink(user, host))
+                    onConnect(PanelApi.vlessLink(user, host, user.pinnedIp))
                     toast("Connecting…")
                 },
                 onDeletePanel = { showDelete = true; deleteError = null },
@@ -763,6 +771,7 @@ private fun ProgressCard(step: Int, error: String?) {
 private fun PanelDashboard(
     account: PanelApi.Account?,
     users: List<PanelApi.User>,
+    poolCount: Int,
     loading: Boolean,
     notice: String?,
     onShowPanels: () -> Unit,
@@ -801,6 +810,14 @@ private fun PanelDashboard(
             StatTile("USERS", users.size.toString(), Palette.Mint, Modifier.weight(1f))
             StatTile("ACTIVE", active.toString(), Palette.Violet, Modifier.weight(1f))
             StatTile("TRAFFIC", formatBytes(used), Palette.Amber, Modifier.weight(1f))
+        }
+
+        if (users.isNotEmpty() && poolCount == 0) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "No clean IP pool yet — configs may not connect in Iran. Add one in the web panel.",
+                fontSize = 10.sp, color = Palette.Amber,
+            )
         }
 
         Spacer(Modifier.height(12.dp))
@@ -898,6 +915,10 @@ private fun UserCard(
             if (user.expiresAt > 0) "expires ${formatDate(user.expiresAt)}" else "no expiry",
             fontSize = 10.sp, color = Palette.TextMuted,
         )
+        user.pinnedIp?.let {
+            Spacer(Modifier.height(2.dp))
+            Text("edge IP $it", fontSize = 10.sp, color = Palette.TextMuted)
+        }
 
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

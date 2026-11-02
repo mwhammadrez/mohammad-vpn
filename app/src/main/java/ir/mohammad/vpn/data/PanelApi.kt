@@ -38,10 +38,19 @@ object PanelApi {
         val limitBytes: Long,
         val expiresAt: Long,
         val enabled: Boolean,
+        /** Clean edge IP this user is pinned to; null until the panel assigns one. */
+        val pinnedIp: String? = null,
+        val connectionType: String = "both",
+        val usedReq: Long = 0,
+        val limitReq: Long = 0,
+        val ipLimit: Int = 0,
+        val startOnFirstConnect: Boolean = false,
+        val note: String? = null,
     ) {
         val blocked: Boolean
             get() = !enabled || (expiresAt > 0 && expiresAt < System.currentTimeMillis()) ||
-                (limitBytes > 0 && usedBytes >= limitBytes)
+                (limitBytes > 0 && usedBytes >= limitBytes) ||
+                (limitReq > 0 && usedReq >= limitReq)
     }
 
     class PanelException(message: String, val code: Int = 0) : Exception(message)
@@ -141,17 +150,46 @@ object PanelApi {
                         limitBytes = item.optLong("limit_bytes"),
                         expiresAt = item.optLong("expires_at"),
                         enabled = item.optInt("enabled", 1) == 1,
+                        pinnedIp = item.optString("pinned_ip").takeIf { it.isNotBlank() },
+                        connectionType = item.optString("connection_type", "both"),
+                        usedReq = item.optLong("used_req"),
+                        limitReq = item.optLong("limit_req"),
+                        ipLimit = item.optInt("ip_limit"),
+                        startOnFirstConnect = item.optInt("start_on_first_connect", 0) == 1,
+                        note = item.optString("note").takeIf { it.isNotBlank() },
                     ),
                 )
             }
         }
     }
 
-    fun addUser(baseUrl: String, session: String, name: String, limitGb: Double, days: Int) {
+    fun addUser(
+        baseUrl: String,
+        session: String,
+        name: String,
+        limitGb: Double,
+        days: Int,
+        protocol: String = "both",
+        limitReq: Int = 0,
+        ipLimit: Int = 0,
+        ipPoolId: Int? = null,
+        startOnFirstConnect: Boolean = false,
+        autoResetVolDays: Int = 0,
+        autoResetReqDays: Int = 0,
+        note: String = "",
+    ) {
         val payload = JSONObject().apply {
             put("name", name)
             put("limit_gb", limitGb)
             put("days", days)
+            put("protocol", protocol)
+            put("limit_req", limitReq)
+            put("ip_limit", ipLimit)
+            ipPoolId?.let { put("ip_pool_id", it) }
+            put("start_on_first_connect", startOnFirstConnect)
+            put("auto_reset_vol_days", autoResetVolDays)
+            put("auto_reset_req_days", autoResetReqDays)
+            put("note", note)
         }
         open("POST", baseUrl.trimEnd('/') + "/api/users", payload, session, READ_TIMEOUT_MS)
     }
@@ -169,6 +207,12 @@ object PanelApi {
         open("DELETE", baseUrl.trimEnd('/') + "/api/users/$id", null, session, READ_TIMEOUT_MS)
     }
 
+    /** How many clean-IP pools the panel has; 0 means configs fall back to a domain. */
+    fun ipPoolCount(baseUrl: String, session: String): Int {
+        val json = open("GET", baseUrl.trimEnd('/') + "/api/ips", null, session, READ_TIMEOUT_MS)
+        return json.optJSONArray("pools")?.length() ?: 0
+    }
+
     fun subLink(baseUrl: String, subToken: String): String =
         baseUrl.trimEnd('/') + "/sub/" + URLEncoder.encode(subToken, "UTF-8")
 
@@ -176,7 +220,10 @@ object PanelApi {
      * The vless:// link the app imports when the user taps CONNECT on a profile.
      * Mirrors what the panel puts inside its own subscription.
      */
-    fun vlessLink(user: User, nodeHost: String): String {
+    fun vlessLink(user: User, nodeHost: String, ip: String? = null): String {
+        // The address is the clean edge IP; SNI and the WebSocket Host stay the node's real domain,
+        // which is what lets the edge route the request when DNS for that name is blocked.
+        val address = ip?.takeIf { it.isNotBlank() } ?: nodeHost
         val query = listOf(
             "encryption=none",
             "security=tls",
@@ -188,6 +235,6 @@ object PanelApi {
             "path=%2Fws%3Fed%3D2048",
         ).joinToString("&")
         val label = URLEncoder.encode(user.name.ifBlank { "profile" }, "UTF-8")
-        return "vless://${user.uuid}@$nodeHost:443?$query#$label"
+        return "vless://${user.uuid}@$address:443?$query#$label"
     }
 }

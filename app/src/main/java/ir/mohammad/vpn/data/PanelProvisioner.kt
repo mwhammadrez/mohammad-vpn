@@ -84,6 +84,13 @@ class PanelProvisioner(private val context: Context, token: String) {
                 "INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 listOf("session_secret", randomHex(32)),
             )
+            // A version marker lets a future build migrate a panel it did not create, without
+            // guessing from the shape of the tables.
+            cf.query(
+                account.id, database,
+                "INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                listOf("panel_version", "1"),
+            )
 
             val nodeName = "$script-node"
             onStep(4)
@@ -141,6 +148,17 @@ class PanelProvisioner(private val context: Context, token: String) {
                     listOf("node_host", nodeHost),
                 )
                 nodeUrl = "https://$nodeHost"
+            } else {
+                // No custom domain: the node is still addressed by its workers.dev name. The
+                // subscription reaches it through a clean edge IP, so a blocked DNS answer for
+                // workers.dev does not matter; SNI/Host still need the real name.
+                val workersHost = "$nodeName.$subdomain.workers.dev"
+                cf.query(
+                    account.id, database,
+                    "INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    listOf("node_host", workersHost),
+                )
+                nodeUrl = "https://$workersHost"
             }
 
             return Created(

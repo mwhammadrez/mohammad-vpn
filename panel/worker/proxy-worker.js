@@ -13,15 +13,40 @@ import { connect } from 'cloudflare:sockets';
 const dec = new TextDecoder();
 const enc = new TextEncoder();
 
+import { isBlocked, nextActiveIps, firstConnectExpiry } from './lib.js';
+
 const HEX56 = /^[0-9a-f]{56}$/i;
 
-async function lookup(env, kind, value) {
+/**
+ * One lookup per connection: authentication, every quota, the device limit and the deferred start
+ * timer all live here so a client cannot reach the proxy by skipping one of them.
+ */
+async function lookup(env, kind, value, clientIp) {
   const row = kind === 'uuid'
     ? await env.DB.prepare('SELECT * FROM users WHERE uuid = ?').bind(value).first()
     : await env.DB.prepare('SELECT * FROM users WHERE trojan_hash = ?').bind(value).first();
   if (!row || !row.enabled) return null;
-  if (row.expires_at && row.expires_at < Date.now()) return null;
-  if (row.limit_bytes > 0 && row.used_bytes >= row.limit_bytes) return null;
+
+  const now = Date.now();
+  if (isBlocked(row, now)) return null;
+
+  if (row.ip_limit > 0 && clientIp) {
+    const devices = nextActiveIps(row.active_ips, clientIp, now, row.ip_limit);
+    if (!devices.allowed) return null;
+    if (devices.changed) {
+      await env.DB.prepare('UPDATE users SET active_ips = ? WHERE id = ?')
+        .bind(devices.active, row.id).run();
+    }
+  }
+
+  const firstExpiry = firstConnectExpiry(row, now);
+  if (firstExpiry !== null) {
+    await env.DB.prepare('UPDATE users SET first_connection_time = ?, expires_at = ? WHERE id = ?')
+      .bind(now, firstExpiry, row.id).run();
+  }
+
+  await env.DB.prepare('UPDATE users SET used_req = used_req + 1, last_active = ? WHERE id = ?')
+    .bind(now, row.id).run();
   return row;
 }
 
@@ -104,6 +129,8 @@ function concat(a, b) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    // Cloudflare sets this; any client-supplied copy is overwritten at the edge.
+    const clientIp = request.headers.get('CF-Connecting-IP') || '';
     if (url.pathname === '/health') {
       return new Response(JSON.stringify({ ok: true, node: true, db: !!env.DB }), {
         headers: { 'content-type': 'application/json' },
@@ -192,7 +219,7 @@ export default {
       if (body[0] === 0) {
         const hex = [...body.slice(1, 17)].map((b) => b.toString(16).padStart(2, '0')).join('');
         const uuid = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-        user = await lookup(env, 'uuid', uuid);
+        user = await lookup(env, 'uuid', uuid, clientIp);
         if (!user) return closeAll();
 
         let p = 18 + body[17];
@@ -220,7 +247,7 @@ export default {
       }
 
       // Trojan
-      user = await lookup(env, 'trojan', dec.decode(body.slice(0, 56)).toLowerCase());
+      user = await lookup(env, 'trojan', dec.decode(body.slice(0, 56)).toLowerCase(), clientIp);
       if (!user) return closeAll();
       let p = 56;
       while (body[p] === 13 || body[p] === 10) p++;

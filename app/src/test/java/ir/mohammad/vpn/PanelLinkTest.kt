@@ -72,4 +72,35 @@ class PanelLinkTest {
             .getJSONArray("vnext").getJSONObject(0)
             .getJSONArray("users").getJSONObject(0).getString("id"))
     }
+
+    @Test
+    fun `a clean-ip link uses the ip and keeps the domain for tls and host`() {
+        val parsed = ConfigUri.parse(PanelApi.vlessLink(user, "node.example.com", "104.16.0.1"))
+        val profile = parsed.profile
+
+        assertEquals("104.16.0.1", profile.host)
+        val vnext = profile.xray!!
+            .getJSONObject("settings")
+            .getJSONArray("vnext")
+            .getJSONObject(0)
+        assertEquals("104.16.0.1", vnext.getString("address"))
+
+        val stream = profile.xray!!.getJSONObject("streamSettings")
+        assertEquals("node.example.com", stream.getJSONObject("tlsSettings").getString("serverName"))
+        assertEquals(
+            "node.example.com",
+            stream.getJSONObject("wsSettings").getJSONObject("headers").getString("Host"),
+        )
+    }
+
+    @Test
+    fun `without a clean ip the domain is still the address`() {
+        val parsed = ConfigUri.parse(PanelApi.vlessLink(user, "node.example.com", null))
+        assertEquals("node.example.com", parsed.profile.host)
+        assertEquals(
+            "node.example.com",
+            parsed.profile.xray!!.getJSONObject("streamSettings")
+                .getJSONObject("tlsSettings").getString("serverName"),
+        )
+    }
 }
