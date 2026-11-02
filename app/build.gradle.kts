@@ -26,6 +26,11 @@ android {
             .replace("\\", "\\\\")
             .replace("\"", "\\\"")
         buildConfigField("String", "OPERATOR_PASSWORD", "\"$escapedPassword\"")
+        // Signed remote config (SPEC §5.9). Empty means "this build never fetches".
+        val rcUrl = localProps.getProperty("mohammad.remoteConfigUrl") ?: ""
+        val rcKey = localProps.getProperty("mohammad.remoteConfigKey") ?: ""
+        buildConfigField("String", "REMOTE_CONFIG_URL", "\"$rcUrl\"")
+        buildConfigField("String", "REMOTE_CONFIG_KEY", "\"$rcKey\"")
         ndk { abiFilters += listOf("arm64-v8a") }
     }
 
@@ -86,6 +91,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation(files("libs/mohammad-core.aar"))
+    // Ed25519 verification on API 26–32: the platform provider only gained EdDSA in API 33 and the
+    // app still supports Android 8. Pure Java, no native code, ~40 KB.
+    implementation("net.i2p.crypto:eddsa:0.3.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")

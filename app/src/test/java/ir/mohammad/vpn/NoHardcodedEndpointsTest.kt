@@ -57,6 +57,9 @@ class NoHardcodedEndpointsTest {
     private val fileExtensions = setOf(
         "txt", "dat", "json", "enc", "apk", "log", "db", "bin", "yml", "yaml", "xml", "toml",
         "kt", "java", "so", "aar", "jar", "md", "png", "jpg", "proto", "pb", "csv",
+        // Script and schema files the panel builder ships: `index.js` is the module name Cloudflare
+        // requires, `schema.sql` the D1 schema. Neither is a host, and neither is a TLD.
+        "js", "sql",
     )
 
     /** Every prefix that legitimately appears as a route or a reserved range. */
