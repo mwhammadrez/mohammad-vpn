@@ -162,6 +162,9 @@ export default {
     // here and exhaust the isolate's memory, taking every other connection on the node with it.
     let queuedBytes = 0;
     const MAX_QUEUED_BYTES = 1024 * 1024;
+    // D1 allows ~100k row writes a day on the free plan; flushing every 64 KB burned that budget
+    // after ~6 GB of traffic. 5 MB keeps a long download to a handful of writes.
+    const FLUSH_BYTES = 5 * 1024 * 1024;
 
     const flush = () => {
       if (!user || !(up + down)) return;
@@ -201,7 +204,7 @@ export default {
             if (user && user.limit_bytes > 0 && user.used_bytes + up + down >= user.limit_bytes) {
               return closeAll();
             }
-            if (down > 65536) flush();
+            if (down >= FLUSH_BYTES) flush();
           },
           close() { closeAll(); },
         })).catch(() => closeAll());
@@ -341,7 +344,7 @@ export default {
         if (!ready) return feedSerial(bytes);
         up += bytes.byteLength;
         await writer.write(bytes);
-        if (up > 65536) flush();
+        if (up >= FLUSH_BYTES) flush();
       } catch {
         closeAll();
       }

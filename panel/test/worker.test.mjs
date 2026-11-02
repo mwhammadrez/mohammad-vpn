@@ -206,6 +206,34 @@ test('quota and expiry block the subscription', async () => {
   assert.equal((await h.call('/sub/' + user.sub_token)).status, 404);
 });
 
+test('a disabled or expired user gets 404, not a working link', async () => {
+  const h = await setupPanel();
+  await h.json('/api/users', { name: 'ali', days: 30 }, h.token);
+  const user = (await (await h.json('/api/users', undefined, h.token, 'GET')).json()).users[0];
+
+  assert.equal((await h.call('/sub/' + user.sub_token)).status, 200);
+  h.db.run('UPDATE users SET enabled = 0 WHERE id = ?', user.id);
+  assert.equal((await h.call('/sub/' + user.sub_token)).status, 404);
+
+  h.db.run('UPDATE users SET enabled = 1, expires_at = ? WHERE id = ?', Date.now() - 1000, user.id);
+  assert.equal((await h.call('/sub/' + user.sub_token)).status, 404);
+  assert.equal((await h.call('/xray/' + user.sub_token)).status, 404);
+});
+
+test('disabling the last pool sends links back to the domain', async () => {
+  const h = await setupPanel();
+  await h.json('/api/ips', { name: 'MCI', ips: '104.16.0.1' }, h.token);
+  await h.json('/api/users', { name: 'ali', days: 30 }, h.token);
+  const user = (await (await h.json('/api/users', undefined, h.token, 'GET')).json()).users[0];
+
+  let text = Buffer.from(await (await h.call('/sub/' + user.sub_token)).text(), 'base64').toString('utf8');
+  assert.match(text, /@104\.16\.0\.1:443/);
+
+  await h.json('/api/ips/1', { enabled: false }, h.token, 'PATCH');
+  text = Buffer.from(await (await h.call('/sub/' + user.sub_token)).text(), 'base64').toString('utf8');
+  assert.match(text, /@node\.example\.com:443/);
+});
+
 test('a user with no pool still gets a domain-based link', async () => {
   const h = await setupPanel();
   await h.json('/api/users', { name: 'ali', days: 30 }, h.token);

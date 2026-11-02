@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.File
 
 /**
  * The pieces of provisioning that can be checked without a Cloudflare account: the name rules, the
@@ -50,6 +51,28 @@ class PanelProvisionerTest {
             "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
             PanelProvisioner.sha256Hex("test"),
         )
+    }
+
+    @Test
+    fun `a new panel starts with usable edge addresses`() {
+        val root = listOf(File(".."), File("."), File(System.getProperty("user.dir")).parentFile)
+            .map { it.absoluteFile }
+            .firstOrNull { File(it, "app/src/main/assets/panel/clean_ips.txt").isFile }
+            ?: error("repository root not found")
+
+        val ips = File(root, "app/src/main/assets/panel/clean_ips.txt").readText()
+            .split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        assertTrue(ips.size >= 4)
+        assertTrue(ips.all { Regex("^\\d{1,3}(\\.\\d{1,3}){3}$").matches(it) })
+    }
+
+    @Test
+    fun `subdomain candidates obey the DNS label rules`() {
+        val candidate = PanelProvisioner.subdomainCandidate("My Panel!!", "a1b2c3")
+        assertTrue(candidate.length in 3..32)
+        assertTrue(candidate.matches(Regex("^[a-z0-9][a-z0-9-]*[a-z0-9]$")))
+
+        assertEquals(32, PanelProvisioner.subdomainCandidate("a".repeat(60), "ffffff").length)
     }
 
     @Test
