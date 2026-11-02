@@ -91,4 +91,15 @@ class RemoteConfigTest {
             RemoteConfig.accept(wrong, minVersion = 0, publicKey = key)
         }
     }
+
+@Test
+    fun `the signed version wins over the envelope version`() {
+        val signed = JSONObject().put("configVersion", 3L)
+        assertEquals(3L, RemoteConfig.resolveVersion(signed, 999L))
+    }
+
+    @Test
+    fun `a legacy payload without a signed version falls back to the envelope`() {
+        assertEquals(7L, RemoteConfig.resolveVersion(JSONObject(), 7L))
+    }
 }

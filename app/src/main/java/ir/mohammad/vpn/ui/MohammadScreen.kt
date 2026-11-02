@@ -866,7 +866,7 @@ private fun CrashCard(report: String, onDismiss: () -> Unit) {
 private fun Console(logs: List<LogEntry>) {
     // Rebuilding 40 rows costs layout work on every log line; 12 is enough to see
     // what happened and keeps the frame budget.
-    val tail = remember(logs.size) { logs.takeLast(12) }
+    val tail = remember(logs.lastOrNull()) { logs.takeLast(12) }
     Glass(shape = 18.dp) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

@@ -24,12 +24,16 @@ class NetMonitor(context: Context) {
 
     private val callback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
+            // The app's own tunnel also advertises INTERNET. Counting it as the underlying network
+            // hides Wi-Fi/cellular loss and can make the tunnel its own underlying network.
+            if (isVpn(network)) return
             if (!_online.value) LogStore.add("I", "NET", "network available")
             _online.value = true
             _activeNetwork.value = network
         }
 
         override fun onLost(network: Network) {
+            if (isVpn(network)) return
             val stillOnline = isCurrentlyOnline()
             if (_online.value && !stillOnline) LogStore.add("W", "NET", "network lost")
             _online.value = stillOnline
@@ -37,6 +41,7 @@ class NetMonitor(context: Context) {
         }
 
         override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return
             val validated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
             if (validated && !_online.value) {
                 _online.value = true
@@ -46,12 +51,16 @@ class NetMonitor(context: Context) {
         }
     }
 
+    private fun isVpn(network: Network): Boolean =
+        manager.getNetworkCapabilities(network)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+
     private var started = false
 
     /** The network that currently carries internet traffic, if any. */
     fun currentNetwork(): Network? {
         val active = manager.activeNetwork ?: return null
         val caps = manager.getNetworkCapabilities(active) ?: return null
+        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return null
         return if (caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) active else null
     }
 
@@ -75,6 +84,7 @@ class NetMonitor(context: Context) {
     private fun isCurrentlyOnline(): Boolean {
         val active = manager.activeNetwork ?: return false
         val caps = manager.getNetworkCapabilities(active) ?: return false
+        if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return false
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
 }

@@ -40,4 +40,14 @@ try {
   fs.unlinkSync(inlined);
 }
 fs.copyFileSync(path.join(root, 'panel/worker/schema.sql'), path.join(out, 'schema.sql'));
+
+// The node worker is the one Cloudflare starts on every connection: an import that pushes it past a
+// few tens of KB turns into a visible cold-start penalty (and, at the upload limit, a hard failure).
+const proxyOut = path.join(out, 'proxy-worker.js');
+const proxyBytes = fs.statSync(proxyOut).size;
+const PROXY_LIMIT = 32 * 1024;
+if (proxyBytes > PROXY_LIMIT) {
+  throw new Error(`proxy-worker.js is ${proxyBytes} bytes (limit ${PROXY_LIMIT}); remove the import or inline less`);
+}
+console.log(`proxy-worker.js ${(proxyBytes / 1024).toFixed(1)} KB (limit ${(PROXY_LIMIT / 1024)} KB)`);
 console.log('built', out);

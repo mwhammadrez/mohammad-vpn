@@ -89,9 +89,14 @@ object RealDelay {
         val liveId = Tunnel.selected?.id
         val proxy = ProxyState.state.value
         profiles.forEachIndexed { index, profile ->
-            val result = when (plan(connected, liveId, profile.id, proxy.running, proxy.profileId)) {
-                Plan.Direct -> directHandshake(context, profile, timeoutMs)
-                else -> measure(context, profile, timeoutMs)
+            // The caller iterates on the main thread. The socket work must not: a direct handshake
+            // there throws NetworkOnMainThreadException, which the catch turns into "no answer" for
+            // every profile and freezes the UI for the whole run.
+            val result = withContext(Dispatchers.IO) {
+                when (plan(connected, liveId, profile.id, proxy.running, proxy.profileId)) {
+                    Plan.Direct -> directHandshake(context, profile, timeoutMs)
+                    else -> measure(context, profile, timeoutMs)
+                }
             }
             onEach(index, profiles.size, profile, result)
         }

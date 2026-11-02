@@ -10,6 +10,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyStore
@@ -128,9 +129,6 @@ object RemoteConfig {
         val schema = envelope.optInt("schemaVersion", -1)
         if (schema != SCHEMA_VERSION) throw Invalid("unsupported schemaVersion $schema")
 
-        val version = envelope.optLong("configVersion", 0L)
-        if (version < minVersion) throw Invalid("stale configVersion $version < $minVersion")
-
         val payload = envelope.optString("payload", "")
         if (payload.isEmpty()) throw Invalid("missing payload")
         val signature = envelope.optString("signature", "")
@@ -142,7 +140,26 @@ object RemoteConfig {
             throw Invalid("bad signature")
         }
 
+        // Everything below is read from the *signed* bytes. The envelope's own configVersion is
+        // attacker-controlled: a replay of an old signed payload with a huge version would pin the
+        // client forever (no later release could ever be "newer").
+        val signed = runCatching { JSONObject(payload) }.getOrElse { throw Invalid("payload is not json") }
+        val signedSchema = signed.optInt("schemaVersion", -1)
+        if (signedSchema != SCHEMA_VERSION) throw Invalid("unsupported signed schemaVersion $signedSchema")
+        val version = resolveVersion(signed, envelope.optLong("configVersion", 0L))
+        if (version < minVersion) throw Invalid("stale configVersion $version < $minVersion")
+
         return Snapshot(profiles = parsePayload(payload), version = version)
+    }
+
+    /**
+     * The signed version wins. Payloads written before the panel embedded `configVersion` fall back
+     * to the envelope value, which keeps already-deployed panels working (their payloads are short
+     * and their hosts are the operator's own).
+     */
+    internal fun resolveVersion(signed: JSONObject, envelopeVersion: Long): Long {
+        val fromPayload = signed.optLong("configVersion", -1L)
+        return if (fromPayload >= 0) fromPayload else envelopeVersion
     }
 
     internal fun verify(publicKey: ByteArray, message: ByteArray, signature: ByteArray): Boolean =
@@ -215,9 +232,11 @@ object RemoteConfig {
         }
         try {
             val code = connection.responseCode
-            if (code != 200) throw Invalid("http $code")
+            // Transport failures are retryable on the next host. Only a *signed* answer that fails
+            // verification is final (see `download`), so these must not be [Invalid].
+            if (code != 200) throw IOException("http $code")
             val type = connection.contentType.orEmpty()
-            if (!type.contains("json", ignoreCase = true)) throw Invalid("content type $type")
+            if (!type.contains("json", ignoreCase = true)) throw IOException("content type $type")
 
             val body = ByteArrayOutputStream()
             connection.inputStream.use { input ->
@@ -226,7 +245,7 @@ object RemoteConfig {
                     val read = input.read(buffer)
                     if (read < 0) break
                     body.write(buffer, 0, read)
-                    if (body.size() > MAX_BODY_BYTES) throw Invalid("oversize")
+                    if (body.size() > MAX_BODY_BYTES) throw IOException("oversize")
                 }
             }
             return String(body.toByteArray(), Charsets.UTF_8)

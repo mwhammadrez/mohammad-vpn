@@ -3,6 +3,7 @@ package ir.mohammad.vpn.data
 import android.net.Uri
 import ir.mohammad.vpn.core.DnsConfig
 import ir.mohammad.vpn.core.FinalMaskRules
+import ir.mohammad.vpn.core.RealityRules
 import ir.mohammad.vpn.core.TlsFingerprint
 import org.json.JSONArray
 import org.json.JSONObject
@@ -72,6 +73,8 @@ object ConfigUri {
         val security = param(q, "security")?.lowercase() ?: "none"
         val network = param(q, "type")?.lowercase()?.takeIf { it.isNotBlank() } ?: "tcp"
         val warnings = mutableListOf<String>()
+        requireUuid(uuid, "vless")
+        RealityRules.validateFlow(param(q, "flow"), security)?.let { throw InvalidConfig("vless: $it") }
 
         // `encryption` is not decoration. Modern servers use "mlkem768x25519plus.<mode>.<rtt>.<key>"
         // (VLESS post-quantum). Forcing "none" here produces a config the core accepts and the
@@ -184,6 +187,9 @@ object ConfigUri {
         val alterId = json.optString("aid").toIntOrNull() ?: 0
         val cipher = json.optString("scy").takeIf { it.isNotBlank() } ?: "auto"
         val warnings = mutableListOf<String>()
+        requireUuid(uuid, "vmess")
+        // VMess carries the TCP header obfuscation in `type` ("http", "none"), not in a query key.
+        json.optString("type").takeIf { it.isNotBlank() }?.let { q["headerType"] = it }
 
         val xray = JSONObject()
             .put("protocol", "vmess")
@@ -291,7 +297,7 @@ object ConfigUri {
 
         val profile = json.optJSONObject("profile") ?: throw InvalidConfig("$scheme: profile missing")
         val engine = profile.optString("engine").ifBlank { scheme }
-        if (engine != "masterdns" && scheme != "masterdns") {
+        if (engine != "masterdns") {
             throw InvalidConfig(
                 "$scheme links need the ${engine} engine, which this build does not include; " +
                     "only masterdns is bundled",
@@ -352,6 +358,11 @@ object ConfigUri {
         body = body.substringBefore('#')
         val queryPart = body.substringAfter('?', "")
         if (queryPart.isNotEmpty()) body = body.substringBefore('?')
+        // The SIP003 plugin runs a separate binary this build does not ship. Importing the link as
+        // plain Shadowsocks produces a profile that can never connect, so refuse it with a reason.
+        if (queryPart.contains("plugin=")) {
+            throw InvalidConfig("ss: SIP003 plugins are not supported by this build")
+        }
 
         val method: String
         val password: String
@@ -479,13 +490,22 @@ object ConfigUri {
                 if (pbk.isNullOrBlank()) {
                     throw InvalidConfig("vless: reality needs pbk (public key)")
                 }
+                val sni = param(q, "sni") ?: ""
+                val sid = param(q, "sid") ?: ""
+                val spx = param(q, "spx")
+                // The core rejects a bad REALITY block at startup with a message the UI never sees.
+                // Validate here, where the reason can be shown next to the pasted link.
+                RealityRules.validateServerName(sni)?.let { throw InvalidConfig("vless: $it") }
+                RealityRules.validatePublicKey(pbk)?.let { throw InvalidConfig("vless: $it") }
+                RealityRules.validateShortId(sid)?.let { throw InvalidConfig("vless: $it") }
+                spx?.let { RealityRules.validateSpiderX(it)?.let { reason -> throw InvalidConfig("vless: $reason") } }
                 stream.put(
                     "realitySettings",
                     JSONObject()
-                        .put("serverName", param(q, "sni") ?: "")
+                        .put("serverName", sni)
                         .put("publicKey", pbk)
-                        .put("shortId", param(q, "sid") ?: "")
-                        .apply { param(q, "spx")?.let { put("spiderX", it) } },
+                        .put("shortId", sid)
+                        .apply { spx?.let { put("spiderX", it) } },
                 )
             }
             "none" -> Unit
@@ -539,6 +559,18 @@ object ConfigUri {
             return DEFAULT_FINGERPRINT
         }
         return value
+    }
+
+    /**
+     * A VLESS/VMess id the core accepts: a 36-character UUID or its 32-hex-character form. The core
+     * refuses anything else at config load, which the UI reports only as "tunnel did not start".
+     */
+    private fun requireUuid(value: String, scheme: String) {
+        val compact = value.replace("-", "")
+        val hex = compact.length == 32 && compact.all { c ->
+            c.isDigit() || c.lowercaseChar() in 'a'..'f'
+        }
+        if (!hex) throw InvalidConfig("$scheme: id is not a UUID")
     }
 
     /** Share links mix casing (`serviceName`, `headerType`); the core's keys are exact, so we compare

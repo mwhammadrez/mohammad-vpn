@@ -127,6 +127,10 @@ export default {
     let ready = false;
     let pending = new Uint8Array(0);
     const queue = [];
+    // Bytes waiting for `remote.opened`. Without a cap a single client can park unbounded payload
+    // here and exhaust the isolate's memory, taking every other connection on the node with it.
+    let queuedBytes = 0;
+    const MAX_QUEUED_BYTES = 1024 * 1024;
 
     const flush = () => {
       if (!user || !(up + down)) return;
@@ -157,6 +161,11 @@ export default {
           write(chunk) {
             down += chunk.byteLength;
             try { server.send(chunk); } catch { closeAll(); }
+            // The quota was only checked when the connection opened, so one long-lived stream could
+            // download many times the allowance. Enforce it on the data path too.
+            if (user && user.limit_bytes > 0 && user.used_bytes + up + down >= user.limit_bytes) {
+              return closeAll();
+            }
             if (down > 65536) flush();
           },
           close() { closeAll(); },
@@ -167,6 +176,7 @@ export default {
           await writer.write(first);
         }
         for (const part of queue.splice(0)) {
+          queuedBytes = 0;
           up += part.byteLength;
           await writer.write(part);
         }
@@ -253,6 +263,8 @@ export default {
           await writer.write(chunk);
         } else if (user) {
           queue.push(chunk);
+          queuedBytes += chunk.byteLength;
+          if (queuedBytes > MAX_QUEUED_BYTES) closeAll();
         } else {
           await feed(chunk);
         }

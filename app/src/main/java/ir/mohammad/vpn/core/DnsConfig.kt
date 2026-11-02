@@ -54,6 +54,7 @@ object DnsConfig {
         if (settings == null) return "dns settings missing"
         val domain = settings.optString("domain").trim()
         if (domain.isBlank()) return "dns domain missing"
+        if (hasControl(domain)) return "dns domain contains a control character"
         if (domain.contains(' ') || !domain.contains('.')) return "dns domain is not a host name"
         if (domain.length > 200) return "dns domain is too long"
 
@@ -66,13 +67,35 @@ object DnsConfig {
         if (resolvers.isEmpty()) return "dns resolvers missing"
         if (resolvers.size > 64) return "dns resolvers: at most 64"
         resolvers.forEach { entry ->
-            val host = entry.substringBeforeLast(':', entry)
-            val port = if (entry.contains(':')) entry.substringAfterLast(':').toIntOrNull() else 53
+            if (hasControl(entry)) return "dns resolver contains a control character"
+            val (host, port) = splitResolver(entry)
             if (host.isBlank()) return "dns resolver \"$entry\" has no address"
             if (port == null || port !in 1..65535) return "dns resolver \"$entry\" has a bad port"
         }
         return null
     }
+
+    /**
+     * `1.1.1.1`, `1.1.1.1:53`, `[2001:4860::8888]:53` and a bare `2001:4860::8888` all occur in the
+     * wild. Splitting on the last colon turns a bare IPv6 address into a bogus host:port pair.
+     */
+    internal fun splitResolver(entry: String): Pair<String, Int?> {
+        val value = entry.trim()
+        if (value.startsWith("[")) {
+            val end = value.indexOf(']')
+            if (end < 0) return value to null
+            val host = value.substring(1, end)
+            val rest = value.substring(end + 1)
+            val port = if (rest.startsWith(":")) rest.drop(1).toIntOrNull() else 53
+            return host to port
+        }
+        val colons = value.count { it == ':' }
+        if (colons > 1) return value to 53
+        if (colons == 1) return value.substringBefore(':') to value.substringAfter(':').toIntOrNull()
+        return value to 53
+    }
+
+    private fun hasControl(value: String): Boolean = value.any { it.code < 0x20 || it.code == 0x7F }
 
     fun resolverList(settings: JSONObject?): List<String> {
         val array = settings?.optJSONArray("resolvers") ?: return emptyList()

@@ -23,6 +23,7 @@ class ProfileStoreTest {
     @After
     fun clean() {
         ProfileStore.file(context).delete()
+        java.io.File(context.filesDir, "imported_profiles.json.corrupt").delete()
     }
 
     private fun sample(name: String = "A", link: String = "vless://11111111-2222-3333-4444-555555555555@a.example.com:443?security=none&type=ws#A") =
@@ -102,5 +103,15 @@ class ProfileStoreTest {
         assertNotNull(ProfileStore.validate(sample().copy(xray = null)))
         assertNotNull(ProfileStore.validate(sample().copy(mtu = 42)))
         assertTrue(ProfileStore.validate(sample().copy(core = "AMNEZIAWG", awg = null)) != null)
+    }
+
+@Test
+    fun `a corrupt file is quarantined instead of silently wiping the list`() {
+        ProfileStore.file(context).writeText("{ not json")
+        assertEquals(emptyList<Profile>(), ProfileStore.load(context))
+        assertTrue(java.io.File(context.filesDir, "imported_profiles.json.corrupt").isFile)
+        // A later save must start from a clean list, not overwrite what was quarantined.
+        ProfileStore.add(context, sample("B"))
+        assertEquals(listOf("B"), ProfileStore.load(context).map { it.name })
     }
 }

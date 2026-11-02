@@ -25,7 +25,10 @@ import ir.mohammad.vpn.core.TunPlan
 import ir.mohammad.vpn.core.XrayConfig
 import ir.mohammad.vpn.data.DnsEngine
 import ir.mohammad.vpn.data.LogStore
+import ir.mohammad.vpn.data.OperatorBundleLoader
 import ir.mohammad.vpn.data.Profile
+import ir.mohammad.vpn.data.ProfileStore
+import ir.mohammad.vpn.data.RemoteConfig
 import ir.mohammad.vpn.data.Tunnel
 import ir.mohammad.vpn.data.TunnelError
 import ir.mohammad.vpn.data.TunnelState
@@ -80,6 +83,10 @@ class MohammadVpnService : VpnService() {
         const val HEALTH_TARGET_PORT = 443
 
         const val TAG = "VPN"
+
+        /** Same store the activity and the surfaces read; a cold process has nothing else. */
+        const val PREFS = "mohammad"
+        const val KEY_SELECTED_PROFILE = "selected_profile"
     }
 
     private enum class StartResult { OK, INVALID_PROFILE, FAILED, UNHEALTHY }
@@ -160,12 +167,15 @@ class MohammadVpnService : VpnService() {
                 paused = true
                 userStopped = true
                 cancelStatsPoll()
-                disconnectBlocking("paused by user")
-                Tunnel.trafficUnavailable()
-                VpnNotifier.post(
-                    this,
-                    VpnNotifier.build(this, Tunnel.state.value, Tunnel.traffic.value, paused = true),
-                )
+                // Teardown touches native code and the TUN; never block the main thread on it.
+                submit {
+                    disconnectBlocking("paused by user")
+                    Tunnel.trafficUnavailable()
+                    VpnNotifier.post(
+                        this,
+                        VpnNotifier.build(this, Tunnel.state.value, Tunnel.traffic.value, paused = true),
+                    )
+                }
             }
 
             ACTION_RESUME -> {
@@ -182,8 +192,11 @@ class MohammadVpnService : VpnService() {
 
             ACTION_DISCONNECT -> {
                 paused = false
-                disconnectBlocking("disconnect requested")
-                stopSelf()
+                // Close the core and the descriptor on the worker, not on the caller's thread.
+                submit {
+                    disconnectBlocking("disconnect requested")
+                    stopSelf()
+                }
             }
         }
         return START_NOT_STICKY
@@ -199,13 +212,29 @@ class MohammadVpnService : VpnService() {
 
     private fun isStale(gen: Int): Boolean = userStopped || gen != generation
 
+    /**
+     * A widget or tile tap can start this service in a fresh process, before any activity has run.
+     * In that case [Tunnel.selected] is null even though a profile id is saved; rebuild it from the
+     * same stores the activity uses instead of failing with NoProfileSelected.
+     */
+    private fun restoreSelectedProfile(): Profile? {
+        val id = getSharedPreferences(PREFS, MODE_PRIVATE)
+            .getString(KEY_SELECTED_PROFILE, null) ?: return null
+        val remote = runCatching { RemoteConfig.cached(this)?.profiles }.getOrNull().orEmpty()
+        val imported = runCatching { ProfileStore.load(this) }.getOrNull().orEmpty()
+        // A build that ships only the encrypted bundle has no remote cache: decrypt it here, on the
+        // worker, so a widget tap after a reboot still finds the operator profile.
+        val bundled = runCatching { OperatorBundleLoader.load(this).profiles }.getOrNull().orEmpty()
+        val found = (remote + imported + bundled).firstOrNull { it.id == id } ?: return null
+        if (Tunnel.profiles.isEmpty()) Tunnel.publishProfiles(bundled + imported)
+        LogStore.add("I", TAG, "restored saved profile for a cold start")
+        return found
+    }
+
     // ---------------------------------------------------------------- connect
 
     private fun connect(gen: Int) {
         val t0 = SystemClock.elapsedRealtime()
-        // A new session never inherits the previous session's totals (AC-N10).
-        Tunnel.resetTraffic()
-        Tunnel.connectTimeline = emptyList()
         fun mark(stage: String) {
             Tunnel.connectTimeline = Tunnel.connectTimeline + (stage to (SystemClock.elapsedRealtime() - t0))
         }
@@ -219,7 +248,9 @@ class MohammadVpnService : VpnService() {
             return
         }
 
-        val profile = Tunnel.selected
+        // A cold process (widget/tile after a reboot) has no in-memory selection; rebuild it from
+        // the saved id before deciding that no profile exists.
+        val profile = Tunnel.selected ?: restoreSelectedProfile()
         if (profile == null) {
             LogStore.add("E", TAG, "no profile selected")
             synchronized(lock) { Tunnel.update(TunnelState.Failed(TunnelError.NoProfileSelected)) }
@@ -227,6 +258,12 @@ class MohammadVpnService : VpnService() {
             stopSelf()
             return
         }
+        Tunnel.selected = profile
+
+        // A new session never inherits the previous session's totals (AC-N10). This runs only after
+        // the stale/connected guards, so a no-op connect cannot zero a live session's counters.
+        Tunnel.resetTraffic()
+        Tunnel.connectTimeline = emptyList()
 
         val mtuResolution = MtuPolicy.resolve(profile.mtu, Tunnel.defaultMtu)
         LogStore.add("I", TAG, MtuPolicy.diagnostic(mtuResolution))
@@ -699,7 +736,19 @@ class MohammadVpnService : VpnService() {
 
     private fun pollStats() {
         if (Tunnel.state.value !is TunnelState.Connected) return
-        val core = xray ?: return
+        val core = xray
+        if (core == null) {
+            // AmneziaWG and the DNS engine expose no byte counters. Their engine being alive is the
+            // only signal available, and it is enough to keep the dead-path policy from firing.
+            if (awg?.isRunning == true || dnsEngine?.process?.isAlive == true) {
+                lastTrafficAt = SystemClock.elapsedRealtime()
+                VpnNotifier.post(
+                    this,
+                    VpnNotifier.build(this, Tunnel.state.value, Tunnel.traffic.value, paused),
+                )
+            }
+            return
+        }
         runCatching { core.queryTraffic() }
             .onSuccess { traffic ->
                 val previous = Tunnel.traffic.value
@@ -728,7 +777,8 @@ class MohammadVpnService : VpnService() {
     private fun checkHealth() {
         if (userStopped) return
         if (Tunnel.state.value !is TunnelState.Connected) return
-        val alive = (xray?.isRunning ?: false) || (awg?.isRunning ?: false)
+        val alive = (xray?.isRunning ?: false) || (awg?.isRunning ?: false) ||
+            (dnsEngine?.process?.isAlive ?: false)
         if (!alive) {
             LogStore.add("E", TAG, "engine stopped unexpectedly (watchdog)")
             synchronized(lock) {
@@ -751,10 +801,20 @@ class MohammadVpnService : VpnService() {
         healthTicks++
         if (healthTicks % PROBE_EVERY_TICKS != 0) return
 
+        // Only Xray exposes a local SOCKS listener to probe. AmneziaWG has no such listener and the
+        // DNS engine speaks its own protocol on 10809, so probing 10808 there would manufacture a
+        // dead path every minute.
+        val port = when {
+            xray != null -> XrayConfig.SOCKS_PORT
+            dnsEngine != null -> DnsConfig.SOCKS_PORT
+            else -> return
+        }
+        if (awg != null) return
+
         // Probe a neutral address, never the server itself: asking the proxy to
         // connect back to its own port is rejected by many providers and produced
         // a false "dead path" every minute.
-        val ok = SocksProbe.probe(XrayConfig.SOCKS_PORT, HEALTH_TARGET, HEALTH_TARGET_PORT)
+        val ok = SocksProbe.probe(port, HEALTH_TARGET, HEALTH_TARGET_PORT)
         if (ok) {
             probeFailures = 0
             return
@@ -817,6 +877,12 @@ class MohammadVpnService : VpnService() {
         // The StateFlow replays its current value on subscribe; ignore it when there
         // is no tunnel to resume.
         if (tun == null && !waitingForNetwork && Tunnel.state.value is TunnelState.Disconnected) return
+        // A connect already in flight owns the tunnel; tearing it down here would kill the attempt
+        // that the restore was supposed to save.
+        when (Tunnel.state.value) {
+            is TunnelState.Connecting, is TunnelState.Disconnecting -> return
+            else -> Unit
+        }
         LogStore.add("I", "NET", "NETWORK_RESTORED")
         waitingForNetwork = false
         retryFuture?.cancel(false)
@@ -853,7 +919,16 @@ class MohammadVpnService : VpnService() {
             }
             HandoverAction.Exhausted -> {
                 reconnecting = false
+                waitingForNetwork = false
                 LogStore.add("W", "NET", "RECONNECT_FAILED (attempt budget exhausted)")
+                // Do not leave an established TUN with no engine behind it: every packet would be
+                // accepted and dropped. Close it and let the user try again.
+                synchronized(lock) {
+                    closeResourcesLocked()
+                    Tunnel.update(TunnelState.Failed(TunnelError.NetworkUnavailable))
+                }
+                stopForegroundCompat()
+                stopSelf()
             }
             else -> Unit
         }
@@ -913,7 +988,6 @@ class MohammadVpnService : VpnService() {
         }
         cancelConnectTimeout()
         cancelHealthCheck()
-        cancelStatsPoll()
         cancelStatsPoll()
         synchronized(lock) {
             closeResourcesLocked()
@@ -996,7 +1070,11 @@ class MohammadVpnService : VpnService() {
 
     override fun onRevoke() {
         LogStore.add("W", TAG, "onRevoke: VPN permission revoked by system")
-        disconnectBlocking("system revoke")
+        // onRevoke runs on the main thread; native teardown belongs on the worker.
+        submit {
+            disconnectBlocking("system revoke")
+            stopSelf()
+        }
         super.onRevoke()
     }
 
@@ -1012,7 +1090,9 @@ class MohammadVpnService : VpnService() {
         scope.cancel()
         synchronized(lock) {
             closeResourcesLocked()
-            if (Tunnel.state.value !is TunnelState.Disconnected) {
+            // Keep a failure visible: onDestroy runs right after fail()/stopSelf and would otherwise
+            // replace the reason with a bare Disconnected.
+            if (Tunnel.state.value !is TunnelState.Failed && Tunnel.state.value !is TunnelState.Disconnected) {
                 Tunnel.update(TunnelState.Disconnected)
             }
         }

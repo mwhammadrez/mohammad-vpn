@@ -69,12 +69,12 @@ object SocksProbe {
                 return null
             }
             when (head[3].toInt() and 0xFF) {
-                0x01 -> readFully(input, ByteArray(4 + 2))
-                0x04 -> readFully(input, ByteArray(16 + 2))
+                0x01 -> if (!readFully(input, ByteArray(4 + 2))) return null
+                0x04 -> if (!readFully(input, ByteArray(16 + 2))) return null
                 0x03 -> {
                     val len = ByteArray(1)
                     if (!readFully(input, len)) return null
-                    readFully(input, ByteArray((len[0].toInt() and 0xFF) + 2))
+                    if (!readFully(input, ByteArray((len[0].toInt() and 0xFF) + 2))) return null
                 }
                 else -> return null
             }
@@ -127,12 +127,12 @@ object SocksProbe {
                     return false
                 }
                 when (head[3].toInt() and 0xFF) {
-                    0x01 -> readFully(input, ByteArray(4 + 2))
-                    0x04 -> readFully(input, ByteArray(16 + 2))
+                    0x01 -> if (!readFully(input, ByteArray(4 + 2))) return false
+                    0x04 -> if (!readFully(input, ByteArray(16 + 2))) return false
                     0x03 -> {
                         val len = ByteArray(1)
                         if (!readFully(input, len)) return false
-                        readFully(input, ByteArray((len[0].toInt() and 0xFF) + 2))
+                        if (!readFully(input, ByteArray((len[0].toInt() and 0xFF) + 2))) return false
                     }
                     else -> return false
                 }

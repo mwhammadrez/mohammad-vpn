@@ -108,7 +108,9 @@ class MainActivity : ComponentActivity() {
         } else {
             LogStore.add("E", "APP", "VPN permission denied")
             Tunnel.setPermissionDenied(true)
-            Tunnel.update(TunnelState.Disconnected)
+            // Not Disconnected: the dial must say why it cannot start, and its tap must lead to
+            // Settings. Android shows the consent dialog at most twice, so retrying is a dead end.
+            Tunnel.update(TunnelState.Failed(TunnelError.VpnPermissionDenied))
         }
     }
 
@@ -137,16 +139,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun loadProfiles() {
-        // Cached profiles first: reading and verifying the stored envelope takes a few milliseconds,
-        // so the list is never empty while the bundle decrypts and the network is contacted.
-        runCatching { RemoteConfig.cached(applicationContext) }.getOrNull()?.let { cached ->
-            if (cached.profiles.isNotEmpty()) {
+        lifecycleScope.launch {
+            // Cached profiles first: reading, Keystore-unwrapping and verifying the stored envelope is
+            // file + crypto work, so it belongs off the main thread. The list is published as soon as
+            // it is ready and replaced when the bundle finishes decrypting.
+            val cached = withContext(Dispatchers.IO) {
+                runCatching { RemoteConfig.cached(applicationContext) }.getOrNull()
+            }
+            if (cached != null && cached.profiles.isNotEmpty()) {
+                val imported = withContext(Dispatchers.IO) { ProfileStore.load(applicationContext) }
                 operatorProfiles = cached.profiles
-                Tunnel.publishProfiles(cached.profiles + ProfileStore.load(applicationContext))
+                Tunnel.publishProfiles(cached.profiles + imported)
                 Tunnel.selected = Tunnel.profiles.firstOrNull()
             }
-        }
-        lifecycleScope.launch {
+
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     withTimeout(5_000) { OperatorBundleLoader.load(applicationContext) }
@@ -164,9 +170,10 @@ class MainActivity : ComponentActivity() {
                     LogStore.add("I", "GEO", "rule sets not cached; will download in background")
                 }
                 // Remote profiles are part of the operator set: adding a server must never need an APK.
-                val remote = RemoteConfig.cached(applicationContext)
+                val remote = withContext(Dispatchers.IO) { RemoteConfig.cached(applicationContext) }
+                val imported = withContext(Dispatchers.IO) { ProfileStore.load(applicationContext) }
                 operatorProfiles = bundle.profiles + (remote?.profiles ?: emptyList())
-                Tunnel.profiles = operatorProfiles + ProfileStore.load(applicationContext)
+                Tunnel.publishProfiles(operatorProfiles + imported)
                 val savedId = prefs().getString(KEY_SELECTED, null)
                 LogStore.add(
                     "I", "APP",
@@ -184,11 +191,12 @@ class MainActivity : ComponentActivity() {
                 LogStore.add("E", "APP", "configuration unavailable: ${e.javaClass.simpleName}: ${e.message}")
                 // The bundle is the floor, but an unreadable bundle must not leave the app with no
                 // profiles at all while a signed remote config is reachable.
-                val remote = RemoteConfig.cached(applicationContext)
+                val remote = withContext(Dispatchers.IO) { RemoteConfig.cached(applicationContext) }
                     ?: withContext(Dispatchers.IO) { RemoteConfig.refresh(applicationContext) }
                 if (remote != null && remote.profiles.isNotEmpty()) {
+                    val imported = withContext(Dispatchers.IO) { ProfileStore.load(applicationContext) }
                     operatorProfiles = remote.profiles
-                    Tunnel.publishProfiles(operatorProfiles + ProfileStore.load(applicationContext))
+                    Tunnel.publishProfiles(operatorProfiles + imported)
                     Tunnel.selected = Tunnel.profiles.firstOrNull()
                     LogStore.add("I", "APP", "bundle unavailable; using ${remote.profiles.size} remote profile(s)")
                 } else {
@@ -274,28 +282,34 @@ class MainActivity : ComponentActivity() {
      *
      * Returns a message for the UI and the number of profiles imported.
      */
-    fun importLinks(text: String): Pair<String, Int> {
+    suspend fun importLinks(text: String): Pair<String, Int> = withContext(Dispatchers.IO) {
         val outcome = ImportBatch.parse(text)
-        outcome.profiles.forEach { profile ->
-            ProfileStore.add(applicationContext, profile)
-            LogStore.add("I", "IMPORT", "imported ${profile.protocol} ${profile.id}")
-        }
         if (outcome.profiles.isNotEmpty()) {
-            Tunnel.profiles = operatorProfiles + ProfileStore.load(applicationContext)
-            outcome.profiles.lastOrNull()?.let { selectProfile(it) }
+            // One read + one write for the whole clipboard, not one per link.
+            val existing = ProfileStore.load(applicationContext)
+                .filterNot { current -> outcome.profiles.any { it.id == current.id } }
+            val merged = existing + outcome.profiles
+            ProfileStore.save(applicationContext, merged)
+            outcome.profiles.forEach { profile ->
+                LogStore.add("I", "IMPORT", "imported ${profile.protocol} ${profile.id}")
+            }
+            // publishProfiles bumps the revision the UI observes; assigning `Tunnel.profiles` directly
+            // left the list showing the old set while the tunnel used the new one.
+            Tunnel.publishProfiles(operatorProfiles + merged)
+            selectProfile(outcome.profiles.last())
         }
         outcome.failures.forEach { LogStore.add("W", "IMPORT", it) }
-        return outcome.message to outcome.profiles.size
+        outcome.message to outcome.profiles.size
     }
 
     /**
      * Imports a share link produced by the panel and dials it through the exact same path a pasted
      * link takes: ProfileStore → Tunnel.selected → TunnelController. No second connect path exists.
      */
-    fun connectProfileFromLink(link: String): Boolean {
+    suspend fun connectProfileFromLink(link: String): Boolean {
         val (_, count) = importLinks(link)
         if (count == 0) return false
-        requestConnect()
+        withContext(Dispatchers.Main) { requestConnect() }
         return true
     }
 
@@ -335,6 +349,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** The consent dialog is exhausted after two denials: only Settings can grant it again. */
+    fun openVpnSettings() {
+        val intent = Intent(android.provider.Settings.ACTION_VPN_SETTINGS)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { startActivity(intent) }
+            .onFailure { LogStore.add("W", "APP", "cannot open VPN settings: ${it.message}") }
+    }
+
     fun requestDisconnect() {
         TunnelController.disconnect(this)
     }
@@ -351,7 +373,7 @@ class MainActivity : ComponentActivity() {
     fun startDns() {
         val profile = dnsProfile()
         if (profile == null) {
-            LogStore.add("E", "APP", "no DNS profile to connect")
+            LogStore.add("E", "DNS", "no DNS profile to connect")
             return
         }
         if (Tunnel.selected?.id != profile.id) selectProfile(profile)
@@ -464,7 +486,7 @@ fun MohammadApp() {
             onOpenUrl = { url ->
                 runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
             },
-            onConnect = { link -> activity.connectProfileFromLink(link) },
+            onConnect = { link -> scope.launch { activity.connectProfileFromLink(link) } },
             topBar = topBar,
         )
         return@MohammadApp
@@ -505,9 +527,11 @@ fun MohammadApp() {
                 if (raw.isNullOrBlank()) {
                     importMessage = "Clipboard is empty"
                 } else {
-                    val (message, count) = activity.importLinks(raw)
-                    importMessage = message
-                    if (count > 0) profiles = Tunnel.profiles
+                    scope.launch {
+                        val (message, count) = activity.importLinks(raw)
+                        importMessage = message
+                        if (count > 0) profiles = Tunnel.profiles
+                    }
                 }
             },
             importMessage = importMessage,
@@ -544,7 +568,10 @@ fun MohammadApp() {
         crashReport = crash,
         onDismissCrash = { crash = null },
         onToggle = {
-            when (state) {
+            val failed = state as? TunnelState.Failed
+            if (failed?.reason == TunnelError.VpnPermissionDenied) {
+                activity.openVpnSettings()
+            } else when (state) {
                 is TunnelState.Connected, is TunnelState.Connecting, is TunnelState.Disconnecting ->
                     activity.requestDisconnect()
                 else -> activity.requestConnect()
@@ -601,16 +628,18 @@ fun MohammadApp() {
             if (raw.isNullOrBlank()) {
                 importMessage = "Clipboard is empty"
             } else {
-                val (message, count) = activity.importLinks(raw)
-                importMessage = message
-                if (count > 0) {
-                    profiles = Tunnel.profiles
-                    selected = Tunnel.selected
-                    pingMs = null
-                    if (Tunnel.selected?.core == "DNS") {
-                        appMode = AppMode.DNS
-                        activity.prefs().edit { putString("app_mode", AppMode.DNS.storageKey) }
-                        LogStore.add("I", "APP", "dns profile imported; switched to Mode 2")
+                scope.launch {
+                    val (message, count) = activity.importLinks(raw)
+                    importMessage = message
+                    if (count > 0) {
+                        profiles = Tunnel.profiles
+                        selected = Tunnel.selected
+                        pingMs = null
+                        if (Tunnel.selected?.core == "DNS") {
+                            appMode = AppMode.DNS
+                            activity.prefs().edit { putString("app_mode", AppMode.DNS.storageKey) }
+                            LogStore.add("I", "APP", "dns profile imported; switched to Mode 2")
+                        }
                     }
                 }
             }

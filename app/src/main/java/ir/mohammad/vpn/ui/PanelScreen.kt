@@ -110,7 +110,7 @@ private enum class Phase { FORM, RUNNING, PANEL }
 @Composable
 fun PanelScreen(
     onOpenUrl: (String) -> Unit,
-    onConnect: (String) -> Boolean,
+    onConnect: (String) -> Unit,
     topBar: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -370,8 +370,8 @@ fun PanelScreen(
                 onConnect = { user ->
                     val acc = account ?: return@PanelDashboard
                     val host = hostOf(acc.nodeUrl ?: acc.baseUrl)
-                    val ok = onConnect(PanelApi.vlessLink(user, host))
-                    toast(if (ok) "Connecting…" else "Could not import the profile")
+                    onConnect(PanelApi.vlessLink(user, host))
+                    toast("Connecting…")
                 },
                 onDeletePanel = { showDelete = true; deleteError = null },
                         error = error,
@@ -655,12 +655,12 @@ private fun SetupForm(
                 onValueChange = onDomain,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Your domain (optional)") },
-                placeholder = { Text("yutei.ir") },
+                placeholder = { Text("your-domain") },
                 singleLine = true,
                 supportingText = {
                     Text(
-                        "A site already on this account. The panel becomes <name>.yutei.ir and the node " +
-                            "<name>-node.yutei.ir. Leave empty for workers.dev — but that address is " +
+                        "A site already on this account. The panel becomes <name>.example.com and the node " +
+                            "<name>-node.example.com. Leave empty for workers.dev — but that address is " +
                             "filtered inside Iran, so configs made from it will not connect there.",
                         fontFamily = Chakra, fontSize = 10.sp, color = Palette.TextMuted, lineHeight = 15.sp,
                     )
@@ -675,7 +675,7 @@ private fun SetupForm(
                 onValueChange = onNodeDomain,
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Node domain (optional)") },
-                placeholder = { Text("mohammad.indevs.in") },
+                placeholder = { Text("node-domain") },
                 singleLine = true,
                 supportingText = {
                     Text(

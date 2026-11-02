@@ -8,6 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertThrows
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.Base64
@@ -308,5 +309,50 @@ class ConfigUriTest {
         assertTrue(ConfigUri.looksLikeConfig("  ss://x"))
         assertTrue(!ConfigUri.looksLikeConfig("hello"))
         assertTrue(!ConfigUri.looksLikeConfig("https://example.com"))
+    }
+
+@Test
+    fun `a non-uuid id is refused at import time`() {
+        assertThrows(ConfigUri.InvalidConfig::class.java) {
+            ConfigUri.parse("vless://not-a-uuid@edge.example.com:443?security=none&type=ws")
+        }
+    }
+
+    @Test
+    fun `reality fields the core would reject are refused at import time`() {
+        assertThrows(ConfigUri.InvalidConfig::class.java) {
+            ConfigUri.parse(
+                "vless://11111111-2222-3333-4444-555555555555@edge.example.com:443" +
+                    "?security=reality&pbk=short&sid=ab&sni=edge.example.com",
+            )
+        }
+        assertThrows(ConfigUri.InvalidConfig::class.java) {
+            ConfigUri.parse(
+                "vless://11111111-2222-3333-4444-555555555555@edge.example.com:443" +
+                    "?security=reality&pbk=" + "A".repeat(43) + "&sid=abc&sni=edge.example.com",
+            )
+        }
+    }
+
+    @Test
+    fun `an ss link with a plugin is refused instead of silently degraded`() {
+        assertThrows(ConfigUri.InvalidConfig::class.java) {
+            ConfigUri.parse("ss://" + b64("aes-256-gcm:pass") + "@edge.example.com:8388?plugin=obfs-local")
+        }
+    }
+
+    @Test
+    fun `vmess tcp header obfuscation is carried into stream settings`() {
+        val body = JSONObject()
+            .put("add", "edge.example.com")
+            .put("port", "8080")
+            .put("id", "11111111-2222-3333-4444-555555555555")
+            .put("net", "tcp")
+            .put("type", "http")
+            .put("host", "cdn.example.com")
+            .toString()
+        val parsed = ConfigUri.parse("vmess://" + b64(body)).profile
+        val tcp = parsed.xray!!.getJSONObject("streamSettings").getJSONObject("tcpSettings")
+        assertEquals("http", tcp.optJSONObject("header")?.optString("type"))
     }
 }

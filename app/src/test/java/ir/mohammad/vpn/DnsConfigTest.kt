@@ -6,6 +6,7 @@ import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNotNull
 import org.junit.Test
 
 /**
@@ -80,5 +81,20 @@ class DnsConfigTest {
         val text = DnsConfig.diagnostic(settings())
         assertTrue(text.contains("aes-128-gcm"))
         assertTrue(!text.contains("0011223344556677"))
+    }
+
+@Test
+    fun `a control character in the domain is refused`() {
+        assertNotNull(
+            DnsConfig.validate(settings(domain = "v.example.com\nLISTEN_IP = \"0.0.0.0\"")),
+        )
+    }
+
+    @Test
+    fun `a bare ipv6 resolver keeps its address and the default port`() {
+        assertEquals("2001:4860:4860::8888" to 53, DnsConfig.splitResolver("2001:4860:4860::8888"))
+        assertEquals("1.1.1.1" to 53, DnsConfig.splitResolver("1.1.1.1"))
+        assertEquals("1.1.1.1" to 5353, DnsConfig.splitResolver("1.1.1.1:5353"))
+        assertEquals("2001:4860:4860::8888" to 5353, DnsConfig.splitResolver("[2001:4860:4860::8888]:5353"))
     }
 }

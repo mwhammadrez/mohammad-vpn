@@ -25,7 +25,14 @@ object ProfileStore {
     fun load(context: Context): List<Profile> {
         val f = file(context)
         if (!f.isFile) return emptyList()
-        val root = runCatching { JSONObject(f.readText()) }.getOrNull() ?: return emptyList()
+        val text = runCatching { f.readText() }.getOrNull() ?: return emptyList()
+        val root = runCatching { JSONObject(text) }.getOrNull()
+        if (root == null || !root.has("profiles")) {
+            // Treat an unreadable file as damaged, not as "the user has no profiles": the next save
+            // would otherwise overwrite whatever survived. Keep a copy for support, then start clean.
+            quarantine(f, "unreadable JSON")
+            return emptyList()
+        }
         val array = root.optJSONArray("profiles") ?: return emptyList()
         val out = mutableListOf<Profile>()
         for (i in 0 until array.length()) {
@@ -36,16 +43,30 @@ object ProfileStore {
         return out
     }
 
+    private fun quarantine(f: File, reason: String) {
+        val target = File(f.parentFile, "$FILE_NAME.corrupt")
+        val kept = runCatching { f.renameTo(target) }.getOrDefault(false)
+        android.util.Log.w("ProfileStore", "$reason; kept=$kept at ${target.name}")
+    }
+
     fun save(context: Context, profiles: List<Profile>) {
         val root = JSONObject().put("schema", SCHEMA).put(
             "profiles",
             JSONArray().apply { profiles.forEach { put(toJson(it)) } },
         )
         val target = file(context)
-        val temp = File(target.parentFile, "$FILE_NAME.tmp")
-        temp.writeText(root.toString())
-        if (!temp.renameTo(target)) {
-            target.writeText(root.toString())
+        // A unique temp name means two writers (import + panel) cannot truncate each other's file.
+        val temp = File(target.parentFile, "$FILE_NAME.${System.nanoTime()}.tmp")
+        try {
+            java.io.FileOutputStream(temp).use { out ->
+                out.write(root.toString().toByteArray(Charsets.UTF_8))
+                out.flush()
+                out.fd.sync()
+            }
+            if (!temp.renameTo(target)) {
+                target.writeText(root.toString())
+            }
+        } finally {
             temp.delete()
         }
     }
