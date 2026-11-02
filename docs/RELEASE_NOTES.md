@@ -5,6 +5,42 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.15.5 — a panel that works for someone else
+
+The panel is meant to be published, so a panel created by a stranger with their own Cloudflare token
+has to carry traffic without a manual setup step.
+
+### Fixed
+- **No client could carry a single VLESS connection.** The node never sent the two-byte VLESS response
+  header, so Xray aborted with `unexpected response version`. Trojan parsed the request in VLESS field
+  order and forwarded the trailing CRLF as payload; both are fixed and covered by a proxy test that
+  runs against a real TCP server.
+- **Quotas could overshoot by 5 MB.** After flushing traffic to D1 the in-memory row was left stale, so
+  the data-path check forgot everything already written. An 8 MB allowance carried about 13 MB; it now
+  cuts at 8,355,840 bytes.
+- **A new panel handed out `workers.dev`-only links.** Provisioning now seeds a clean-IP pool from
+  `assets/panel/clean_ips.txt`.
+- **Accounts without a `workers.dev` subdomain could not provision at all.** The app registers one
+  automatically.
+- **The first request after provisioning could land on 404.** The wait after creation is now 30 s.
+- Panel passwords must be at least 8 characters, matching what `/api/setup` already enforced.
+
+### Added
+- `GET /xray/<token>` returns a full, ready-to-import Xray config (VLESS/Trojan outbounds, SOCKS and
+  HTTP inbounds, private ranges direct). `address` is the clean edge IP while `serverName` and the
+  WebSocket `Host` stay the node domain.
+- A per-user button in the panel copies the `/xray` link.
+
+### Changed
+- Node traffic is flushed every 5 MB instead of 64 KB. D1 allows roughly 100k row writes a day on the
+  free plan, and the old threshold spent that after about 6 GB of traffic.
+
+### Verified
+- 368 Android unit tests, 35 panel tests, lint clean.
+- Fresh provisioning end to end (database → schema → password → pool → node → panel → login → user →
+  subscription → 10 MB transfer), and an 8 MB quota cutting a 20 MB download at 8.36 MB.
+- Real network connectivity from an Iranian ISP is **NOT VERIFIED** in this workspace.
+
 ## 0.15.4 — real DNS profiles import, and a key rule that was wrong
 
 ### Fixed
