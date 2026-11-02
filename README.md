@@ -11,6 +11,39 @@ and **AmneziaWG** (WireGuard + obfuscation).
 
 > **New here? Read `docs/HANDBOOK.txt` first — it explains the whole project end to end.**
 
+
+## Modes
+
+| Mode | What it is |
+|---|---|
+| **1 · Xray** | VLESS/VMess/Trojan/SS through Xray-core (REALITY, TLS, WebSocket, uTLS) |
+| **2 · Meli** | DNS tunnel: slow, but survives networks where only DNS gets through |
+| **3 · Panel** | Builds a VLESS/Trojan panel in your own Cloudflare account, from the phone |
+
+### Mode 3 — the panel
+
+Mode 3 asks for a Cloudflare API token (the link on the card pre-selects Workers Scripts: Edit,
+D1: Edit and Account Settings: Read), then creates two Workers and a D1 database in that account:
+a panel with users, subscription links and app configs, and a proxy node. The token is used for one
+request and never stored.
+
+The panel also serves a **signed remote config** (`/rc`): every config the operator adds appears in
+the profile list of every installed app, without an APK release. The payload is signed with Ed25519;
+the public key is compiled into the app (`mohammad.remoteConfigKey`), so a compromised host cannot
+inject servers. The app keeps the last verified list encrypted with an Android Keystore key.
+
+```
+GET https://panel.example.com/rc
+{ "schemaVersion": 1, "configVersion": 1793610222331,
+  "payload": "{\"profiles\":[...]}", "signature": "base64url" }
+```
+
+Build the Workers from source with `node panel/build.mjs` (they land in
+`app/src/main/assets/panel/`), or deploy them by hand — see below.
+
+📖 **Full guide (Persian): [`docs/PANEL-FA.md`](docs/PANEL-FA.md)** — Cloudflare setup, custom
+domains, the WebSocket block that some zones carry, and troubleshooting.
+
 ## Build
 
 Prerequisites (versions actually used and verified):
@@ -30,7 +63,7 @@ export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 export ANDROID_HOME=$HOME/android-sdk
 
 ./gradlew assembleDebug        # → app/build/outputs/apk/debug/app-debug.apk
-./gradlew testDebugUnitTest    # 16 unit tests
+./gradlew testDebugUnitTest    # 355 unit tests
 ./gradlew lintDebug
 ```
 
