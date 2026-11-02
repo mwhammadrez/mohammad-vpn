@@ -5,6 +5,22 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.16.1 — DNS that ordinary clients can use
+
+### Fixed
+- **A UDP DNS association now works.** Workers cannot send UDP, so a VLESS `cmd=2` request on port
+  53 is bridged to TCP DNS at 8.8.8.8:53. Both directions use the same two-byte length framing, so
+  the client sees normal DNS and the node stays within TCP. Cloudflare's own resolvers (1.1.1.1,
+  1.0.0.1) are mapped to 8.8.8.8 because `connect()` to Cloudflare is refused.
+- **`/xray` uses UDP DNS again** (`1.1.1.1`, `8.8.8.8`) instead of the TCP-only workaround. The
+  app's default resolver list is UDP, so this is the path its configs actually exercise.
+
+Other UDP (QUIC and friends) is still closed on purpose: the platform has no UDP socket.
+
+### Verified
+- Live edge with UDP DNS: httpbin 0.87 s, wikipedia 0.61 s, google 0.79 s; `/xray` 0.77–1.35 s.
+- 46 panel tests, 368 Android tests.
+
 ## 0.16.0 — anti-DPI presets, several edge addresses, and a status page
 
 ### Added

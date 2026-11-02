@@ -190,9 +190,13 @@ export default {
       flush();
     };
 
-    const dial = async (host, port, first, isVless) => {
+    const dial = async (host, port, first, isVless, dns = false) => {
       try {
-        remote = connect({ hostname: host, port });
+        // VLESS can carry UDP. Workers cannot send UDP, but DNS over TCP uses the same 2-byte
+        // length framing, so a DNS association is bridged to 8.8.8.8:53 instead of being dropped.
+        // Cloudflare's own resolvers are mapped away because connect() to Cloudflare is refused.
+        const target = dns && (host === '1.1.1.1' || host === '1.0.0.1') ? '8.8.8.8' : host;
+        remote = connect({ hostname: target, port: dns ? 53 : port });
         // Take the writer only after the socket is open. Locking the writable stream first makes
         // workerd (and therefore production) wait for a writer that the connection is waiting on.
         await remote.opened;
@@ -238,7 +242,8 @@ export default {
         if (!user) return closeAll();
 
         let p = 18 + body[17];
-        if (body[p] !== 1) return closeAll(); // only CONNECT; UDP is not proxied
+        const cmd = body[p];
+        if (cmd !== 1 && cmd !== 2) return closeAll(); // CONNECT or UDP (DNS only)
         p += 1;
         const port = (body[p] << 8) | body[p + 1];
         p += 2;
@@ -258,6 +263,11 @@ export default {
           p += 16;
         }
         if (!host || !port) return closeAll();
+        if (cmd === 2) {
+          // Full UDP is impossible on Workers; DNS is the one association that matters in practice.
+          if (port !== 53) return closeAll();
+          return dial(host, port, buf.slice(need), true, true);
+        }
         return dial(host, port, buf.slice(need), true);
       }
 

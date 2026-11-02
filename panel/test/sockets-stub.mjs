@@ -6,7 +6,9 @@
 import net from 'node:net';
 
 export function connect({ hostname, port }) {
-  const socket = net.connect({ host: hostname, port });
+  // The DNS bridge test redirects the fixed 8.8.8.8:53 target to a local framed server.
+  const target = globalThis.__SOCKET_TARGET__ || { host: hostname, port };
+  const socket = net.connect(target);
   const opened = new Promise((resolve, reject) => {
     socket.once('connect', resolve);
     socket.once('error', reject);

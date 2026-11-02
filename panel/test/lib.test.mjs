@@ -147,7 +147,7 @@ test('xray config keeps the clean IP and the domain for TLS', () => {
   assert.equal(vless.streamSettings.tlsSettings.serverName, host);
   assert.equal(vless.streamSettings.wsSettings.headers.Host, host);
   assert.equal(vless.streamSettings.wsSettings.path, '/ws?ed=2048');
-  assert.deepEqual(cfg.dns.servers, ['tcp://8.8.8.8', 'tcp://9.9.9.9']);
+  assert.deepEqual(cfg.dns.servers, ['1.1.1.1', '8.8.8.8']);
 
   const trojan = cfg.outbounds.find((o) => o.protocol === 'trojan');
   assert.equal(trojan.settings.servers[0].address, ip);

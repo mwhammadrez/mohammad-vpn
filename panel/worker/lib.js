@@ -416,9 +416,9 @@ export function xrayConfig(user, host, ip) {
 
   return {
     log: { loglevel: 'warning' },
-    // TCP DNS on purpose: the node proxies TCP CONNECT only, so a UDP resolver makes every
-    // lookup wait for a timeout (measured 8-10 s per request before this).
-    dns: { servers: ['tcp://8.8.8.8', 'tcp://9.9.9.9'] },
+    // UDP DNS, like the commercial panels: the node bridges a port-53 association to TCP DNS, so
+    // the client gets the normal resolver path instead of a TCP-only workaround.
+    dns: { servers: ['1.1.1.1', '8.8.8.8'] },
     inbounds: [
       {
         tag: 'socks-in', listen: '127.0.0.1', port: 10808, protocol: 'socks',

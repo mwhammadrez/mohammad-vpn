@@ -132,6 +132,18 @@ function vlessHeader(port, ip = [127, 0, 0, 1]) {
   ]);
 }
 
+function vlessUdpHeader(port, ip = [127, 0, 0, 1]) {
+  return new Uint8Array([0, ...uuidBytes, 0, 2, (port >> 8) & 255, port & 255, 1, ...ip]);
+}
+
+function udpFrame(bytes) {
+  const out = new Uint8Array(2 + bytes.length);
+  out[0] = (bytes.length >> 8) & 255;
+  out[1] = bytes.length & 255;
+  out.set(bytes, 2);
+  return out;
+}
+
 function trojanHeader(port, ip = [127, 0, 0, 1]) {
   // Trojan request: hash CRLF CMD ATYP ADDR PORT CRLF
   return new Uint8Array([
@@ -297,4 +309,48 @@ test.after(() => {
   try {
     fs.unlinkSync(modulePath);
   } catch {}
+});
+
+test('VLESS UDP DNS is bridged to TCP DNS with the same framing', async () => {
+  const queries = [];
+  const target = net.createServer((socket) => {
+    let buffer = Buffer.alloc(0);
+    socket.on('data', (chunk) => {
+      buffer = Buffer.concat([buffer, chunk]);
+      while (buffer.length >= 2) {
+        const length = buffer.readUInt16BE(0);
+        if (buffer.length < 2 + length) break;
+        const query = Buffer.from(buffer.subarray(2, 2 + length));
+        queries.push(query);
+        const reply = Buffer.alloc(2 + length);
+        reply.writeUInt16BE(length, 0);
+        query.copy(reply, 2);
+        socket.write(reply);
+        buffer = buffer.subarray(2 + length);
+      }
+    });
+  });
+  await new Promise((resolve) => target.listen(0, '127.0.0.1', resolve));
+
+  const previous = globalThis.__SOCKET_TARGET__;
+  globalThis.__SOCKET_TARGET__ = { host: '127.0.0.1', port: target.address().port };
+  try {
+    const res = await worker.fetch(request(), makeEnv(), { waitUntil() {} });
+    assert.equal(res.upgradeStatus, 101);
+    const ws = lastServer;
+
+    const query = Buffer.from('001000010000000000000000', 'hex');
+    ws.emit('message', { data: new Uint8Array([...vlessUdpHeader(53), ...udpFrame(query)]) });
+    await waitFor(() => joinSent(ws).length >= 4 + query.length);
+
+    const bytes = joinSent(ws);
+    assert.deepEqual([bytes[0], bytes[1]], [0, 0]);
+    const length = bytes.readUInt16BE(2);
+    assert.equal(length, query.length);
+    assert.deepEqual(bytes.subarray(4, 4 + length), query);
+    assert.equal(queries.length, 1);
+  } finally {
+    target.close();
+    globalThis.__SOCKET_TARGET__ = previous;
+  }
 });
