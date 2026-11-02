@@ -182,8 +182,10 @@ export default {
     const dial = async (host, port, first, isVless) => {
       try {
         remote = connect({ hostname: host, port });
-        writer = remote.writable.getWriter();
+        // Take the writer only after the socket is open. Locking the writable stream first makes
+        // workerd (and therefore production) wait for a writer that the connection is waiting on.
         await remote.opened;
+        writer = remote.writable.getWriter();
         // The client's VLESS decoder reads this before any payload. Trojan has no response header.
         if (isVless) server.send(VLESS_RESPONSE_HEADER);
         remote.readable.pipeTo(new WritableStream({
@@ -320,7 +322,15 @@ export default {
     server.addEventListener('message', async (event) => {
       try {
         const data = event.data;
-        const bytes = typeof data === 'string' ? enc.encode(data) : new Uint8Array(data);
+        // Production delivers an ArrayBuffer; wrangler's local bridge can deliver a Blob, and
+        // `new Uint8Array(blob)` is silently empty. Accept every shape a runtime may hand over.
+        const bytes = typeof data === 'string'
+          ? enc.encode(data)
+          : data instanceof ArrayBuffer
+            ? new Uint8Array(data)
+            : ArrayBuffer.isView(data)
+              ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+              : new Uint8Array(await data.arrayBuffer());
         if (!ready) return feedSerial(bytes);
         up += bytes.byteLength;
         await writer.write(bytes);

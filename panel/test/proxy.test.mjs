@@ -239,6 +239,24 @@ test('Trojan has no response header: the first bytes are the target data', async
   }
 });
 
+test('a Blob frame is decoded (wrangler local delivers Blobs)', async () => {
+  const { server: target, port } = await startTarget();
+  try {
+    const res = await worker.fetch(request(), makeEnv(), { waitUntil() {} });
+    assert.equal(res.upgradeStatus, 101);
+    const ws = lastServer;
+
+    ws.emit('message', { data: new Blob([vlessHeader(port)]) });
+    await waitFor(() => joinSent(ws).length >= 7);
+
+    const bytes = joinSent(ws);
+    assert.deepEqual([bytes[0], bytes[1]], [0, 0]);
+    assert.equal(bytes.slice(2, 7).toString(), 'HELLO');
+  } finally {
+    target.close();
+  }
+});
+
 test('an unknown uuid closes the socket without connecting', async () => {
   const { server: target, port } = await startTarget();
   try {
