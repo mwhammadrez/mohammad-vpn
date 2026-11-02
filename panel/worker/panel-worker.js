@@ -60,7 +60,7 @@ const K224 = [
 function sha224hex(str) {
   const msg = enc.encode(String(str));
   const bitLen = msg.length * 8;
-  const withPad = new Uint8Array((((msg.length + 9) >> 6) + 1) << 6);
+  const withPad = new Uint8Array(Math.ceil((msg.length + 9) / 64) * 64);
   withPad.set(msg);
   withPad[msg.length] = 0x80;
   new DataView(withPad.buffer).setUint32(withPad.length - 4, bitLen >>> 0);
@@ -162,6 +162,10 @@ const COOKIE = 'zp_session';
 const SESSION_TTL = 7 * 86400000;
 
 async function secret(env) {
+  // Keyed on the password hash so changing the password invalidates every open session; before a
+  // password exists there is nothing to bind to, so the random secret keeps the placeholder opaque.
+  const hash = await DB.setting(env, 'password_hash');
+  if (hash) return hash;
   let s = await DB.setting(env, 'session_secret');
   if (!s) {
     s = randHex(32);
@@ -240,7 +244,7 @@ function b64(str) {
 
 async function handleSub(request, env, token) {
   const user = await DB.bySubToken(env, token);
-  if (!user || !user.enabled) return new Response('not found', { status: 404 });
+  if (!user || !user.enabled || blocked(user)) return new Response('not found', { status: 404 });
   const host = (await DB.setting(env, 'node_host')) || env.PROXY_HOST || hostOf(request, env);
   const links = [vlessLink(user, host), trojanLink(user, host)].join('\n');
   const body = b64(links);
@@ -285,8 +289,12 @@ async function rcKeys(env) {
     const pair = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
     const privateJwk = JSON.stringify(await crypto.subtle.exportKey('jwk', pair.privateKey));
     const publicJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
-    await env.DB.prepare("INSERT INTO settings (key,value) VALUES ('rc_priv',?) ON CONFLICT(key) DO NOTHING").bind(privateJwk).run();
-    await env.DB.prepare("INSERT INTO settings (key,value) VALUES ('rc_pub',?) ON CONFLICT(key) DO NOTHING").bind(publicJwk.x).run();
+    // One batch = one transaction: two isolates racing on a fresh database must not end up with
+    // the private half of one pair and the public half of another, which no client could verify.
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO settings (key,value) VALUES ('rc_priv',?) ON CONFLICT(key) DO NOTHING").bind(privateJwk),
+      env.DB.prepare("INSERT INTO settings (key,value) VALUES ('rc_pub',?) ON CONFLICT(key) DO NOTHING").bind(publicJwk.x),
+    ]);
     priv = await DB.setting(env, 'rc_priv');
   }
   return { priv: JSON.parse(priv), pub: await DB.setting(env, 'rc_pub') };
@@ -457,6 +465,7 @@ async function handleApi(request, env, url) {
       if (b.uri !== undefined && !/^(vless|vmess|trojan|ss|hysteria2?|tuic|wireguard):\/\//i.test(String(b.uri))) {
         return json({ error: 'bad_uri' }, 400);
       }
+      if (b.uri !== undefined && String(b.uri).length > 4000) return json({ error: 'uri_too_long' }, 400);
       const row = await env.DB.prepare('SELECT * FROM configs WHERE id = ?').bind(id).first();
       if (!row) return json({ error: 'not_found' }, 404);
       await env.DB.prepare('UPDATE configs SET name = ?, uri = ?, enabled = ?, sort = ? WHERE id = ?')
@@ -496,7 +505,7 @@ async function handleApi(request, env, url) {
     const allowed = new Set(['node_host']);
     if (!allowed.has(String(b.key))) return json({ error: 'forbidden_key' }, 400);
     const value = String(b.value || '').trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
-    if (value && !/^[a-z0-9.-]+(:\d+)?$/i.test(value)) return json({ error: 'bad_host' }, 400);
+    if (value && !/^[a-z0-9.-]+$/i.test(value)) return json({ error: 'bad_host' }, 400);
     await DB.setSetting(env, String(b.key), value);
     return json({ ok: true, value });
   }
@@ -515,7 +524,8 @@ export default {
     try {
       return await handleRequest(request, env, ctx);
     } catch (err) {
-      return json({ error: String((err && err.stack) || err).slice(0, 800) }, 500);
+      console.error(err);
+      return json({ error: 'internal' }, 500);
     }
   },
 };

@@ -1,203 +1,423 @@
 <!doctype html>
-<html lang="fa" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#080b10">
 <title>پنل مدیریت</title>
 <style>
-:root{--bg:#0b0f14;--card:#131a23;--inner:#0e141b;--line:#22303f;--txt:#e6edf3;--dim:#8b98a5;
---acc:#3b82f6;--ok:#22c55e;--bad:#ef4444;--warn:#f59e0b;--mint:#34f5c5}
+:root{
+  --bg:#080b10;--bg2:#0b1017;--panel:#0f151d;--panel2:#121a24;--inner:#0b1119;
+  --line:rgba(255,255,255,.07);--line2:rgba(255,255,255,.13);
+  --txt:#e8eef6;--dim:#93a4b8;--dim2:#64748b;
+  --acc:#34f5c5;--acc2:#14b8a6;--blue:#5aa9ff;
+  --ok:#34d399;--bad:#f87171;--warn:#fbbf24;
+  --r:14px;--rs:10px;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.65 Tahoma,system-ui,sans-serif}
-.wrap{max-width:1040px;margin:0 auto;padding:20px 16px 60px}
-.top{display:flex;align-items:center;gap:12px;margin-bottom:18px}
-.brand{font-weight:700;font-size:17px;letter-spacing:.3px}
-.top .sp{flex:1}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin-bottom:14px}
-h2{font-size:14px;margin:0 0 12px;font-weight:600;color:var(--txt)}
-input,select,textarea,button{font:inherit;border-radius:10px;border:1px solid var(--line);background:var(--inner);color:var(--txt);padding:9px 12px}
-input:focus,textarea:focus{outline:none;border-color:var(--acc)}
-textarea{width:100%;min-height:96px;resize:vertical;direction:ltr;text-align:left;font-family:monospace;font-size:12px}
-button{background:var(--acc);border-color:var(--acc);cursor:pointer;font-weight:600;white-space:nowrap}
-button:active{transform:translateY(1px)}
-button.ghost{background:transparent;color:var(--txt)}
-button.bad{background:var(--bad);border-color:var(--bad)}
-button.ok{background:var(--ok);border-color:var(--ok);color:#04170a}
-button.sm{padding:5px 9px;font-size:12px;border-radius:8px}
-select.sm{padding:5px 8px;font-size:12px}
-table{width:100%;border-collapse:collapse}
-th,td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:right;font-size:13px;vertical-align:middle}
-th{color:var(--dim);font-weight:500;font-size:12px}
-tr:last-child td{border-bottom:none}
-.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
-.pill{padding:2px 9px;border-radius:999px;font-size:11.5px;border:1px solid var(--line);white-space:nowrap}
-.on{color:var(--ok);border-color:#1d4d2b;background:#0c1f13}
-.off{color:var(--bad);border-color:#4d1d1d;background:#1f0c0c}
-.muted{color:var(--dim);font-size:12px}
-.err{color:var(--bad);font-size:12.5px;min-height:18px;margin:6px 0 0}
-.okmsg{color:var(--ok);font-size:12.5px}
-code,pre{background:var(--inner);border-radius:8px;font-family:monospace;font-size:12px}
-code{padding:2px 6px}
-pre{margin:0;padding:12px;overflow:auto;direction:ltr;text-align:left;border:1px solid var(--line)}
-.tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
-.tab{background:transparent;border:1px solid var(--line);color:var(--dim);padding:8px 14px;border-radius:10px;font-weight:500}
-.tab.active{background:var(--inner);color:var(--mint);border-color:#1f6f5c}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--txt);
+  font:14px/1.7 "Vazirmatn","Segoe UI",Tahoma,system-ui,sans-serif;
+  -webkit-tap-highlight-color:transparent;
+  background-image:radial-gradient(900px 480px at 100% -10%,rgba(52,245,197,.07),transparent 60%),
+                   radial-gradient(700px 400px at 0% 110%,rgba(90,169,255,.06),transparent 60%);
+  background-attachment:fixed;
+}
+.ic{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .hidden{display:none!important}
-.stat{background:var(--inner);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
-.stat b{display:block;font-size:18px;margin-top:2px}
-.stat span{color:var(--dim);font-size:11px}
-.bar{height:6px;border-radius:4px;background:#1b2530;overflow:hidden;margin-top:6px;min-width:90px}
-.bar i{display:block;height:100%;background:var(--mint)}
-.list{display:flex;flex-direction:column;gap:8px}
-.item{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--inner)}
-.mono{font-family:monospace;direction:ltr;text-align:left;word-break:break-all;font-size:11.5px;color:var(--dim)}
-dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:var(--txt);padding:18px;max-width:420px;width:92%}
-dialog::backdrop{background:#0009}
-.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#0f2a20;border:1px solid #1f6f5c;
-color:#d7ffee;padding:10px 16px;border-radius:10px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
-.toast.show{opacity:1}
-@media(max-width:640px){.hide-sm{display:none}}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;direction:ltr;text-align:left;word-break:break-all;font-size:11.5px;color:var(--dim)}
+.muted{color:var(--dim);font-size:12.5px}
+.err{color:var(--bad);font-size:12.5px;min-height:20px;margin:8px 0 0}
+
+/* ── inputs ── */
+label.fld{display:block;font-size:11.5px;color:var(--dim);margin-bottom:5px}
+input,select,textarea,button{font:inherit;color:inherit}
+input,select,textarea{
+  width:100%;padding:10px 12px;border-radius:var(--rs);
+  border:1px solid var(--line2);background:var(--inner);
+  transition:border-color .15s,box-shadow .15s;
+}
+input::placeholder,textarea::placeholder{color:var(--dim2)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px rgba(52,245,197,.10)}
+textarea{min-height:92px;resize:vertical;direction:ltr;text-align:left;font-family:ui-monospace,monospace;font-size:12.5px}
+
+button{
+  display:inline-flex;align-items:center;gap:7px;justify-content:center;
+  padding:10px 16px;border-radius:var(--rs);border:1px solid transparent;
+  background:var(--acc);color:#04231c;font-weight:700;cursor:pointer;
+  transition:filter .15s,background .15s,border-color .15s,opacity .15s;white-space:nowrap;
+}
+button:hover{filter:brightness(1.06)}
+button:active{transform:translateY(1px)}
+button:disabled{opacity:.55;cursor:not-allowed;transform:none}
+button.ghost{background:transparent;border-color:var(--line2);color:var(--txt);font-weight:600}
+button.ghost:hover{background:rgba(255,255,255,.04);border-color:var(--line2);filter:none}
+button.danger{background:transparent;border-color:rgba(248,113,113,.35);color:var(--bad);font-weight:600}
+button.danger:hover{background:rgba(248,113,113,.08);filter:none}
+button.sm{padding:6px 11px;font-size:12px;border-radius:9px}
+button.icon{padding:7px;border-radius:9px;background:transparent;border-color:var(--line);color:var(--dim)}
+button.icon:hover{color:var(--txt);background:rgba(255,255,255,.05);filter:none}
+button.icon .ic{width:15px;height:15px}
+
+/* ── auth ── */
+.auth{min-height:100vh;display:grid;place-items:center;padding:24px}
+.auth-card{
+  width:100%;max-width:390px;background:linear-gradient(180deg,rgba(255,255,255,.035),transparent),var(--panel);
+  border:1px solid var(--line);border-radius:20px;padding:28px 24px;
+  box-shadow:0 30px 80px -30px #000;
+}
+.logo{display:flex;align-items:center;gap:11px;margin-bottom:22px}
+.logo .mark{
+  width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none;
+  background:linear-gradient(140deg,var(--acc),var(--acc2));color:#04231c;font-weight:900;font-size:17px;
+  box-shadow:0 8px 22px -8px rgba(52,245,197,.65);
+}
+.logo b{font-size:15px;display:block;line-height:1.3}
+.logo span{font-size:11.5px;color:var(--dim2)}
+.field{position:relative;margin-bottom:12px}
+.field input{padding-left:44px}
+.field .eye{
+  position:absolute;left:6px;top:50%;transform:translateY(-50%);
+  background:none;border:0;padding:7px;color:var(--dim2);cursor:pointer;border-radius:8px;
+}
+.field .eye:hover{color:var(--txt);background:none;filter:none}
+.auth .hint{font-size:11.5px;color:var(--dim2);margin-top:16px;line-height:1.8}
+
+/* ── shell ── */
+.shell{display:grid;grid-template-columns:252px 1fr;min-height:100vh}
+.side{
+  position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:4px;
+  padding:22px 14px;border-left:1px solid var(--line);
+  background:linear-gradient(180deg,rgba(255,255,255,.02),transparent 40%),var(--bg2);
+}
+.side .logo{padding:0 8px;margin-bottom:20px}
+.nav{
+  display:flex;align-items:center;gap:11px;width:100%;padding:11px 13px;border-radius:11px;
+  background:transparent;border:1px solid transparent;color:var(--dim);
+  font-weight:600;font-size:13px;cursor:pointer;justify-content:flex-start;
+}
+.nav:hover{background:rgba(255,255,255,.04);color:var(--txt);filter:none}
+.nav.active{background:rgba(52,245,197,.09);border-color:rgba(52,245,197,.25);color:var(--acc)}
+.nav .ic{width:17px;height:17px}
+.side .foot{margin-top:auto;padding:12px 8px 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.side .foot .host{font-size:11px;color:var(--dim2);font-family:ui-monospace,monospace;direction:ltr;text-align:left;word-break:break-all}
+.side .foot button{width:100%}
+
+.main{padding:26px 28px 60px;max-width:1180px;width:100%}
+.head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px;flex-wrap:wrap}
+.head h1{font-size:20px;margin:0;font-weight:800;letter-spacing:-.2px}
+.head p{margin:4px 0 0;font-size:12.5px;color:var(--dim)}
+.head .actions{display:flex;gap:8px}
+
+/* ── cards & stats ── */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px}
+.card>h2{font-size:13.5px;margin:0 0 4px;font-weight:700;display:flex;align-items:center;gap:8px}
+.card>h2+.muted{margin-bottom:14px}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.card-head h2{margin:0}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px}
+.stat{
+  background:linear-gradient(180deg,rgba(255,255,255,.025),transparent),var(--panel);
+  border:1px solid var(--line);border-radius:12px;padding:13px 14px;position:relative;overflow:hidden;
+}
+.stat .lbl{font-size:11px;color:var(--dim2);display:flex;align-items:center;gap:6px}
+.stat .lbl .ic{width:14px;height:14px;opacity:.8}
+.stat b{display:block;font-size:20px;font-weight:800;margin-top:6px;letter-spacing:-.5px}
+.stat.accent b{color:var(--acc)}
+.stat.blue b{color:var(--blue)}
+.stat.bad b{color:var(--bad)}
+
+/* ── table ── */
+.tbl-wrap{overflow-x:auto;margin:0 -4px}
+table{width:100%;border-collapse:separate;border-spacing:0;min-width:640px}
+th{
+  text-align:right;font-size:11px;font-weight:600;color:var(--dim2);
+  padding:0 10px 9px;white-space:nowrap;border-bottom:1px solid var(--line);
+}
+td{padding:11px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:rgba(255,255,255,.022)}
+.who{display:flex;align-items:center;gap:10px;min-width:150px}
+.av{
+  width:32px;height:32px;border-radius:10px;flex:none;display:grid;place-items:center;
+  font-weight:800;font-size:12.5px;background:rgba(90,169,255,.12);color:var(--blue);
+  border:1px solid rgba(90,169,255,.22);text-transform:uppercase;direction:ltr;
+}
+.who .nm{font-weight:700;line-height:1.25}
+.who .sub{font-size:10.5px;color:var(--dim2);font-family:ui-monospace,monospace;direction:ltr;text-align:right}
+.pill{
+  display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
+  font-size:11px;font-weight:600;border:1px solid transparent;white-space:nowrap;
+}
+.pill i{width:6px;height:6px;border-radius:50%;background:currentColor;display:block}
+.pill.on{color:var(--ok);background:rgba(52,211,153,.10);border-color:rgba(52,211,153,.22)}
+.pill.off{color:var(--bad);background:rgba(248,113,113,.10);border-color:rgba(248,113,113,.22)}
+.pill.warn{color:var(--warn);background:rgba(251,191,36,.10);border-color:rgba(251,191,36,.22)}
+.bar{height:5px;border-radius:4px;background:rgba(255,255,255,.07);overflow:hidden;margin-top:6px;width:120px;max-width:100%}
+.bar i{display:block;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--acc2),var(--acc))}
+.bar.warn i{background:linear-gradient(90deg,#f59e0b,var(--warn))}
+.bar.bad i{background:linear-gradient(90deg,#dc2626,var(--bad))}
+.ops{display:flex;gap:4px;justify-content:flex-start}
+
+/* ── configs ── */
+.list{display:flex;flex-direction:column;gap:9px}
+.item{
+  border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--inner);
+  display:flex;flex-direction:column;gap:8px;transition:border-color .15s;
+}
+.item:hover{border-color:var(--line2)}
+.item .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.item .top b{font-size:13px}
+.item .mono{margin:0}
+.empty{
+  text-align:center;padding:34px 16px;color:var(--dim2);font-size:12.5px;
+  border:1px dashed var(--line2);border-radius:12px;
+}
+.empty .ic{width:26px;height:26px;opacity:.5;margin-bottom:8px}
+.empty b{display:block;color:var(--dim);font-size:13px;margin-bottom:3px}
+
+/* ── app tab ── */
+pre{
+  margin:0;padding:14px;overflow:auto;border-radius:11px;border:1px solid var(--line);
+  background:var(--inner);font-family:ui-monospace,monospace;font-size:12px;
+  direction:ltr;text-align:left;line-height:1.8;color:#c9d6e4;
+}
+code{background:rgba(255,255,255,.06);border-radius:6px;padding:1px 6px;font-family:ui-monospace,monospace;font-size:11.5px;direction:ltr;display:inline-block}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:14px}
+.kv .stat b{font-size:14px;font-family:ui-monospace,monospace;direction:ltr;text-align:left;word-break:break-all;font-weight:600}
+
+/* ── dialog / toast ── */
+dialog{
+  border:1px solid var(--line2);border-radius:16px;background:var(--panel);color:var(--txt);
+  padding:0;max-width:440px;width:92%;box-shadow:0 40px 90px -30px #000;
+}
+dialog::backdrop{background:rgba(3,6,10,.72);backdrop-filter:blur(3px)}
+dialog .dlg-head{padding:18px 20px 0;display:flex;align-items:center;justify-content:space-between}
+dialog .dlg-head h2{margin:0;font-size:14.5px}
+dialog .dlg-body{padding:16px 20px 4px;display:flex;flex-direction:column;gap:12px}
+dialog .dlg-foot{padding:12px 20px 18px;display:flex;gap:8px;justify-content:flex-start}
+.toast{
+  position:fixed;bottom:22px;left:50%;transform:translate(-50%,14px);
+  background:#0d2019;border:1px solid rgba(52,245,197,.28);color:#d6fff2;
+  padding:11px 18px;border-radius:11px;font-size:13px;font-weight:600;
+  opacity:0;pointer-events:none;transition:opacity .22s,transform .22s;z-index:40;box-shadow:0 18px 40px -18px #000;
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.err{border-color:rgba(248,113,113,.35);background:#221013;color:#ffd9d9}
+.search{position:relative;min-width:200px;flex:1;max-width:280px}
+.search input{padding-right:38px}
+.search .ic{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--dim2);width:15px;height:15px;pointer-events:none}
+
+@media (max-width:920px){
+  .shell{grid-template-columns:1fr}
+  .side{position:sticky;top:0;z-index:20;height:auto;flex-direction:row;align-items:center;gap:6px;
+    padding:10px 12px;border-left:0;border-bottom:1px solid var(--line);overflow-x:auto;background:rgba(11,16,23,.95);backdrop-filter:blur(10px)}
+  .side .logo{margin:0;padding:0;flex:none}
+  .side .logo span{display:none}
+  .side .logo .mark{width:32px;height:32px;border-radius:9px}
+  .nav{width:auto;padding:8px 11px;font-size:12px}
+  .nav span{display:none}
+  .side .foot{margin:0 0 0 auto;border:0;padding:0;flex-direction:row;align-items:center}
+  .side .foot .host{display:none}
+  .side .foot button{width:auto;padding:7px 11px}
+  .main{padding:18px 14px 48px}
+  .head h1{font-size:17px}
+  th,td{padding:9px 8px}
+}
 </style>
+</head>
+<body>
 
-<div class="wrap">
-  <div class="top">
-    <div class="brand">پنل مدیریت</div>
-    <div class="sp"></div>
-    <span class="muted" id="host"></span>
-    <button class="ghost sm hidden" id="logoutBtn" onclick="logout()">خروج</button>
-  </div>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19c.6-3.2 2.9-5 5.5-5s4.9 1.8 5.5 5"/><path d="M16.2 6.4a3 3 0 0 1 0 6"/><path d="M17.6 19c-.2-1.6-.7-3-1.5-4"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5Z"/><path d="m3 13 9 5 9-5"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10.5 13.5a4 4 0 0 0 5.7 0l2.3-2.3a4 4 0 0 0-5.7-5.7L11.7 6.6"/><path d="M13.5 10.5a4 4 0 0 0-5.7 0l-2.3 2.3a4 4 0 0 0 5.7 5.7l1.1-1.1"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5h6v2M6.5 7l1 13h9l1-13"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L20 8l-4-4L4 16v4Z"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 4v7"/><path d="M7.5 7.5a7 7 0 1 0 9 0"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M14 4h5v16h-5"/><path d="m10 8-4 4 4 4"/><path d="M6 12h9"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m6 14 6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 10 6 6 6-6"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8v8a2 2 0 0 1-1 1.7l-7 4a2 2 0 0 1-2 0l-7-4A2 2 0 0 1 3 16V8a2 2 0 0 1 1-1.7l7-4a2 2 0 0 1 2 0l7 4A2 2 0 0 1 21 8Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></symbol>
+</svg>
 
-  <section id="auth" class="card hidden">
+<!-- ══════════ ورود ══════════ -->
+<section id="auth" class="auth hidden">
+  <div class="auth-card">
+    <div class="logo">
+      <div class="mark">م</div>
+      <div><b>پنل مدیریت</b><span id="authHost">—</span></div>
+    </div>
     <div id="setupBox" class="hidden">
-      <h2>اولین ورود</h2>
-      <p class="muted">یک رمز قوی برای پنل بساز (حداقل ۸ کاراکتر).</p>
-      <div class="row"><input id="spass" type="password" placeholder="رمز جدید" style="flex:1;min-width:180px">
-      <button onclick="setup()">ساخت رمز</button></div>
+      <p class="muted" style="margin:0 0 14px">اولین ورود است. یک رمز قوی برای پنل بساز.</p>
+      <div class="field">
+        <input id="spass" type="password" placeholder="رمز جدید (حداقل ۸ کاراکتر)" autocomplete="new-password">
+      </div>
+      <button style="width:100%" onclick="setup()" id="setupBtn">ساخت رمز</button>
     </div>
     <div id="loginBox" class="hidden">
-      <h2>ورود</h2>
-      <div class="row"><input id="lpass" type="password" placeholder="رمز عبور" style="flex:1;min-width:180px">
-      <button onclick="login()">ورود</button></div>
+      <p class="muted" style="margin:0 0 14px">برای ادامه رمز پنل را وارد کن.</p>
+      <div class="field">
+        <input id="lpass" type="password" placeholder="رمز عبور" autocomplete="current-password">
+        <button class="eye" type="button" onclick="togglePass('lpass',this)" title="نمایش رمز"><svg class="ic"><use href="#i-eye"/></svg></button>
+      </div>
+      <button style="width:100%" onclick="login()" id="loginBtn">ورود</button>
     </div>
     <p class="err" id="authMsg"></p>
-  </section>
+    <p class="hint">این صفحه روی ورکر خودت اجرا می‌شود؛ رمز فقط در دیتابیس D1 همان حساب ذخیره می‌شود.</p>
+  </div>
+</section>
 
-  <nav id="tabs" class="tabs hidden">
-    <button class="tab active" data-tab="users" onclick="tab('users')">کاربران</button>
-    <button class="tab" data-tab="configs" onclick="tab('configs')">کانفیگ‌های اپ</button>
-    <button class="tab" data-tab="app" onclick="tab('app')">اتصال اپ</button>
-    <button class="tab" data-tab="settings" onclick="tab('settings')">تنظیمات</button>
-  </nav>
+<!-- ══════════ پنل ══════════ -->
+<div id="app" class="shell hidden">
+  <aside class="side">
+    <div class="logo">
+      <div class="mark">م</div>
+      <div><b>پنل مدیریت</b><span>VLESS · Trojan</span></div>
+    </div>
+    <button class="nav active" data-tab="users" onclick="tab('users')"><svg class="ic"><use href="#i-users"/></svg><span>کاربران</span></button>
+    <button class="nav" data-tab="configs" onclick="tab('configs')"><svg class="ic"><use href="#i-layers"/></svg><span>کانفیگ‌ها</span></button>
+    <button class="nav" data-tab="app" onclick="tab('app')"><svg class="ic"><use href="#i-link"/></svg><span>اتصال اپ</span></button>
+    <button class="nav" data-tab="settings" onclick="tab('settings')"><svg class="ic"><use href="#i-sliders"/></svg><span>تنظیمات</span></button>
+    <div class="foot">
+      <div class="host" id="host">—</div>
+      <button class="ghost sm" onclick="logout()"><svg class="ic"><use href="#i-logout"/></svg>خروج</button>
+    </div>
+  </aside>
 
-  <main id="main" class="hidden">
-    <!-- ─────────── users ─────────── -->
+  <main class="main">
+    <!-- ───────── کاربران ───────── -->
     <section id="pane-users">
-      <div class="grid" style="margin-bottom:14px">
-        <div class="stat"><span>کاربران</span><b id="s-users">0</b></div>
-        <div class="stat"><span>فعال</span><b id="s-active">0</b></div>
-        <div class="stat"><span>مصرف کل</span><b id="s-used">0</b></div>
-        <div class="stat"><span>آدرس نود</span><b id="s-node" style="font-size:12px;word-break:break-all">—</b></div>
+      <div class="head">
+        <div><h1>کاربران</h1><p>هر کاربر یک UUID و یک لینک ساب مستقل دارد.</p></div>
+        <div class="actions"><button class="ghost sm" onclick="loadUsers(true)" id="refUsers"><svg class="ic"><use href="#i-refresh"/></svg>تازه‌سازی</button></div>
+      </div>
+
+      <div class="stats">
+        <div class="stat accent"><div class="lbl"><svg class="ic"><use href="#i-users"/></svg>کاربران</div><b id="s-users" class="num">۰</b></div>
+        <div class="stat blue"><div class="lbl"><svg class="ic"><use href="#i-power"/></svg>فعال</div><b id="s-active" class="num">۰</b></div>
+        <div class="stat"><div class="lbl"><svg class="ic"><use href="#i-box"/></svg>مصرف کل</div><b id="s-used" class="num">۰</b></div>
+        <div class="stat"><div class="lbl"><svg class="ic"><use href="#i-link"/></svg>آدرس نود</div><b id="s-node" style="font-size:12.5px;word-break:break-all;direction:ltr;text-align:right">—</b></div>
       </div>
 
       <div class="card">
-        <h2>افزودن کاربر</h2>
-        <div class="row">
-          <input id="u-name" placeholder="نام کاربری" style="flex:1;min-width:140px">
-          <input id="u-gb" type="number" placeholder="حجم (GB، ۰ = نامحدود)" style="width:190px">
-          <input id="u-days" type="number" placeholder="روز اعتبار (۰ = بی‌پایان)" style="width:200px">
-          <button onclick="addUser()">افزودن</button>
+        <h2><svg class="ic" style="color:var(--acc)"><use href="#i-plus"/></svg>افزودن کاربر</h2>
+        <div class="muted">حجم و روز را خالی بگذار تا نامحدود باشد.</div>
+        <div style="display:grid;grid-template-columns:1.4fr .8fr .8fr auto;gap:10px;align-items:end" id="addUserRow">
+          <div><label class="fld">نام کاربری</label><input id="u-name" placeholder="ali" autocomplete="off"></div>
+          <div><label class="fld">حجم (GB)</label><input id="u-gb" type="number" min="0" step="0.5" placeholder="۰"></div>
+          <div><label class="fld">اعتبار (روز)</label><input id="u-days" type="number" min="0" step="1" placeholder="۰"></div>
+          <div><button onclick="addUser(this)"><svg class="ic"><use href="#i-plus"/></svg>افزودن</button></div>
         </div>
         <p class="err" id="u-msg"></p>
       </div>
 
       <div class="card">
-        <div class="row" style="justify-content:space-between;margin-bottom:8px">
-          <h2 style="margin:0">کاربران</h2>
-          <button class="ghost sm" onclick="loadUsers()">تازه‌سازی</button>
+        <div class="card-head">
+          <h2>لیست کاربران</h2>
+          <div class="search"><svg class="ic"><use href="#i-search"/></svg><input id="q" placeholder="جست‌وجوی نام…" oninput="onSearch(this.value)"></div>
         </div>
-        <div style="overflow-x:auto">
+        <div class="tbl-wrap">
           <table>
-            <thead><tr>
-              <th>نام</th><th>وضعیت</th><th>مصرف</th><th class="hide-sm">انقضا</th><th>عملیات</th>
-            </tr></thead>
+            <thead><tr><th>کاربر</th><th>وضعیت</th><th>مصرف</th><th>انقضا</th><th style="width:150px">عملیات</th></tr></thead>
             <tbody id="rows"></tbody>
           </table>
         </div>
-        <p class="muted" id="u-empty" style="margin:10px 0 0"></p>
+        <div id="u-empty"></div>
       </div>
     </section>
 
-    <!-- ─────────── configs ─────────── -->
+    <!-- ───────── کانفیگ‌ها ───────── -->
     <section id="pane-configs" class="hidden">
+      <div class="head">
+        <div><h1>کانفیگ‌های اپ</h1><p>هر کانفیگ اینجا، در صفحه‌ی اصلی همه‌ی کاربران اپ ظاهر می‌شود.</p></div>
+        <div class="actions"><button class="ghost sm" onclick="publish(this)"><svg class="ic"><use href="#i-refresh"/></svg>انتشار مجدد</button></div>
+      </div>
+
       <div class="card">
-        <h2>افزودن کانفیگ</h2>
-        <p class="muted" style="margin-top:-6px">هر کانفیگی که اینجا اضافه کنی، در صفحه‌ی اصلی همه‌ی کاربران اپ ظاهر می‌شود.</p>
-        <div class="row">
-          <input id="c-name" placeholder="نام (مثلاً فرانکفورت)" style="flex:0 0 190px">
-          <input id="c-uri" placeholder="vless://… یا trojan://…" style="flex:1;min-width:240px;direction:ltr;text-align:left">
-          <button onclick="addConfig()">افزودن</button>
+        <h2><svg class="ic" style="color:var(--acc)"><use href="#i-plus"/></svg>افزودن کانفیگ</h2>
+        <div style="display:grid;grid-template-columns:200px 1fr auto;gap:10px;align-items:end" id="addCfgRow">
+          <div><label class="fld">نام</label><input id="c-name" placeholder="آلمان - فرانکفورت" autocomplete="off"></div>
+          <div><label class="fld">لینک</label><input id="c-uri" placeholder="vless://…" style="direction:ltr;text-align:left;font-family:ui-monospace,monospace;font-size:12.5px"></div>
+          <div><button onclick="addConfig(this)"><svg class="ic"><use href="#i-plus"/></svg>افزودن</button></div>
         </div>
         <p class="err" id="c-msg"></p>
-        <details style="margin-top:8px">
-          <summary class="muted" style="cursor:pointer">افزودن گروهی (هر خط یک لینک)</summary>
+        <details style="margin-top:6px">
+          <summary class="muted" style="cursor:pointer;padding:6px 0">افزودن گروهی (هر خط یک لینک)</summary>
           <textarea id="c-bulk" placeholder="vless://...
 vless://...
-trojan://..."></textarea>
-          <div class="row" style="margin-top:8px"><button class="ghost" onclick="addBulk()">افزودن همه</button>
-          <span class="muted">نام هر کانفیگ از تکه‌ی آخر لینک (#name) برداشته می‌شود.</span></div>
+trojan://..." style="margin-top:10px"></textarea>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+            <button class="ghost" onclick="addBulk(this)">افزودن همه</button>
+            <span class="muted">نام هر کانفیگ از <code>#name</code> آخر لینک برداشته می‌شود.</span>
+          </div>
         </details>
       </div>
 
       <div class="card">
-        <div class="row" style="justify-content:space-between;margin-bottom:8px">
-          <h2 style="margin:0">کانفیگ‌ها</h2>
-          <div class="row"><button class="ghost sm" onclick="loadConfigs()">تازه‌سازی</button>
-          <button class="ghost sm" onclick="publish()">انتشار مجدد</button></div>
-        </div>
+        <div class="card-head"><h2>کانفیگ‌ها</h2><button class="ghost sm" onclick="loadConfigs(true)"><svg class="ic"><use href="#i-refresh"/></svg>تازه‌سازی</button></div>
         <div class="list" id="cfg-list"></div>
-        <p class="muted" id="c-empty" style="margin:10px 0 0"></p>
+        <div id="c-empty"></div>
       </div>
     </section>
 
-    <!-- ─────────── app ─────────── -->
+    <!-- ───────── اتصال اپ ───────── -->
     <section id="pane-app" class="hidden">
+      <div class="head"><div><h1>اتصال اپ</h1><p>این دو خط را در <code>local.properties</code> پروژه بگذار و یک‌بار بیلد کن.</p></div></div>
+
       <div class="card">
-        <h2>ربط دادن اپ</h2>
-        <p class="muted">این دو خط را در <code>local.properties</code> پروژه بگذار و اپ را یک‌بار بیلد کن.</p>
-        <pre id="rc-lines"></pre>
-        <div class="row" style="margin-top:10px">
-          <button class="sm" onclick="copyEl('rc-lines')">کپی</button>
-          <button class="ghost sm" onclick="copyEl('rc-url')">کپی آدرس</button>
+        <h2><svg class="ic" style="color:var(--acc)"><use href="#i-link"/></svg>خطوط بیلد</h2>
+        <pre id="rc-lines">…</pre>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="sm" onclick="copyEl('rc-lines')"><svg class="ic"><use href="#i-copy"/></svg>کپی هر دو خط</button>
+          <button class="ghost sm" onclick="copyEl('rc-url')"><svg class="ic"><use href="#i-copy"/></svg>کپی آدرس</button>
         </div>
-        <div class="grid" style="margin-top:14px">
-          <div class="stat"><span>آدرس RC</span><b id="rc-url" style="font-size:11.5px;word-break:break-all">—</b></div>
-          <div class="stat"><span>نسخه‌ی فعال</span><b id="rc-version">0</b></div>
-          <div class="stat"><span>کانفیگ فعال</span><b id="rc-count">0</b></div>
-        </div>
-        <p class="muted" style="margin-top:12px">کلید عمومی داخل خود اپ کامپایل می‌شود. اگر کسی سرور را عوض کند، امضا نمی‌خواند و کانفیگ رد می‌شود.</p>
+      </div>
+
+      <div class="kv">
+        <div class="stat"><div class="lbl">آدرس RC</div><b id="rc-url">—</b></div>
+        <div class="stat"><div class="lbl">نسخه‌ی فعال</div><b id="rc-version">—</b></div>
+        <div class="stat"><div class="lbl">کانفیگ فعال</div><b id="rc-count">—</b></div>
       </div>
 
       <div class="card">
         <h2>کلید عمومی امضا</h2>
-        <pre id="rc-key"></pre>
-        <div class="row" style="margin-top:10px"><button class="sm" onclick="copyEl('rc-key')">کپی</button></div>
+        <p class="muted">داخل خود اپ کامپایل می‌شود. اگر کسی سرور را عوض کند، امضا نمی‌خواند و کانفیگ رد می‌شود.</p>
+        <pre id="rc-key">…</pre>
+        <div style="margin-top:12px"><button class="sm" onclick="copyEl('rc-key')"><svg class="ic"><use href="#i-copy"/></svg>کپی کلید</button></div>
       </div>
     </section>
 
-    <!-- ─────────── settings ─────────── -->
+    <!-- ───────── تنظیمات ───────── -->
     <section id="pane-settings" class="hidden">
+      <div class="head"><div><h1>تنظیمات</h1><p>آدرس نود و رمز پنل.</p></div></div>
+
       <div class="card">
-        <h2>آدرس نود</h2>
-        <p class="muted">کانفیگ‌هایی که به کاربران داده می‌شود به این دامنه وصل می‌شوند.</p>
-        <div class="row"><input id="node-host" placeholder="node.example.com" style="flex:1;min-width:220px;direction:ltr;text-align:left">
-        <button onclick="saveNode()">ذخیره</button></div>
+        <h2><svg class="ic" style="color:var(--acc)"><use href="#i-link"/></svg>آدرس نود</h2>
+        <p class="muted">کانفیگ‌هایی که به کاربران داده می‌شود به این دامنه وصل می‌شوند. بدون <code>https://</code> و بدون پورت.</p>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end">
+          <div><label class="fld">دامنه‌ی نود</label><input id="node-host" placeholder="node.example.com" style="direction:ltr;text-align:left;font-family:ui-monospace,monospace"></div>
+          <div><button onclick="saveNode(this)">ذخیره</button></div>
+        </div>
         <p class="err" id="n-msg"></p>
       </div>
 
       <div class="card">
         <h2>تغییر رمز پنل</h2>
-        <div class="row">
-          <input id="pw-cur" type="password" placeholder="رمز فعلی" style="flex:1;min-width:150px">
-          <input id="pw-new" type="password" placeholder="رمز جدید (حداقل ۸)" style="flex:1;min-width:150px">
-          <button onclick="changePassword()">تغییر</button>
+        <p class="muted">بعد از تغییر، همه‌ی نشست‌های باز باطل می‌شوند.</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end">
+          <div><label class="fld">رمز فعلی</label><input id="pw-cur" type="password" autocomplete="current-password"></div>
+          <div><label class="fld">رمز جدید</label><input id="pw-new" type="password" autocomplete="new-password"></div>
+          <div><button onclick="changePassword(this)">تغییر</button></div>
         </div>
         <p class="err" id="pw-msg"></p>
       </div>
@@ -205,289 +425,426 @@ trojan://..."></textarea>
   </main>
 </div>
 
-<dialog id="editDlg">
-  <h2>ویرایش کاربر</h2>
-  <div class="grid">
-    <label class="muted">نام<input id="e-name" style="width:100%;margin-top:4px"></label>
-    <label class="muted">حجم (GB)<input id="e-gb" type="number" style="width:100%;margin-top:4px"></label>
-    <label class="muted">روز اعتبار<input id="e-days" type="number" style="width:100%;margin-top:4px"></label>
+<dialog id="userDlg">
+  <div class="dlg-head"><h2>ویرایش کاربر</h2><button class="icon" onclick="closeDlg('userDlg')"><svg class="ic" style="transform:rotate(45deg)"><use href="#i-plus"/></svg></button></div>
+  <div class="dlg-body">
+    <div><label class="fld">نام</label><input id="e-name" autocomplete="off"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><label class="fld">حجم (GB، ۰ = نامحدود)</label><input id="e-gb" type="number" min="0" step="0.5"></div>
+      <div><label class="fld">روز اعتبار (۰ = بی‌پایان)</label><input id="e-days" type="number" min="0" step="1"></div>
+    </div>
+    <p class="err" id="e-msg"></p>
   </div>
-  <p class="err" id="e-msg"></p>
-  <div class="row" style="justify-content:flex-end;margin-top:10px">
-    <button class="ghost" onclick="document.getElementById('editDlg').close()">انصراف</button>
-    <button onclick="saveEdit()">ذخیره</button>
-  </div>
+  <div class="dlg-foot"><button onclick="saveEdit(this)">ذخیره</button><button class="ghost" onclick="closeDlg('userDlg')">انصراف</button></div>
 </dialog>
 
-<div class="toast" id="toast"></div>
+<dialog id="cfgDlg">
+  <div class="dlg-head"><h2>ویرایش کانفیگ</h2><button class="icon" onclick="closeDlg('cfgDlg')"><svg class="ic" style="transform:rotate(45deg)"><use href="#i-plus"/></svg></button></div>
+  <div class="dlg-body">
+    <div><label class="fld">نام</label><input id="k-name" autocomplete="off"></div>
+    <div><label class="fld">لینک</label><textarea id="k-uri" style="min-height:88px"></textarea></div>
+    <p class="err" id="k-msg"></p>
+  </div>
+  <div class="dlg-foot"><button onclick="saveCfg(this)">ذخیره</button><button class="ghost" onclick="closeDlg('cfgDlg')">انصراف</button></div>
+</dialog>
+
+<div id="toast" class="toast"></div>
 
 <script>
-var users = [], configs = [], editing = null, rcInfo = null;
+var S = { users: [], configs: [], rc: null, q: '', editUser: null, editCfg: null, editingUserSnapshot: null };
 
-function el(id) { return document.getElementById(id); }
-function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
-function gb(n) { return n ? (n / 1073741824).toFixed(2) + ' GB' : 'نامحدود'; }
-function faDate(ts) { return ts ? new Date(ts).toLocaleDateString('fa-IR') : 'بی‌پایان'; }
-function toast(m) { var t = el('toast'); t.textContent = m; t.className = 'toast show'; setTimeout(function () { t.className = 'toast'; }, 2200); }
+function el(id){ return document.getElementById(id); }
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+function onSearch(v){ S.q = v; renderUsers(); }
 
-async function api(path, opt) {
-  var res = await fetch(path, Object.assign({ credentials: 'include', headers: { 'content-type': 'application/json' } }, opt || {}));
+function fa(n){ return Number(n || 0).toLocaleString('fa-IR'); }
+function size(bytes){
+  var n = Number(bytes || 0);
+  if (n <= 0) return '۰';
+  var u = ['B','KB','MB','GB','TB'], i = 0;
+  while (n >= 1024 && i < u.length - 1) { n = n / 1024; i++; }
+  return (i === 0 ? n : n.toFixed(n >= 100 ? 0 : n >= 10 ? 1 : 2)) + ' ' + u[i];
+}
+function limit(bytes){ return Number(bytes) > 0 ? size(bytes) : 'نامحدود'; }
+function faDate(ts){
+  if (!ts) return 'بی‌پایان';
+  try { return new Date(ts).toLocaleDateString('fa-IR'); } catch (e) { return '—'; }
+}
+function toast(msg, isErr){
+  var t = el('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (isErr ? ' err' : '');
+  clearTimeout(t._h);
+  t._h = setTimeout(function(){ t.className = 'toast'; }, 2400);
+}
+function busy(btn, on){
+  if (!btn) return;
+  btn.disabled = !!on;
+}
+function togglePass(id, btn){
+  var f = el(id);
+  f.type = f.type === 'password' ? 'text' : 'password';
+}
+function closeDlg(id){ el(id).close(); }
+
+async function api(path, opt){
+  var res;
+  try {
+    res = await fetch(path, Object.assign({ credentials: 'include', headers: { 'content-type': 'application/json' } }, opt || {}));
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: 'network' } };
+  }
   var data = {};
   try { data = await res.json(); } catch (e) {}
+  if (res.status === 401 && path !== '/api/state' && path !== '/api/login' && path !== '/api/setup') showAuth('login');
   return { ok: res.ok, status: res.status, data: data };
 }
 
-async function boot() {
+/* ───────── auth ───────── */
+async function boot(){
+  el('authHost').textContent = location.host;
   el('host').textContent = location.host;
   var st = await api('/api/state');
-  if (!st.data.hasPassword) { el('auth').classList.remove('hidden'); el('setupBox').classList.remove('hidden'); return; }
+  if (!st.data.hasPassword) { showAuth('setup'); return; }
   if (st.data.authed) { showApp(); return; }
-  el('auth').classList.remove('hidden'); el('loginBox').classList.remove('hidden');
+  showAuth('login');
 }
-
-async function setup() {
+function showAuth(mode){
+  el('app').classList.add('hidden');
+  el('auth').classList.remove('hidden');
+  el('setupBox').classList.toggle('hidden', mode !== 'setup');
+  el('loginBox').classList.toggle('hidden', mode !== 'login');
+  el('authMsg').textContent = '';
+  setTimeout(function(){ var f = mode === 'setup' ? el('spass') : el('lpass'); if (f) f.focus(); }, 60);
+}
+async function setup(){
   var p = el('spass').value;
-  if (p.length < 8) { el('authMsg').textContent = 'رمز حداقل ۸ کاراکتر'; return; }
+  if (p.length < 8) { el('authMsg').textContent = 'رمز حداقل ۸ کاراکتر باشد.'; return; }
+  busy(el('setupBtn'), true);
   var r = await api('/api/setup', { method: 'POST', body: JSON.stringify({ password: p }) });
-  if (r.ok) showApp(); else el('authMsg').textContent = 'خطا: ' + (r.data.error || r.status);
+  busy(el('setupBtn'), false);
+  if (r.ok) { showApp(); } else { el('authMsg').textContent = r.data.error === 'already_set' ? 'رمز قبلاً ساخته شده.' : 'خطا: ' + (r.data.error || r.status); }
 }
-
-async function login() {
+async function login(){
   var p = el('lpass').value;
+  busy(el('loginBtn'), true);
   var r = await api('/api/login', { method: 'POST', body: JSON.stringify({ password: p }) });
-  if (r.ok) showApp(); else el('authMsg').textContent = 'رمز اشتباه';
+  busy(el('loginBtn'), false);
+  if (r.ok) { showApp(); } else { el('authMsg').textContent = 'رمز اشتباه است.'; el('lpass').select(); }
 }
-
-async function logout() {
+async function logout(){
   await api('/api/logout', { method: 'POST' });
   location.reload();
 }
-
-function showApp() {
+function showApp(){
   el('auth').classList.add('hidden');
-  el('tabs').classList.remove('hidden');
-  el('main').classList.remove('hidden');
-  el('logoutBtn').classList.remove('hidden');
-  loadAll();
+  el('app').classList.remove('hidden');
+  tab('users');
 }
-
-function tab(name) {
-  var panes = ['users', 'configs', 'app', 'settings'];
-  panes.forEach(function (p) {
-    el('pane-' + p).classList.toggle('hidden', p !== name);
+function tab(name){
+  ['users','configs','app','settings'].forEach(function(p){
+    var pane = el('pane-' + p);
+    if (pane) pane.classList.toggle('hidden', p !== name);
   });
-  var btns = document.querySelectorAll('.tab');
-  for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('active', btns[i].getAttribute('data-tab') === name);
+  var navs = document.querySelectorAll('.nav');
+  for (var i = 0; i < navs.length; i++) navs[i].classList.toggle('active', navs[i].getAttribute('data-tab') === name);
   if (name === 'app') loadRc();
   if (name === 'settings') loadSettings();
+  if (name === 'users') loadUsers();
+  if (name === 'configs') loadConfigs();
 }
-
-async function loadAll() { await Promise.all([loadUsers(), loadConfigs(), loadSettings()]); }
 
 /* ───────── users ───────── */
-async function loadUsers() {
+async function loadUsers(manual){
+  var btn = manual ? el('refUsers') : null;
+  busy(btn, true);
   var r = await api('/api/users');
-  users = r.data.users || [];
-  var now = Date.now(), used = 0, active = 0;
+  busy(btn, false);
+  if (!r.ok) { toast('دریافت کاربران نشد', true); return; }
+  S.users = r.data.users || [];
+  renderUsers();
+}
+function blocked(u){
+  return !u.enabled || (u.expires_at && u.expires_at < Date.now()) || (u.limit_bytes > 0 && u.used_bytes >= u.limit_bytes);
+}
+function renderUsers(){
+  var q = (S.q || '').trim().toLowerCase();
+  var list = S.users.filter(function(u){ return !q || String(u.name).toLowerCase().indexOf(q) >= 0; });
+  var used = 0, active = 0;
+  S.users.forEach(function(u){ used += u.used_bytes || 0; if (!blocked(u)) active++; });
+
   var html = '';
-  users.forEach(function (u) {
-    used += u.used_bytes || 0;
-    var blocked = !u.enabled || (u.expires_at && u.expires_at < now) || (u.limit_bytes > 0 && u.used_bytes >= u.limit_bytes);
-    if (!blocked) active++;
+  list.forEach(function(u){
+    var b = blocked(u);
     var pct = u.limit_bytes > 0 ? Math.min(100, (u.used_bytes / u.limit_bytes) * 100) : 0;
+    var barCls = pct >= 100 ? 'bad' : pct >= 85 ? 'warn' : '';
+    var expired = u.expires_at && u.expires_at < Date.now();
     html += '<tr>'
-      + '<td>' + esc(u.name) + '<div class="mono">' + esc(String(u.uuid).slice(0, 13)) + '…</div></td>'
-      + '<td><span class="pill ' + (blocked ? 'off' : 'on') + '">' + (blocked ? 'غیرفعال' : 'فعال') + '</span></td>'
-      + '<td>' + gb(u.used_bytes) + ' / ' + gb(u.limit_bytes)
-        + (u.limit_bytes > 0 ? '<div class="bar"><i style="width:' + pct.toFixed(0) + '%"></i></div>' : '') + '</td>'
-      + '<td class="hide-sm">' + faDate(u.expires_at) + '</td>'
-      + '<td><div class="row" style="gap:4px">'
-        + '<button class="ghost sm" onclick="editUser(' + u.id + ')">ویرایش</button>'
-        + '<button class="ghost sm" onclick="toggleUser(' + u.id + ',' + (!u.enabled) + ')">' + (u.enabled ? 'خاموش' : 'روشن') + '</button>'
-        + '<button class="ghost sm" onclick="resetUser(' + u.id + ')">ریست</button>'
-        + '<button class="ghost sm" onclick="copySub(' + u.id + ')">ساب</button>'
-        + '<button class="bad sm" onclick="delUser(' + u.id + ')">حذف</button>'
-      + '</div></td></tr>';
+      + '<td><div class="who"><div class="av">' + esc(String(u.name).slice(0, 2)) + '</div><div>'
+        + '<div class="nm">' + esc(u.name) + '</div>'
+        + '<div class="sub">' + esc(String(u.uuid).slice(0, 8)) + '…</div></div></div></td>'
+      + '<td><span class="pill ' + (b ? 'off' : 'on') + '"><i></i>' + (b ? (expired ? 'منقضی' : 'غیرفعال') : 'فعال') + '</span></td>'
+      + '<td><div class="num">' + size(u.used_bytes) + ' <span class="muted">/ ' + limit(u.limit_bytes) + '</span></div>'
+        + (u.limit_bytes > 0 ? '<div class="bar ' + barCls + '"><i style="width:' + pct.toFixed(1) + '%"></i></div>' : '') + '</td>'
+      + '<td class="muted num">' + faDate(u.expires_at) + '</td>'
+      + '<td><div class="ops">'
+        + '<button class="icon" title="ویرایش" onclick="openUser(' + u.id + ')"><svg class="ic"><use href="#i-edit"/></svg></button>'
+        + '<button class="icon" title="' + (u.enabled ? 'خاموش کردن' : 'روشن کردن') + '" onclick="toggleUser(' + u.id + ')"><svg class="ic"><use href="#i-power"/></svg></button>'
+        + '<button class="icon" title="کپی لینک ساب" onclick="copySub(' + u.id + ')"><svg class="ic"><use href="#i-copy"/></svg></button>'
+        + '<button class="icon" title="صفر کردن مصرف" onclick="resetUser(' + u.id + ')"><svg class="ic"><use href="#i-refresh"/></svg></button>'
+        + '<button class="icon" title="حذف" style="color:var(--bad)" onclick="delUser(' + u.id + ')"><svg class="ic"><use href="#i-trash"/></svg></button>'
+        + '</div></td></tr>';
   });
   el('rows').innerHTML = html;
-  el('u-empty').textContent = users.length ? '' : 'هنوز کاربری نساخته‌ای.';
-  el('s-users').textContent = users.length;
-  el('s-active').textContent = active;
-  el('s-used').textContent = gb(used);
+  el('u-empty').innerHTML = list.length ? '' :
+    '<div class="empty"><svg class="ic"><use href="#i-users"/></svg><b>' + (q ? 'چیزی پیدا نشد' : 'هنوز کاربری نساخته‌ای') + '</b>'
+    + (q ? 'عبارت دیگری را جست‌وجو کن.' : 'از فرم بالا اولین کاربر را بساز.') + '</div>';
+  el('s-users').textContent = fa(S.users.length);
+  el('s-active').textContent = fa(active);
+  el('s-used').textContent = size(used);
 }
 
-async function addUser() {
+async function addUser(btn){
   var name = el('u-name').value.trim();
-  var limit = Number(el('u-gb').value || 0);
-  var days = Number(el('u-days').value || 0);
-  if (!/^[A-Za-z0-9_.-]{2,32}$/.test(name)) { el('u-msg').textContent = 'نام: ۲ تا ۳۲ کاراکتر، فقط حروف انگلیسی/عدد/._-'; return; }
-  var r = await api('/api/users', { method: 'POST', body: JSON.stringify({ name: name, limit_gb: limit, days: days }) });
-  if (r.ok) { el('u-name').value = ''; el('u-gb').value = ''; el('u-days').value = ''; el('u-msg').textContent = ''; toast('کاربر ساخته شد'); loadUsers(); }
-  else el('u-msg').textContent = r.data.error === 'duplicate' ? 'این نام قبلاً استفاده شده' : 'خطا: ' + (r.data.error || r.status);
+  var gbv = el('u-gb').value, daysv = el('u-days').value;
+  if (!/^[A-Za-z0-9_.-]{2,32}$/.test(name)) { el('u-msg').textContent = 'نام: ۲ تا ۳۲ کاراکتر، فقط حروف انگلیسی، عدد، نقطه، خط تیره.'; return; }
+  el('u-msg').textContent = '';
+  busy(btn, true);
+  var r = await api('/api/users', { method: 'POST', body: JSON.stringify({ name: name, limit_gb: Number(gbv || 0), days: Number(daysv || 0) }) });
+  busy(btn, false);
+  if (r.ok) {
+    el('u-name').value = ''; el('u-gb').value = ''; el('u-days').value = '';
+    toast('کاربر ساخته شد');
+    loadUsers();
+  } else {
+    el('u-msg').textContent = r.data.error === 'duplicate' ? 'این نام قبلاً استفاده شده.' : r.data.error === 'bad_name' ? 'نام معتبر نیست.' : 'خطا: ' + (r.data.error || r.status);
+  }
 }
 
-function editUser(id) {
-  var u = users.filter(function (x) { return x.id === id; })[0];
+function openUser(id){
+  var u = S.users.filter(function(x){ return x.id === id; })[0];
   if (!u) return;
-  editing = id;
+  S.editUser = id;
+  S.editingUserSnapshot = { gb: u.limit_bytes, days: u.expires_at ? Math.max(0, Math.round((u.expires_at - Date.now()) / 86400000)) : 0 };
   el('e-name').value = u.name;
-  el('e-gb').value = u.limit_bytes ? (u.limit_bytes / 1073741824).toFixed(2) : 0;
-  el('e-days').value = u.expires_at ? Math.max(0, Math.round((u.expires_at - Date.now()) / 86400000)) : 0;
+  el('e-gb').value = u.limit_bytes ? +(u.limit_bytes / 1073741824).toFixed(2) : 0;
+  el('e-days').value = S.editingUserSnapshot.days;
   el('e-msg').textContent = '';
-  el('editDlg').showModal();
+  el('userDlg').showModal();
 }
 
-async function saveEdit() {
-  var body = {
-    name: el('e-name').value.trim(),
-    limit_gb: Number(el('e-gb').value || 0),
-    days: Number(el('e-days').value || 0)
-  };
-  var r = await api('/api/users/' + editing, { method: 'PATCH', body: JSON.stringify(body) });
-  if (r.ok) { el('editDlg').close(); toast('ذخیره شد'); loadUsers(); }
-  else el('e-msg').textContent = 'خطا: ' + (r.data.error || r.status);
+async function saveEdit(btn){
+  var name = el('e-name').value.trim();
+  var gb = Number(el('e-gb').value || 0);
+  var days = Number(el('e-days').value || 0);
+  var body = {};
+  // فقط فیلدهایی که عوض شده‌اند فرستاده می‌شوند؛ فرستادن روزِ گردشده تاریخ انقضا را جابه‌جا می‌کرد.
+  if (name) body.name = name;
+  if (gb !== Number((S.editingUserSnapshot.gb / 1073741824).toFixed(2))) body.limit_gb = gb;
+  if (days !== S.editingUserSnapshot.days) body.days = days;
+  if (!Object.keys(body).length) { el('userDlg').close(); return; }
+  busy(btn, true);
+  var r = await api('/api/users/' + S.editUser, { method: 'PATCH', body: JSON.stringify(body) });
+  busy(btn, false);
+  if (r.ok) { el('userDlg').close(); toast('ذخیره شد'); loadUsers(); }
+  else el('e-msg').textContent = r.data.error === 'duplicate' ? 'این نام تکراری است.' : 'خطا: ' + (r.data.error || r.status);
 }
 
-async function toggleUser(id, on) { await api('/api/users/' + id, { method: 'PATCH', body: JSON.stringify({ enabled: on }) }); loadUsers(); }
-async function resetUser(id) { await api('/api/users/' + id + '/reset', { method: 'POST' }); toast('مصرف صفر شد'); loadUsers(); }
-async function delUser(id) {
-  if (!confirm('این کاربر حذف شود؟')) return;
-  await api('/api/users/' + id, { method: 'DELETE' });
-  toast('حذف شد'); loadUsers();
+async function toggleUser(id){
+  var u = S.users.filter(function(x){ return x.id === id; })[0];
+  if (!u) return;
+  var r = await api('/api/users/' + id, { method: 'PATCH', body: JSON.stringify({ enabled: !u.enabled }) });
+  if (r.ok) loadUsers(); else toast('تغییر وضعیت نشد', true);
 }
-function copySub(id) {
-  var u = users.filter(function (x) { return x.id === id; })[0];
-  if (u) copyText(location.origin + '/sub/' + u.sub_token, 'لینک ساب کپی شد');
+async function resetUser(id){
+  if (!confirm('مصرف این کاربر صفر شود؟')) return;
+  var r = await api('/api/users/' + id + '/reset', { method: 'POST' });
+  if (r.ok) { toast('مصرف صفر شد'); loadUsers(); } else toast('انجام نشد', true);
+}
+async function delUser(id){
+  var u = S.users.filter(function(x){ return x.id === id; })[0];
+  if (!confirm('کاربر «' + (u ? u.name : id) + '» حذف شود؟ این کار برگشت‌پذیر نیست.')) return;
+  var r = await api('/api/users/' + id, { method: 'DELETE' });
+  if (r.ok) { toast('حذف شد'); loadUsers(); } else toast('حذف نشد', true);
+}
+function copySub(id){
+  var u = S.users.filter(function(x){ return x.id === id; })[0];
+  if (!u) return;
+  copyText(location.origin + '/sub/' + u.sub_token, 'لینک ساب کپی شد');
 }
 
 /* ───────── configs ───────── */
-async function loadConfigs() {
+async function loadConfigs(manual){
   var r = await api('/api/configs');
-  configs = r.data.configs || [];
+  if (!r.ok) { toast('دریافت کانفیگ‌ها نشد', true); return; }
+  S.configs = r.data.configs || [];
+  renderConfigs();
+  if (manual) toast('تازه شد');
+}
+function renderConfigs(){
   var html = '';
-  configs.forEach(function (c) {
+  S.configs.forEach(function(c, i){
     html += '<div class="item">'
-      + '<div class="row" style="justify-content:space-between">'
-        + '<div><b>' + esc(c.name) + '</b> <span class="pill ' + (c.enabled ? 'on' : 'off') + '">' + (c.enabled ? 'فعال' : 'خاموش') + '</span></div>'
-        + '<div class="row" style="gap:4px">'
-          + '<button class="ghost sm" onclick="moveCfg(' + c.id + ',-1)">↑</button>'
-          + '<button class="ghost sm" onclick="moveCfg(' + c.id + ',1)">↓</button>'
-          + '<button class="ghost sm" onclick="editCfg(' + c.id + ')">ویرایش</button>'
-          + '<button class="ghost sm" onclick="toggleCfg(' + c.id + ',' + (!c.enabled) + ')">' + (c.enabled ? 'خاموش' : 'روشن') + '</button>'
-          + '<button class="bad sm" onclick="delCfg(' + c.id + ')">حذف</button>'
-        + '</div>'
+      + '<div class="top">'
+        + '<b>' + esc(c.name) + '</b>'
+        + '<span class="pill ' + (c.enabled ? 'on' : 'off') + '"><i></i>' + (c.enabled ? 'فعال' : 'خاموش') + '</span>'
+        + '<span style="margin-right:auto"></span>'
+        + '<button class="icon" title="بالا" ' + (i === 0 ? 'disabled' : '') + ' onclick="moveCfg(' + c.id + ',-1)"><svg class="ic"><use href="#i-up"/></svg></button>'
+        + '<button class="icon" title="پایین" ' + (i === S.configs.length - 1 ? 'disabled' : '') + ' onclick="moveCfg(' + c.id + ',1)"><svg class="ic"><use href="#i-down"/></svg></button>'
+        + '<button class="icon" title="ویرایش" onclick="openCfg(' + c.id + ')"><svg class="ic"><use href="#i-edit"/></svg></button>'
+        + '<button class="icon" title="' + (c.enabled ? 'خاموش' : 'روشن') + '" onclick="toggleCfg(' + c.id + ')"><svg class="ic"><use href="#i-power"/></svg></button>'
+        + '<button class="icon" title="حذف" style="color:var(--bad)" onclick="delCfg(' + c.id + ')"><svg class="ic"><use href="#i-trash"/></svg></button>'
       + '</div>'
       + '<div class="mono">' + esc(c.uri) + '</div>'
-    + '</div>';
+      + '</div>';
   });
   el('cfg-list').innerHTML = html;
-  el('c-empty').textContent = configs.length ? '' : 'هنوز کانفیگی اضافه نکرده‌ای.';
-  el('rc-count').textContent = configs.filter(function (c) { return c.enabled; }).length;
+  el('c-empty').innerHTML = S.configs.length ? '' :
+    '<div class="empty"><svg class="ic"><use href="#i-layers"/></svg><b>هنوز کانفیگی اضافه نکرده‌ای</b>اولین سرور را از فرم بالا اضافه کن.</div>';
+  var n = S.configs.filter(function(c){ return c.enabled; }).length;
+  if (el('rc-count')) el('rc-count').textContent = fa(n);
 }
-
-async function addConfig() {
+async function addConfig(btn){
   var name = el('c-name').value.trim();
   var uri = el('c-uri').value.trim();
-  if (!name) { el('c-msg').textContent = 'نام را بنویس'; return; }
-  if (!/^(vless|vmess|trojan|ss|hysteria2?|tuic|wireguard):\/\//i.test(uri)) { el('c-msg').textContent = 'لینک معتبر نیست'; return; }
+  if (!name) { el('c-msg').textContent = 'نام را بنویس.'; return; }
+  if (!/^(vless|vmess|trojan|ss|hysteria2?|tuic|wireguard):\/\//i.test(uri)) { el('c-msg').textContent = 'لینک معتبر نیست.'; return; }
+  el('c-msg').textContent = '';
+  busy(btn, true);
   var r = await api('/api/configs', { method: 'POST', body: JSON.stringify({ name: name, uri: uri }) });
-  if (r.ok) { el('c-name').value = ''; el('c-uri').value = ''; el('c-msg').textContent = ''; toast('اضافه شد'); loadConfigs(); }
-  else el('c-msg').textContent = 'خطا: ' + (r.data.error || r.status);
+  busy(btn, false);
+  if (r.ok) { el('c-name').value = ''; el('c-uri').value = ''; toast('اضافه شد'); loadConfigs(); }
+  else el('c-msg').textContent = r.data.error === 'uri_too_long' ? 'لینک خیلی بلند است.' : 'خطا: ' + (r.data.error || r.status);
 }
-
-async function addBulk() {
-  var lines = (el('c-bulk').value || '').split(/\s+/).filter(function (x) { return /:\/\//.test(x); });
-  var ok = 0;
+async function addBulk(btn){
+  var lines = (el('c-bulk').value || '').split(/\s+/).filter(function(x){ return /:\/\//.test(x); });
+  if (!lines.length) { toast('لینکی پیدا نشد', true); return; }
+  busy(btn, true);
+  var ok = 0, fail = 0;
   for (var i = 0; i < lines.length; i++) {
-    var uri = lines[i], name = 'کانفیگ ' + (configs.length + ok + 1);
+    var uri = lines[i];
+    var name = 'کانفیگ ' + (S.configs.length + ok + 1);
     var hash = uri.split('#')[1];
     if (hash) { try { name = decodeURIComponent(hash); } catch (e) { name = hash; } }
-    var r = await api('/api/configs', { method: 'POST', body: JSON.stringify({ name: name, uri: uri }) });
-    if (r.ok) ok++;
+    var r = await api('/api/configs', { method: 'POST', body: JSON.stringify({ name: name.slice(0, 60), uri: uri }) });
+    if (r.ok) ok++; else fail++;
   }
+  busy(btn, false);
   el('c-bulk').value = '';
-  toast(ok + ' کانفیگ اضافه شد');
+  toast(ok + ' اضافه شد' + (fail ? ' · ' + fail + ' رد شد' : ''), fail > 0 && ok === 0);
   loadConfigs();
 }
-
-async function toggleCfg(id, on) { await api('/api/configs/' + id, { method: 'PATCH', body: JSON.stringify({ enabled: on }) }); loadConfigs(); }
-async function delCfg(id) {
-  if (!confirm('حذف شود؟')) return;
-  await api('/api/configs/' + id, { method: 'DELETE' });
-  toast('حذف شد'); loadConfigs();
-}
-async function editCfg(id) {
-  var c = configs.filter(function (x) { return x.id === id; })[0];
+function openCfg(id){
+  var c = S.configs.filter(function(x){ return x.id === id; })[0];
   if (!c) return;
-  var name = prompt('نام کانفیگ', c.name);
-  if (name === null) return;
-  var uri = prompt('لینک کانفیگ', c.uri);
-  if (uri === null) return;
-  var r = await api('/api/configs/' + id, { method: 'PATCH', body: JSON.stringify({ name: name, uri: uri }) });
-  if (!r.ok) toast('خطا: ' + (r.data.error || r.status));
-  loadConfigs();
+  S.editCfg = id;
+  el('k-name').value = c.name;
+  el('k-uri').value = c.uri;
+  el('k-msg').textContent = '';
+  el('cfgDlg').showModal();
 }
-async function moveCfg(id, dir) {
-  var i = configs.findIndex(function (x) { return x.id === id; });
+async function saveCfg(btn){
+  var name = el('k-name').value.trim();
+  var uri = el('k-uri').value.trim();
+  if (!name) { el('k-msg').textContent = 'نام را بنویس.'; return; }
+  if (!/^(vless|vmess|trojan|ss|hysteria2?|tuic|wireguard):\/\//i.test(uri)) { el('k-msg').textContent = 'لینک معتبر نیست.'; return; }
+  busy(btn, true);
+  var r = await api('/api/configs/' + S.editCfg, { method: 'PATCH', body: JSON.stringify({ name: name, uri: uri }) });
+  busy(btn, false);
+  if (r.ok) { el('cfgDlg').close(); toast('ذخیره شد'); loadConfigs(); }
+  else el('k-msg').textContent = 'خطا: ' + (r.data.error || r.status);
+}
+async function toggleCfg(id){
+  var c = S.configs.filter(function(x){ return x.id === id; })[0];
+  if (!c) return;
+  var r = await api('/api/configs/' + id, { method: 'PATCH', body: JSON.stringify({ enabled: !c.enabled }) });
+  if (r.ok) loadConfigs(); else toast('تغییر وضعیت نشد', true);
+}
+async function delCfg(id){
+  var c = S.configs.filter(function(x){ return x.id === id; })[0];
+  if (!confirm('کانفیگ «' + (c ? c.name : id) + '» حذف شود؟')) return;
+  var r = await api('/api/configs/' + id, { method: 'DELETE' });
+  if (r.ok) { toast('حذف شد'); loadConfigs(); } else toast('حذف نشد', true);
+}
+async function moveCfg(id, dir){
+  var i = S.configs.findIndex(function(x){ return x.id === id; });
   var j = i + dir;
-  if (i < 0 || j < 0 || j >= configs.length) return;
-  await api('/api/configs/' + configs[i].id, { method: 'PATCH', body: JSON.stringify({ sort: configs[j].sort }) });
-  await api('/api/configs/' + configs[j].id, { method: 'PATCH', body: JSON.stringify({ sort: configs[i].sort }) });
+  if (i < 0 || j < 0 || j >= S.configs.length) return;
+  var a = S.configs[i], b = S.configs[j];
+  var sa = a.sort, sb = b.sort;
+  // اگر sort دو کانفیگ یکی باشد، جابه‌جایی هیچ اثری ندارد؛ یکی را یک واحد جدا می‌کنیم.
+  if (sa === sb) { sa = sb - 1; }
+  await api('/api/configs/' + a.id, { method: 'PATCH', body: JSON.stringify({ sort: sb }) });
+  await api('/api/configs/' + b.id, { method: 'PATCH', body: JSON.stringify({ sort: sa }) });
   loadConfigs();
 }
-
-async function publish() { await api('/api/rc/publish', { method: 'POST' }); toast('نسخه بالا رفت'); loadRc(); }
+async function publish(btn){
+  busy(btn, true);
+  var r = await api('/api/rc/publish', { method: 'POST' });
+  busy(btn, false);
+  if (r.ok) { toast('نسخه بالا رفت'); loadRc(); } else toast('انتشار نشد', true);
+}
 
 /* ───────── app + settings ───────── */
-async function loadRc() {
+async function loadRc(){
   var r = await api('/api/rc');
-  rcInfo = r.data || {};
-  var url = rcInfo.url || '';
-  el('rc-url').textContent = url;
-  el('rc-key').textContent = rcInfo.publicKey || '';
-  el('rc-version').textContent = rcInfo.version || 0;
-  el('rc-count').textContent = rcInfo.enabled || 0;
-  el('rc-lines').textContent = 'mohammad.remoteConfigUrl=' + url + String.fromCharCode(10)
-    + 'mohammad.remoteConfigKey=' + (rcInfo.publicKey || '');
+  if (!r.ok) { toast('اطلاعات RC نیامد', true); return; }
+  S.rc = r.data || {};
+  var url = S.rc.url || '';
+  el('rc-url').textContent = url.replace(/^https?:\/\//, '');
+  el('rc-key').textContent = S.rc.publicKey || '';
+  el('rc-version').textContent = fa(S.rc.version || 0);
+  el('rc-count').textContent = fa(S.rc.enabled || 0);
+  el('rc-lines').textContent = 'mohammad.remoteConfigUrl=' + url + '\n'
+    + 'mohammad.remoteConfigKey=' + (S.rc.publicKey || '');
 }
-
-async function loadSettings() {
+async function loadSettings(){
   var r = await api('/api/settings');
+  if (!r.ok) return;
   el('node-host').value = (r.data && r.data.node_host) || '';
   el('s-node').textContent = (r.data && r.data.node_host) || '—';
 }
-
-async function saveNode() {
-  var v = el('node-host').value.trim();
+async function saveNode(btn){
+  var v = el('node-host').value.trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  busy(btn, true);
   var r = await api('/api/settings', { method: 'POST', body: JSON.stringify({ key: 'node_host', value: v }) });
+  busy(btn, false);
   if (r.ok) { toast('ذخیره شد'); el('n-msg').textContent = ''; loadSettings(); }
-  else el('n-msg').textContent = 'خطا: ' + (r.data.error || r.status);
+  else el('n-msg').textContent = r.data.error === 'bad_host' ? 'فرمت دامنه درست نیست (بدون https و بدون پورت).' : 'خطا: ' + (r.data.error || r.status);
 }
-
-async function changePassword() {
+async function changePassword(btn){
   var cur = el('pw-cur').value, next = el('pw-new').value;
-  if (next.length < 8) { el('pw-msg').textContent = 'رمز جدید حداقل ۸ کاراکتر'; return; }
+  if (next.length < 8) { el('pw-msg').textContent = 'رمز جدید حداقل ۸ کاراکتر باشد.'; return; }
+  busy(btn, true);
   var r = await api('/api/password', { method: 'POST', body: JSON.stringify({ current: cur, next: next }) });
-  if (r.ok) { el('pw-cur').value = ''; el('pw-new').value = ''; el('pw-msg').textContent = ''; toast('رمز عوض شد'); }
-  else el('pw-msg').textContent = r.status === 401 ? 'رمز فعلی اشتباه است' : 'خطا: ' + (r.data.error || r.status);
+  busy(btn, false);
+  if (r.ok) { el('pw-cur').value = ''; el('pw-new').value = ''; el('pw-msg').textContent = ''; toast('رمز عوض شد'); showAuth('login'); }
+  else el('pw-msg').textContent = r.status === 401 ? 'رمز فعلی اشتباه است.' : 'خطا: ' + (r.data.error || r.status);
 }
 
 /* ───────── helpers ───────── */
-function copyText(text, msg) {
-  var done = function () { toast(msg || 'کپی شد'); };
+function copyText(text, msg){
+  var done = function(){ toast(msg || 'کپی شد'); };
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+    navigator.clipboard.writeText(text).then(done, function(){ fallbackCopy(text); done(); });
   } else { fallbackCopy(text); done(); }
 }
-function fallbackCopy(text) {
+function fallbackCopy(text){
   var ta = document.createElement('textarea');
   ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
   document.body.appendChild(ta); ta.select();
   try { document.execCommand('copy'); } catch (e) {}
   document.body.removeChild(ta);
 }
-function copyEl(id) { copyText(el(id).textContent, 'کپی شد'); }
+function copyEl(id){ copyText(el(id).textContent, 'کپی شد'); }
+
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Enter' && !el('auth').classList.contains('hidden')) {
+    if (!el('setupBox').classList.contains('hidden')) setup(); else login();
+  }
+});
 
 boot();
 </script>
+</body>
 </html>
