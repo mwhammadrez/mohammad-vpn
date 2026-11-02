@@ -9,7 +9,7 @@
  */
 
 import { connect } from 'cloudflare:sockets';
-import { subscription, contentType, profileTitle, pickIp, parseIps, xrayConfig } from './lib.js';
+import { subscription, contentType, profileTitle, pickIp, parseIps, xrayConfig, statusPage } from './lib.js';
 
 const JSON_H = { 'content-type': 'application/json; charset=utf-8' };
 const enc = new TextEncoder();
@@ -122,8 +122,8 @@ const DB = {
     await env.DB.prepare(
       'INSERT INTO users (name, uuid, sub_token, trojan_password, trojan_hash, limit_bytes, limit_req, ' +
         'ip_limit, expires_at, expiry_days, start_on_first_connect, auto_reset_vol_days, ' +
-        'auto_reset_req_days, connection_type, ip_pool_id, note, enabled, created_at) ' +
-        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)',
+        'auto_reset_req_days, connection_type, ip_pool_id, note, frag_len, frag_int, ip_count, enabled, created_at) ' +
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)',
     )
       .bind(
         name, uuid, sub, password, sha224hex(password),
@@ -135,6 +135,9 @@ const DB = {
         Math.max(0, Number(opts.auto_reset_req_days) || 0),
         protocol, opts.ip_pool_id ? Number(opts.ip_pool_id) : null,
         String(opts.note || '').slice(0, 200) || null,
+        String(opts.frag_len || '').trim().slice(0, 20) || null,
+        String(opts.frag_int || '').trim().slice(0, 20) || null,
+        Math.max(1, Math.min(8, Number(opts.ip_count) || 1)),
         now,
       )
       .run();
@@ -178,6 +181,9 @@ function ensureSchema(env) {
       await env.DB.prepare(
         'CREATE TABLE IF NOT EXISTS ip_pools (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, operator TEXT NOT NULL DEFAULT \'any\', ips TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, created_at INTEGER NOT NULL)',
       ).run();
+      await env.DB.prepare(
+        'CREATE TABLE IF NOT EXISTS login_attempts (ip TEXT PRIMARY KEY, fails INTEGER NOT NULL DEFAULT 0, reset_at INTEGER NOT NULL)',
+      ).run();
 
       const info = await env.DB.prepare('PRAGMA table_info(users)').all();
       const have = new Set((info.results || []).map((r) => r.name));
@@ -199,6 +205,9 @@ function ensureSchema(env) {
         ['auto_rotate_ip', 'INTEGER NOT NULL DEFAULT 1'],
         ['connection_type', "TEXT NOT NULL DEFAULT 'both'"],
         ['note', 'TEXT'],
+        ['frag_len', 'TEXT'],
+        ['frag_int', 'TEXT'],
+        ['ip_count', 'INTEGER NOT NULL DEFAULT 1'],
       ];
       for (const [name, type] of additions) {
         if (!have.has(name)) {
@@ -257,6 +266,27 @@ async function ipFor(env, user, host) {
   await env.DB.prepare('UPDATE users SET pinned_ip = ?, ip_pinned_at = ? WHERE id = ?')
     .bind(picked, Date.now(), user.id).run();
   return picked;
+}
+
+/**
+ * Addresses a subscription should carry. One IP keeps the sticky behaviour; several are picked
+ * deterministically from the same pool so a blocked edge does not take the whole user down.
+ */
+async function ipListFor(env, user, host) {
+  const count = Math.max(1, Math.min(8, Number(user.ip_count) || 1));
+  const pool = await poolFor(env, user);
+  if (!pool) return [null];
+  const ips = parseIps(pool.ips);
+  if (!ips.length) return [null];
+  if (count === 1) return [await ipFor(env, user, host) || null];
+
+  const out = [];
+  if (user.pinned_ip && ips.includes(user.pinned_ip)) out.push(user.pinned_ip);
+  for (let i = 0; out.length < count && i < ips.length * 4; i++) {
+    const ip = pickIp(pool.ips, `${user.id}:${host}:${i}`);
+    if (ip && !out.includes(ip)) out.push(ip);
+  }
+  return out.length ? out : [null];
 }
 
 /* ───────────────────────── auth ───────────────────────── */
@@ -318,15 +348,16 @@ async function handleSub(request, env, token) {
   if (!user || !user.enabled || blocked(user)) return new Response('not found', { status: 404 });
 
   const host = (await DB.setting(env, 'node_host')) || env.PROXY_HOST || hostOf(request, env);
-  const ip = await ipFor(env, user, host);
+  const ips = await ipListFor(env, user, host);
   const format = new URL(request.url).searchParams.get('format') || 'base64';
 
-  return new Response(subscription(format, user, host, ip), {
+  return new Response(subscription(format, user, host, ips), {
     headers: {
       'content-type': contentType(format),
       'cache-control': 'no-store',
       'profile-title': profileTitle(user.name),
       'profile-update-interval': '12',
+      'profile-web-page-url': new URL(`/status/${token}`, request.url).toString(),
       'subscription-userinfo': `upload=0; download=${user.used_bytes}; total=${user.limit_bytes || 0}; expire=${user.expires_at ? Math.floor(user.expires_at / 1000) : 0}`,
     },
   });
@@ -341,8 +372,8 @@ async function handleXray(request, env, token) {
   if (!user || !user.enabled || blocked(user)) return new Response('not found', { status: 404 });
 
   const host = (await DB.setting(env, 'node_host')) || env.PROXY_HOST || hostOf(request, env);
-  const ip = await ipFor(env, user, host);
-  const body = JSON.stringify(xrayConfig(user, host, ip), null, 2);
+  const ips = await ipListFor(env, user, host);
+  const body = JSON.stringify(xrayConfig(user, host, ips[0]), null, 2);
 
   return new Response(body, {
     headers: {
@@ -350,9 +381,19 @@ async function handleXray(request, env, token) {
       'content-disposition': `attachment; filename="${user.name}-xray.json"`,
       'cache-control': 'no-store',
       'profile-title': profileTitle(user.name),
+      'profile-web-page-url': new URL(`/status/${token}`, request.url).toString(),
       'subscription-userinfo': `upload=0; download=${user.used_bytes}; total=${user.limit_bytes || 0}; expire=${user.expires_at ? Math.floor(user.expires_at / 1000) : 0}`,
     },
   });
+}
+
+/** `GET /status/<token>` — the public usage page linked from the subscription headers. */
+async function handleStatus(request, env, token) {
+  const user = await DB.bySubToken(env, token);
+  if (!user) return new Response('not found', { status: 404 });
+  const host = (await DB.setting(env, 'node_host')) || env.PROXY_HOST || hostOf(request, env);
+  const ips = await ipListFor(env, user, host);
+  return page(statusPage(user, host, ips));
 }
 
 /* ───────────────────────── remote config ───────────────────────── */
@@ -464,10 +505,29 @@ async function handleApi(request, env, url) {
     return json({ ok: true, token: s }, 200, { 'set-cookie': cookieHeader(s, SESSION_TTL / 1000) });
   }
   if (path === '/api/login' && method === 'POST') {
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const now = Date.now();
+    const attempt = await env.DB.prepare('SELECT fails, reset_at FROM login_attempts WHERE ip = ?').bind(ip).first();
+    if (attempt && attempt.reset_at > now && attempt.fails >= 5) {
+      const retry = Math.max(1, Math.ceil((attempt.reset_at - now) / 1000));
+      return json({ error: 'rate_limited', retry_after: retry }, 429, { 'retry-after': String(retry) });
+    }
+
     const { password } = await readJson(request);
     const hash = await DB.setting(env, 'password_hash');
     if (!hash) return json({ error: 'not_setup' }, 400);
-    if (!timingSafe(await sha256hex(password || ''), hash)) return json({ error: 'bad_password' }, 401);
+    if (!timingSafe(await sha256hex(password || ''), hash)) {
+      if (attempt && attempt.reset_at > now) {
+        await env.DB.prepare('UPDATE login_attempts SET fails = fails + 1 WHERE ip = ?').bind(ip).run();
+      } else {
+        await env.DB.prepare(
+          'INSERT INTO login_attempts (ip, fails, reset_at) VALUES (?,?,?) ' +
+            'ON CONFLICT(ip) DO UPDATE SET fails = 1, reset_at = excluded.reset_at',
+        ).bind(ip, 1, now + 600000).run();
+      }
+      return json({ error: 'bad_password' }, 401);
+    }
+    await env.DB.prepare('DELETE FROM login_attempts WHERE ip = ?').bind(ip).run();
     const s = await makeSession(env);
     return json({ ok: true, token: s }, 200, { 'set-cookie': cookieHeader(s, SESSION_TTL / 1000) });
   }
@@ -508,6 +568,9 @@ async function handleApi(request, env, url) {
       auto_reset_req_days: Number(b.auto_reset_req_days) || 0,
       protocol: b.protocol,
       note: b.note,
+      frag_len: b.frag_len,
+      frag_int: b.frag_int,
+      ip_count: b.ip_count,
     });
     return json({ ok: true });
   }
@@ -548,6 +611,9 @@ async function handleApi(request, env, url) {
         : (['vless', 'trojan', 'both'].includes(b.protocol) ? b.protocol : 'both');
       const autoRotate = b.auto_rotate_ip === undefined ? user.auto_rotate_ip : b.auto_rotate_ip ? 1 : 0;
       const note = b.note === undefined ? user.note : String(b.note || '').slice(0, 200) || null;
+      const fragLen = b.frag_len === undefined ? user.frag_len : String(b.frag_len || '').trim().slice(0, 20) || null;
+      const fragInt = b.frag_int === undefined ? user.frag_int : String(b.frag_int || '').trim().slice(0, 20) || null;
+      const ipCount = b.ip_count === undefined ? user.ip_count : Math.max(1, Math.min(8, Number(b.ip_count) || 1));
       let name = user.name;
       if (b.name !== undefined) {
         name = String(b.name).trim();
@@ -558,12 +624,12 @@ async function handleApi(request, env, url) {
       await env.DB.prepare(
         'UPDATE users SET name = ?, enabled = ?, limit_bytes = ?, limit_req = ?, ip_limit = ?, ' +
           'expires_at = ?, expiry_days = ?, start_on_first_connect = ?, auto_reset_vol_days = ?, ' +
-          'auto_reset_req_days = ?, connection_type = ?, ip_pool_id = ?, auto_rotate_ip = ?, note = ? ' +
-          'WHERE id = ?',
+          'auto_reset_req_days = ?, connection_type = ?, ip_pool_id = ?, auto_rotate_ip = ?, note = ?, ' +
+          'frag_len = ?, frag_int = ?, ip_count = ? WHERE id = ?',
       )
         .bind(
           name, enabled, limit, limitReq, ipLimit, expires, days, startOnFirst, resetVol, resetReq,
-          protocol, poolId, autoRotate, note, id,
+          protocol, poolId, autoRotate, note, fragLen, fragInt, ipCount, id,
         )
         .run();
       return json({ ok: true });
@@ -792,6 +858,7 @@ async function handleRequest(request, env, ctx) {
     if (p === '/favicon.ico') return new Response(null, { status: 204 });
     if (p.startsWith('/sub/')) return handleSub(request, env, p.slice(5));
     if (p.startsWith('/xray/')) return handleXray(request, env, p.slice(6));
+    if (p.startsWith('/status/')) return handleStatus(request, env, p.slice(8));
     if (p === '/rc') return handleRc(request, env);
     if (p === '/panel' || p === '/panel/') return page(PANEL);
     if (p.startsWith('/api/')) return handleApi(request, env, url);

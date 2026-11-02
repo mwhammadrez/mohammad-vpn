@@ -12,6 +12,10 @@ import {
   nextActiveIps,
   firstConnectExpiry,
   xrayConfig,
+  buildLinks,
+  clientKey,
+  fragmentMask,
+  statusPage,
 } from '../worker/lib.js';
 
 const user = {
@@ -154,4 +158,57 @@ test('xray config keeps the clean IP and the domain for TLS', () => {
 test('xray config follows the connection_type filter', () => {
   const cfg = xrayConfig({ ...user, connection_type: 'vless' }, host, ip);
   assert.deepEqual(cfg.outbounds.map((o) => o.protocol), ['vless', 'freedom', 'blackhole']);
+});
+
+test('device identity groups an IPv4 /24 and an IPv6 /64', () => {
+  assert.equal(clientKey('1.2.3.4'), '1.2.3.0/24');
+  assert.equal(clientKey('1.2.3.99'), '1.2.3.0/24');
+  assert.equal(clientKey('2001:db8:1:2:3:4:5:6'), '2001:db8:1:2::/64');
+  assert.equal(clientKey('2001:db8::1'), '2001:db8::/64');
+});
+
+test('two addresses in one /24 do not consume two device slots', () => {
+  const now = 1_000_000;
+  let state = nextActiveIps('{}', '1.2.3.4', now, 1);
+  state = nextActiveIps(state.active, '1.2.3.99', now + 1, 1);
+  assert.equal(state.allowed, true);
+});
+
+test('fragment settings travel in the fm parameter', () => {
+  const tuned = { ...user, frag_len: '100-200', frag_int: '1-1' };
+  const link = vlessLink(tuned, host, ip);
+  const query = new URLSearchParams(link.split('?')[1].split('#')[0]);
+  const mask = JSON.parse(query.get('fm'));
+  assert.equal(mask.tcp[0].type, 'fragment');
+  assert.equal(mask.tcp[0].settings.packets, 'tlshello');
+  assert.deepEqual(mask.tcp[0].settings.lengths, ['100-200']);
+  assert.deepEqual(mask.tcp[0].settings.delays, ['1-1']);
+  assert.equal(new URLSearchParams(vlessLink(user, host, ip).split('?')[1].split('#')[0]).get('fm'), null);
+});
+
+test('one user can carry several addresses in one subscription', () => {
+  const links = buildLinks(user, host, ['1.1.1.1', '2.2.2.2']);
+  assert.equal(links.length, 4);
+  assert.match(links[0], /@1\.1\.1\.1:443/);
+  assert.match(links[2], /@2\.2\.2\.2:443/);
+  assert.match(links[0], /#ali-1/);
+});
+
+test('the Xray config carries the fragment finalmask', () => {
+  const cfg = xrayConfig({ ...user, frag_len: '1-3', frag_int: '1-2' }, host, ip);
+  const mask = cfg.outbounds[0].streamSettings.finalmask;
+  assert.equal(mask.tcp[0].settings.lengths[0], '1-3');
+  assert.equal(mask.tcp[0].settings.delays[0], '1-2');
+});
+
+test('the status page renders usage without leaking anything else', () => {
+  const html = statusPage(
+    { ...user, sub_token: 'tok', used_bytes: 1.5 * 1024 ** 3, limit_bytes: 3 * 1024 ** 3, expires_at: Date.now() + 86400000 },
+    host,
+    [ip],
+  );
+  assert.match(html, /ali/);
+  assert.match(html, /1\.50/);
+  assert.match(html, /50%/);
+  assert.match(html, new RegExp(ip.replace(/\./g, '\\.')));
 });

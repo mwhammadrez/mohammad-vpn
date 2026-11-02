@@ -279,3 +279,49 @@ test.after(() => {
     fs.unlinkSync(modulePath);
   } catch {}
 });
+
+test('ip_count puts several addresses in one subscription', async () => {
+  const h = await setupPanel();
+  await h.json('/api/ips', { name: 'Multi', ips: '1.1.1.1\n2.2.2.2\n3.3.3.3' }, h.token);
+  await h.json('/api/users', { name: 'multi', days: 30, ip_count: 3 }, h.token);
+  const user = (await (await h.json('/api/users', undefined, h.token, 'GET')).json()).users[0];
+  const text = Buffer.from(await (await h.call('/sub/' + user.sub_token)).text(), 'base64').toString('utf8');
+  const addresses = new Set(text.split('\n').map((line) => line.match(/@([^:]+):/)[1]));
+  assert.equal(addresses.size, 3);
+  assert.ok(addresses.has('1.1.1.1'));
+  assert.ok(addresses.has('2.2.2.2'));
+  assert.ok(addresses.has('3.3.3.3'));
+});
+
+test('fragment settings reach the subscription links', async () => {
+  const h = await setupPanel();
+  await h.json('/api/users', { name: 'frag', days: 30, frag_len: '100-200', frag_int: '1-1' }, h.token);
+  const user = (await (await h.json('/api/users', undefined, h.token, 'GET')).json()).users[0];
+  const text = Buffer.from(await (await h.call('/sub/' + user.sub_token)).text(), 'base64').toString('utf8');
+  const first = new URLSearchParams(text.split('\n')[0].split('?')[1].split('#')[0]);
+  const mask = JSON.parse(first.get('fm'));
+  assert.equal(mask.tcp[0].settings.lengths[0], '100-200');
+});
+
+test('the status page answers for a token and 404s for an unknown one', async () => {
+  const h = await setupPanel();
+  await h.json('/api/users', { name: 'status-user', days: 30 }, h.token);
+  const user = (await (await h.json('/api/users', undefined, h.token, 'GET')).json()).users[0];
+  const ok = await h.call('/status/' + user.sub_token);
+  assert.equal(ok.status, 200);
+  assert.match(await ok.text(), /status-user/);
+  assert.equal((await h.call('/status/nope')).status, 404);
+});
+
+test('six bad logins from one address answer 429 with retry_after', async () => {
+  const h = await setupPanel();
+  const attempt = (password) => h.call('/api/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'CF-Connecting-IP': '9.9.9.9' },
+    body: JSON.stringify({ password }),
+  });
+  for (let i = 0; i < 5; i++) assert.equal((await attempt('wrong')).status, 401);
+  const blocked = await attempt('password123');
+  assert.equal(blocked.status, 429);
+  assert.ok(Number((await blocked.json()).retry_after) > 0);
+});

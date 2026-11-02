@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS users (
   pinned_ip              TEXT,
   ip_pinned_at           INTEGER,
   note                   TEXT,
+  frag_len               TEXT,                 -- طول فرگمنت ضدDPI (مثلاً 100-200)
+  frag_int               TEXT,                 -- فاصله فرگمنت (مثلاً 1-1)
+  ip_count               INTEGER NOT NULL DEFAULT 1,  -- چند IP در لینک‌ها
   created_at             INTEGER NOT NULL,
   last_active            INTEGER
 );
@@ -60,3 +63,9 @@ CREATE TABLE IF NOT EXISTS configs (
   created_at  INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_configs_sort ON configs (sort, id);
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+  ip       TEXT PRIMARY KEY,
+  fails    INTEGER NOT NULL DEFAULT 0,
+  reset_at INTEGER NOT NULL
+);

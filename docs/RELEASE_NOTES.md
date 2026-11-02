@@ -5,6 +5,28 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.16.0 — anti-DPI presets, several edge addresses, and a status page
+
+### Added
+- **Fragment presets per operator** (MCI, Irancell, Rightel, Mokhaberat, balanced). The panel writes
+  the mask into each link as the `fm=` parameter the app already understands and into the `/xray`
+  config as `streamSettings.finalmask`, so the handshake no longer matches a fixed DPI pattern.
+- **Several clean IPs per subscription** (`ip_count`, 1–8). One blocked edge no longer takes the
+  whole user down; the links and the Clash/Sing-box profiles carry every address.
+- **`/status/<token>`** — a public page with usage, quota, expiry and addresses, linked from the
+  subscription headers (`profile-web-page-url`).
+- **Login throttling** — five bad passwords from one address answer 429 with `retry_after` for ten
+  minutes.
+
+### Fixed
+- **Device limits counted the exact IP.** Carriers rotate inside a prefix, so one phone could look
+  like several devices. An IPv4 /24 or IPv6 /64 now counts as one device.
+
+### Verified
+- 45 panel tests, 368 Android tests.
+- Live edge: fragment links and a three-IP subscription carry HTTPS; the status page answers 200.
+- Real network connectivity from an Iranian ISP is **NOT VERIFIED** in this workspace.
+
 ## 0.15.5 — a panel that works for someone else
 
 The panel is meant to be published, so a panel created by a stranger with their own Cloudflare token
