@@ -675,6 +675,7 @@ function renderUsers(){
         + '<button class="icon" title="ویرایش" onclick="openUser(' + u.id + ')"><svg class="ic"><use href="#i-edit"/></svg></button>'
         + '<button class="icon" title="' + (u.enabled ? 'خاموش کردن' : 'روشن کردن') + '" onclick="toggleUser(' + u.id + ')"><svg class="ic"><use href="#i-power"/></svg></button>'
         + '<button class="icon" title="کپی لینک ساب" onclick="copySub(' + u.id + ')"><svg class="ic"><use href="#i-copy"/></svg></button>'
+        + '<button class="icon" title="کانفیگ Xray" onclick="copyXray(' + u.id + ')"><svg class="ic"><use href="#i-link"/></svg></button>'
         + '<button class="icon" title="صفر کردن مصرف" onclick="resetUser(' + u.id + ')"><svg class="ic"><use href="#i-refresh"/></svg></button>'
         + '<button class="icon" title="حذف" style="color:var(--bad)" onclick="delUser(' + u.id + ')"><svg class="ic"><use href="#i-trash"/></svg></button>'
         + '</div></td></tr>';
@@ -787,6 +788,11 @@ function copySub(id){
   var u = S.users.filter(function(x){ return x.id === id; })[0];
   if (!u) return;
   copyText(location.origin + '/sub/' + u.sub_token, 'لینک ساب کپی شد');
+}
+function copyXray(id){
+  var u = S.users.filter(function(x){ return x.id === id; })[0];
+  if (!u) return;
+  copyText(location.origin + '/xray/' + u.sub_token, 'لینک کانفیگ Xray کپی شد');
 }
 
 /* ───────── configs ───────── */

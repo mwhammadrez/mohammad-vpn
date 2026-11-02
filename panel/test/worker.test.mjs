@@ -178,6 +178,23 @@ test('a pinned IP can be released and is re-picked later', async () => {
   assert.equal(h.db.get('SELECT pinned_ip FROM users WHERE id = ?', user.id).pinned_ip, null);
 });
 
+test('/xray returns a full config with the clean IP and the real hostname', async () => {
+  const h = await setupPanel();
+  await h.json('/api/ips', { name: 'MCI', ips: '104.16.0.1' }, h.token);
+  await h.json('/api/users', { name: 'ali', days: 30 }, h.token);
+  const user = (await (await h.json('/api/users', undefined, h.token, 'GET')).json()).users[0];
+
+  const res = await h.call('/xray/' + user.sub_token);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'application/json; charset=utf-8');
+  const cfg = await res.json();
+  const vless = cfg.outbounds.find((o) => o.protocol === 'vless');
+  assert.equal(vless.settings.vnext[0].address, '104.16.0.1');
+  assert.equal(vless.streamSettings.tlsSettings.serverName, 'node.example.com');
+  assert.equal(vless.settings.vnext[0].users[0].id, user.uuid);
+  assert.ok(cfg.outbounds.some((o) => o.protocol === 'trojan'));
+});
+
 test('quota and expiry block the subscription', async () => {
   const h = await setupPanel();
   await h.json('/api/ips', { name: 'MCI', ips: '104.16.0.1' }, h.token);

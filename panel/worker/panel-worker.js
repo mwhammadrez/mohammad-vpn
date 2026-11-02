@@ -9,7 +9,7 @@
  */
 
 import { connect } from 'cloudflare:sockets';
-import { subscription, contentType, profileTitle, pickIp, parseIps } from './lib.js';
+import { subscription, contentType, profileTitle, pickIp, parseIps, xrayConfig } from './lib.js';
 
 const JSON_H = { 'content-type': 'application/json; charset=utf-8' };
 const enc = new TextEncoder();
@@ -327,6 +327,29 @@ async function handleSub(request, env, token) {
       'cache-control': 'no-store',
       'profile-title': profileTitle(user.name),
       'profile-update-interval': '12',
+      'subscription-userinfo': `upload=0; download=${user.used_bytes}; total=${user.limit_bytes || 0}; expire=${user.expires_at ? Math.floor(user.expires_at / 1000) : 0}`,
+    },
+  });
+}
+
+/**
+ * `GET /xray/<token>` — the same profile as a full Xray config instead of a share link. Clients
+ * that prefer a file (and users who want the JSON) get one object with every outbound.
+ */
+async function handleXray(request, env, token) {
+  const user = await DB.bySubToken(env, token);
+  if (!user || !user.enabled || blocked(user)) return new Response('not found', { status: 404 });
+
+  const host = (await DB.setting(env, 'node_host')) || env.PROXY_HOST || hostOf(request, env);
+  const ip = await ipFor(env, user, host);
+  const body = JSON.stringify(xrayConfig(user, host, ip), null, 2);
+
+  return new Response(body, {
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'content-disposition': `attachment; filename="${user.name}-xray.json"`,
+      'cache-control': 'no-store',
+      'profile-title': profileTitle(user.name),
       'subscription-userinfo': `upload=0; download=${user.used_bytes}; total=${user.limit_bytes || 0}; expire=${user.expires_at ? Math.floor(user.expires_at / 1000) : 0}`,
     },
   });
@@ -768,6 +791,7 @@ async function handleRequest(request, env, ctx) {
     }
     if (p === '/favicon.ico') return new Response(null, { status: 204 });
     if (p.startsWith('/sub/')) return handleSub(request, env, p.slice(5));
+    if (p.startsWith('/xray/')) return handleXray(request, env, p.slice(6));
     if (p === '/rc') return handleRc(request, env);
     if (p === '/panel' || p === '/panel/') return page(PANEL);
     if (p.startsWith('/api/')) return handleApi(request, env, url);

@@ -11,6 +11,7 @@ import {
   isBlocked,
   nextActiveIps,
   firstConnectExpiry,
+  xrayConfig,
 } from '../worker/lib.js';
 
 const user = {
@@ -133,4 +134,24 @@ test('start_on_first_connect sets expiry only once', () => {
   assert.equal(firstConnectExpiry({ start_on_first_connect: 1, expiry_days: 30 }, now), now + 30 * 86400000);
   assert.equal(firstConnectExpiry({ start_on_first_connect: 1, first_connection_time: 5 }, now), null);
   assert.equal(firstConnectExpiry({ start_on_first_connect: 0 }, now), null);
+});
+
+test('xray config keeps the clean IP and the domain for TLS', () => {
+  const cfg = xrayConfig(user, host, ip);
+  const vless = cfg.outbounds.find((o) => o.protocol === 'vless');
+  assert.equal(vless.settings.vnext[0].address, ip);
+  assert.equal(vless.streamSettings.tlsSettings.serverName, host);
+  assert.equal(vless.streamSettings.wsSettings.headers.Host, host);
+  assert.equal(vless.streamSettings.wsSettings.path, '/ws?ed=2048');
+  assert.deepEqual(cfg.dns.servers, ['tcp://8.8.8.8', 'tcp://9.9.9.9']);
+
+  const trojan = cfg.outbounds.find((o) => o.protocol === 'trojan');
+  assert.equal(trojan.settings.servers[0].address, ip);
+  assert.equal(trojan.settings.servers[0].password, user.trojan_password);
+  assert.deepEqual(cfg.outbounds.map((o) => o.protocol), ['vless', 'trojan', 'freedom', 'blackhole']);
+});
+
+test('xray config follows the connection_type filter', () => {
+  const cfg = xrayConfig({ ...user, connection_type: 'vless' }, host, ip);
+  assert.deepEqual(cfg.outbounds.map((o) => o.protocol), ['vless', 'freedom', 'blackhole']);
 });

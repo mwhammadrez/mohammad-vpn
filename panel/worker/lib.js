@@ -250,3 +250,83 @@ export function firstConnectExpiry(row, now) {
   const days = Number(row.expiry_days) || 0;
   return days > 0 ? now + days * 86400000 : 0;
 }
+
+/**
+ * A complete Xray client config, the shape a desktop/mobile client can import directly.
+ *
+ * Same addressing rule as the subscription links: `address` is the clean edge IP (or the node
+ * domain when no pool exists), while `serverName` and the WebSocket `Host` header stay the real
+ * domain. Routing lists private ranges literally so the file works without geoip.dat.
+ */
+export function xrayConfig(user, host, ip) {
+  const address = ip || host;
+  const outbounds = [];
+
+  if (protocolsFor(user).includes('vless')) {
+    outbounds.push({
+      tag: `vless-${host}-443`,
+      protocol: 'vless',
+      settings: {
+        vnext: [{
+          address,
+          port: 443,
+          users: [{ id: user.uuid, encryption: 'none' }],
+        }],
+      },
+      streamSettings: {
+        network: 'ws',
+        wsSettings: { path: '/ws?ed=2048', headers: { Host: host } },
+        security: 'tls',
+        tlsSettings: { serverName: host, allowInsecure: false },
+      },
+    });
+  }
+
+  if (protocolsFor(user).includes('trojan')) {
+    outbounds.push({
+      tag: `trojan-${host}-443`,
+      protocol: 'trojan',
+      settings: {
+        servers: [{ address, port: 443, password: user.trojan_password }],
+      },
+      streamSettings: {
+        network: 'ws',
+        wsSettings: { path: '/ws?ed=2048', headers: { Host: host } },
+        security: 'tls',
+        tlsSettings: { serverName: host, allowInsecure: false },
+      },
+    });
+  }
+
+  outbounds.push({ tag: 'direct', protocol: 'freedom' }, { tag: 'block', protocol: 'blackhole' });
+
+  return {
+    log: { loglevel: 'warning' },
+    // TCP DNS on purpose: the node proxies TCP CONNECT only, so a UDP resolver makes every
+    // lookup wait for a timeout (measured 8-10 s per request before this).
+    dns: { servers: ['tcp://8.8.8.8', 'tcp://9.9.9.9'] },
+    inbounds: [
+      {
+        tag: 'socks-in', listen: '127.0.0.1', port: 10808, protocol: 'socks',
+        settings: { auth: 'noauth', udp: true },
+        sniffing: { enabled: true, destOverride: ['http', 'tls'] },
+      },
+      {
+        tag: 'http-in', listen: '127.0.0.1', port: 10809, protocol: 'http',
+        settings: {},
+        sniffing: { enabled: true, destOverride: ['http', 'tls'] },
+      },
+    ],
+    outbounds,
+    routing: {
+      domainStrategy: 'IPIfNonMatch',
+      rules: [
+        {
+          type: 'field',
+          ip: ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '127.0.0.0/8', '169.254.0.0/16'],
+          outboundTag: 'direct',
+        },
+      ],
+    },
+  };
+}
