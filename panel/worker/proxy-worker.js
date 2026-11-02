@@ -171,6 +171,10 @@ export default {
       const n = up + down;
       up = 0;
       down = 0;
+      // Keep the row in memory in step with D1. The data-path quota check adds `up + down` to
+      // `user.used_bytes`; leaving it stale after a flush let a 6 MB allowance carry ~11 MB before
+      // the next check noticed.
+      user.used_bytes += n;
       ctx.waitUntil(
         env.DB.prepare('UPDATE users SET used_bytes = used_bytes + ?, last_active = ? WHERE id = ?')
           .bind(n, Date.now(), user.id).run().catch(() => {}),
