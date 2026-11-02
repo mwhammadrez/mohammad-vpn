@@ -106,16 +106,20 @@ function headerLength(buf) {
   if (!HEX56.test(dec.decode(buf.slice(0, 56)))) return -1;
   let p = 56;
   while (p < buf.length && (buf[p] === 13 || buf[p] === 10)) p++;
-  if (buf.length < p + 4) return null;
-  const atyp = buf[p + 3];
+  // Trojan request layout is CMD | ATYP | ADDR | PORT | CRLF — not the VLESS order.
+  if (buf.length < p + 2) return null;
+  const atyp = buf[p + 1];
   let addrLen;
   if (atyp === 1) addrLen = 4;
   else if (atyp === 3) {
-    if (buf.length < p + 5) return null;
-    addrLen = 1 + buf[p + 4];
+    if (buf.length < p + 3) return null;
+    addrLen = 1 + buf[p + 2];
   } else if (atyp === 4) addrLen = 16;
   else return -1;
-  return p + 4 + addrLen;
+  const end = p + 2 + addrLen + 2 + 2; // cmd+atyp, addr, port, trailing CRLF
+  if (buf.length < end) return null;
+  if (buf[end - 2] !== 13 || buf[end - 1] !== 10) return -1;
+  return end;
 }
 
 function concat(a, b) {
@@ -255,10 +259,8 @@ export default {
       if (!user) return closeAll();
       let p = 56;
       while (body[p] === 13 || body[p] === 10) p++;
-      if (body[p] !== 1) return closeAll();
+      if (body[p] !== 1) return closeAll(); // CONNECT only
       p += 1;
-      const port = (body[p] << 8) | body[p + 1];
-      p += 2;
       const atyp = body[p];
       p += 1;
       let host;
@@ -270,14 +272,19 @@ export default {
         p += 1;
         host = dec.decode(body.slice(p, p + len));
         p += len;
-      } else {
+      } else if (atyp === 4) {
         const parts = [];
         for (let i = 0; i < 8; i++) {
           parts.push(((body[p] << 8) | body[p + 1]).toString(16));
           p += 2;
         }
         host = parts.join(':');
+      } else {
+        return closeAll();
       }
+      const port = (body[p] << 8) | body[p + 1];
+      p += 2;
+      if (body[p] === 13 && body[p + 1] === 10) p += 2; // trailing CRLF
       if (!host || !port) return closeAll();
       return dial(host, port, buf.slice(need), false);
     };

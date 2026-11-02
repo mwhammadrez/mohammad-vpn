@@ -133,10 +133,12 @@ function vlessHeader(port, ip = [127, 0, 0, 1]) {
 }
 
 function trojanHeader(port, ip = [127, 0, 0, 1]) {
+  // Trojan request: hash CRLF CMD ATYP ADDR PORT CRLF
   return new Uint8Array([
-    ...new TextEncoder().encode(trojanHash), 13, 10, 1,
+    ...new TextEncoder().encode(trojanHash), 13, 10,
+    1, 1, ...ip,
     (port >> 8) & 255, port & 255,
-    1, ...ip,
+    13, 10,
   ]);
 }
 
@@ -252,6 +254,22 @@ test('a Blob frame is decoded (wrangler local delivers Blobs)', async () => {
     const bytes = joinSent(ws);
     assert.deepEqual([bytes[0], bytes[1]], [0, 0]);
     assert.equal(bytes.slice(2, 7).toString(), 'HELLO');
+  } finally {
+    target.close();
+  }
+});
+
+test('the Trojan trailing CRLF is not forwarded as payload', async () => {
+  const { server: target, port, received } = await startTarget();
+  try {
+    const res = await worker.fetch(request(), makeEnv(), { waitUntil() {} });
+    assert.equal(res.upgradeStatus, 101);
+    const ws = lastServer;
+
+    const frame = new Uint8Array([...trojanHeader(port), ...new TextEncoder().encode('GET / HTTP/1.1\r\n\r\n')]);
+    ws.emit('message', { data: frame });
+    await waitFor(() => received.length > 0);
+    assert.equal(Buffer.concat(received).toString(), 'GET / HTTP/1.1\r\n\r\n');
   } finally {
     target.close();
   }
