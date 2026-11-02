@@ -311,33 +311,6 @@ function hostOf(request, env) {
   return env.PANEL_HOST || new URL(request.url).host;
 }
 
-function vlessLink(user, host) {
-  const q = new URLSearchParams({
-    encryption: 'none',
-    security: 'tls',
-    sni: host,
-    fp: 'chrome',
-    alpn: 'http/1.1',
-    type: 'ws',
-    host: host,
-    path: '/ws?ed=2048',
-  });
-  return `vless://${user.uuid}@${host}:443?${q.toString()}#${encodeURIComponent(user.name)}`;
-}
-
-function trojanLink(user, host) {
-  const q = new URLSearchParams({
-    security: 'tls',
-    sni: host,
-    fp: 'chrome',
-    alpn: 'http/1.1',
-    type: 'ws',
-    host: host,
-    path: '/ws?ed=2048',
-  });
-  return `trojan://${user.trojan_password}@${host}:443?${q.toString()}#${encodeURIComponent(user.name)}-trojan`;
-}
-
 async function handleSub(request, env, token) {
   const user = await DB.bySubToken(env, token);
   // Expired, over-quota or over-request users must not keep receiving working links: the panel
