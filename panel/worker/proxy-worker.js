@@ -13,7 +13,7 @@ import { connect } from 'cloudflare:sockets';
 const dec = new TextDecoder();
 const enc = new TextEncoder();
 
-import { isBlocked, nextActiveIps, firstConnectExpiry } from './lib.js';
+import { isBlocked, nextActiveIps, firstConnectExpiry, VLESS_RESPONSE_HEADER } from './lib.js';
 
 const HEX56 = /^[0-9a-f]{56}$/i;
 
@@ -179,11 +179,13 @@ export default {
       flush();
     };
 
-    const dial = async (host, port, first) => {
+    const dial = async (host, port, first, isVless) => {
       try {
         remote = connect({ hostname: host, port });
         writer = remote.writable.getWriter();
         await remote.opened;
+        // The client's VLESS decoder reads this before any payload. Trojan has no response header.
+        if (isVless) server.send(VLESS_RESPONSE_HEADER);
         remote.readable.pipeTo(new WritableStream({
           write(chunk) {
             down += chunk.byteLength;
@@ -243,7 +245,7 @@ export default {
           p += 16;
         }
         if (!host || !port) return closeAll();
-        return dial(host, port, buf.slice(need));
+        return dial(host, port, buf.slice(need), true);
       }
 
       // Trojan
@@ -275,7 +277,7 @@ export default {
         host = parts.join(':');
       }
       if (!host || !port) return closeAll();
-      return dial(host, port, buf.slice(need));
+      return dial(host, port, buf.slice(need), false);
     };
 
     /**

@@ -196,6 +196,15 @@ export function profileTitle(name) {
   return 'base64:' + b64(String(name || ''));
 }
 
+/**
+ * VLESS response header: version (0) followed by a zero-length addons block.
+ *
+ * Xray's client calls DecodeResponseHeader() before reading any payload and aborts with
+ * "unexpected response version" if the first byte is not 0. A proxy that pipes the destination's
+ * bytes straight through therefore never carries a single VLESS connection.
+ */
+export const VLESS_RESPONSE_HEADER = new Uint8Array([0, 0]);
+
 /* ───────────── quota rules (shared with the node worker) ───────────── */
 
 /** Every reason a user must not be allowed to connect. Pure so it is testable off-Workers. */
