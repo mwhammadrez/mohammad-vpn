@@ -119,7 +119,7 @@ fs.writeFileSync(modulePath, source);
 const worker = (await import(modulePath)).default;
 
 const uuid = '5ddd358d-b923-4a29-ac93-e8247b29404e';
-const password = '6f83b4aa4b66a37715de';
+const password = 'test-trojan-password-0001';
 const uuidBytes = new Uint8Array(uuid.replace(/-/g, '').match(/../g).map((h) => parseInt(h, 16)));
 // Trojan sends the sha224 digest as 56 ASCII hex characters, not as raw bytes.
 const trojanHash = crypto.createHash('sha224').update(password).digest('hex');
