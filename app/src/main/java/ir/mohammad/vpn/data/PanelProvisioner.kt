@@ -23,17 +23,20 @@ class PanelProvisioner(private val context: Context, token: String) {
     data class Created(val account: PanelApi.Account, val accountName: String, val database: String)
 
     /**
-     * @param name     worker name; becomes `<name>` and `<name>-node`
-     * @param password panel password, hashed into the database before the worker ever serves a request
-     * @param domain   a zone already on this Cloudflare account (for example `yutei.ir`). When given,
-     *                 the panel is published on `<name>.<domain>` and the node on `<name>-node.<domain>`
-     *                 instead of `*.workers.dev`, which is filtered inside Iran. Empty keeps workers.dev.
-     * @param onStep   called with the index of each step as it starts; the list is [STEPS]
+     * @param name       worker name; becomes `<name>` and `<name>-node`
+     * @param password   panel password, hashed into the database before the worker ever serves a request
+     * @param domain     site already on this Cloudflare account (for example `yutei.ir`) for the panel.
+     *                   Empty publishes the panel on `*.workers.dev`.
+     * @param nodeDomain site for the proxy node; defaults to [domain]. Kept separate because a zone can
+     *                   open over plain HTTP while Cloudflare blocks WebSocket upgrades on it — the panel
+     *                   then works there but its configs cannot, so the node belongs on a healthy zone.
+     * @param onStep     called with the index of each step as it starts; the list is [STEPS]
      */
     fun provision(
         name: String,
         password: String,
         domain: String? = null,
+        nodeDomain: String? = null,
         onStep: (Int) -> Unit = { },
     ): Created {
         if (password.length < 6) throw CfException("The panel password needs at least 6 characters")
@@ -106,20 +109,28 @@ class PanelProvisioner(private val context: Context, token: String) {
             var base = "https://$script.$subdomain.workers.dev"
             var nodeUrl = "https://$nodeName.$subdomain.workers.dev"
 
-            val custom = domain?.trim()?.trim('.')?.lowercase().orEmpty()
-            if (custom.isNotEmpty()) {
-                // A subdomain of a zone this token can already see. Anything else would need the user
-                // to add the site to the account first, and guessing a hostname would publish a panel
-                // on a domain they do not control.
-                val zone = cf.zones().firstOrNull { custom == it.name || custom.endsWith(".${it.name}") }
+            // Anything but a site already on this account would need the user to add it first; guessing
+            // a hostname would publish their panel on a domain they do not control.
+            fun zoneFor(wanted: String): CloudflareApi.Zone =
+                cf.zones().firstOrNull { wanted == it.name || wanted.endsWith(".${it.name}") }
                     ?: throw CfException(
-                        "\"$custom\" is not a site on this Cloudflare account. Add it under Web sites, " +
+                        "\"$wanted\" is not a site on this Cloudflare account. Add it under Web sites, " +
                             "or leave the domain field empty and use the workers.dev address.",
                     )
 
+            val panelDomain = domain?.trim()?.trim('.')?.lowercase().orEmpty()
+            val nodeZone = nodeDomain?.trim()?.trim('.')?.lowercase().orEmpty().ifEmpty { panelDomain }
+
+            if (panelDomain.isNotEmpty()) {
+                val zone = zoneFor(panelDomain)
                 val panelHost = "$script.${zone.name}"
-                val nodeHost = "$nodeName.${zone.name}"
                 cf.attachWorkerHost(zone.id, panelHost, script)
+                base = "https://$panelHost"
+            }
+
+            if (nodeZone.isNotEmpty()) {
+                val zone = zoneFor(nodeZone)
+                val nodeHost = "$nodeName.${zone.name}"
                 cf.attachWorkerHost(zone.id, nodeHost, nodeName)
 
                 // The panel builds its subscription links from this setting, so it has to name the
@@ -129,8 +140,6 @@ class PanelProvisioner(private val context: Context, token: String) {
                     "INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                     listOf("node_host", nodeHost),
                 )
-
-                base = "https://$panelHost"
                 nodeUrl = "https://$nodeHost"
             }
 

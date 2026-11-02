@@ -127,6 +127,7 @@ fun PanelScreen(
     var panelName by remember { mutableStateOf("mohammad") }
     var panelPassword by remember { mutableStateOf(PanelProvisioner.suggestPassword()) }
     var domain by remember { mutableStateOf("") }
+    var nodeDomain by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(true) }
     var step by remember { mutableStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -206,6 +207,8 @@ fun PanelScreen(
                 onTogglePassword = { passwordVisible = !passwordVisible },
                 domain = domain,
                 onDomain = { domain = it; error = null },
+                nodeDomain = nodeDomain,
+                onNodeDomain = { nodeDomain = it; error = null },
                 panels = panels,
                 onOpenSaved = { entry ->
                     if (PanelStore.select(context, entry.worker)) {
@@ -243,7 +246,7 @@ fun PanelScreen(
                             try {
                                 val created = withContext(Dispatchers.IO) {
                                     PanelProvisioner(context.applicationContext, trimmed)
-                                        .provision(panelName, panelPassword, domain) { index -> step = index }
+                                        .provision(panelName, panelPassword, domain, nodeDomain) { index -> step = index }
                                 }
                                 // A worker created seconds ago is not always answering yet. A first
                                 // failure here used to leave a real panel on Cloudflare that this
@@ -521,6 +524,8 @@ private fun SetupForm(
     onTogglePassword: () -> Unit,
     domain: String,
     onDomain: (String) -> Unit,
+    nodeDomain: String,
+    onNodeDomain: (String) -> Unit,
     panels: List<PanelStore.Entry>,
     onOpenSaved: (PanelStore.Entry) -> Unit,
     onRemoveSaved: (PanelStore.Entry) -> Unit,
@@ -657,6 +662,26 @@ private fun SetupForm(
                         "A site already on this account. The panel becomes <name>.yutei.ir and the node " +
                             "<name>-node.yutei.ir. Leave empty for workers.dev — but that address is " +
                             "filtered inside Iran, so configs made from it will not connect there.",
+                        fontFamily = Chakra, fontSize = 10.sp, color = Palette.TextMuted, lineHeight = 15.sp,
+                    )
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+            )
+
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                colors = panelFieldColors(),
+                value = nodeDomain,
+                onValueChange = onNodeDomain,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Node domain (optional)") },
+                placeholder = { Text("mohammad.indevs.in") },
+                singleLine = true,
+                supportingText = {
+                    Text(
+                        "Where the proxy node lives. Defaults to the panel domain above — change it when " +
+                            "Cloudflare blocks WebSocket on that zone: the panel still opens, but its " +
+                            "configs cannot connect.",
                         fontFamily = Chakra, fontSize = 10.sp, color = Palette.TextMuted, lineHeight = 15.sp,
                     )
                 },
