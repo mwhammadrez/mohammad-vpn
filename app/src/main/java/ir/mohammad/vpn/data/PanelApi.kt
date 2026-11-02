@@ -97,6 +97,34 @@ object PanelApi {
             ?: throw PanelException("Login did not return a session")
     }
 
+    /**
+     * Signs in to a panel that was created moments ago.
+     *
+     * Cloudflare publishes a fresh workers.dev hostname — and a fresh custom-domain route — within a
+     * few seconds, so the first request can still land on 404. Retrying here turns that window into a
+     * short wait instead of a failure that leaves a working panel on Cloudflare that this phone never
+     * saved; the next attempt then hit "worker already exists" with no way forward.
+     *
+     * Returns null when the panel is still not answering; callers keep the account and ask for the
+     * password later rather than losing it.
+     */
+    fun loginWhenReady(baseUrl: String, password: String, attempts: Int = 6, pauseMs: Long = 2_500L): String? {
+        for (attempt in 0 until attempts) {
+            try {
+                return login(baseUrl, password)
+            } catch (e: Exception) {
+                if (attempt == attempts - 1) return null
+                try {
+                    Thread.sleep(pauseMs)
+                } catch (interrupted: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return null
+                }
+            }
+        }
+        return null
+    }
+
     fun users(baseUrl: String, session: String): List<User> {
         val json = open("GET", baseUrl.trimEnd('/') + "/api/users", null, session, READ_TIMEOUT_MS)
         val array = json.optJSONArray("users") ?: return emptyList()

@@ -65,11 +65,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Pre-filled token creation screen: Workers Scripts:Edit + D1:Edit + Account Settings:Read.
- * Opening this link is step one; the user copies the token it generates back into the app.
+ * Pre-filled token creation screen: Workers Scripts:Edit, D1:Edit, Account Settings:Read, and the
+ * three permissions that let the app publish the panel on the user's own domain (Zone:Read, DNS:Edit,
+ * Workers Routes:Edit). Opening this link is step one; the user copies the token back into the app.
  */
 private const val CLOUDFLARE_TOKEN_URL =
-    "https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_settings%22%2C%22type%22%3A%22read%22%7D%5D&accountId=*&zoneId=all&name=Mohammad"
+    "https://dash.cloudflare.com/profile/api-tokens?permissionGroupKeys=%5B%7B%22key%22%3A%22workers_scripts%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22d1%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22account_settings%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22zone%22%2C%22type%22%3A%22read%22%7D%2C%7B%22key%22%3A%22dns%22%2C%22type%22%3A%22edit%22%7D%2C%7B%22key%22%3A%22workers_routes%22%2C%22type%22%3A%22edit%22%7D%5D&accountId=*&zoneId=all&name=Mohammad"
 
 /**
  * The Material default paints entered text with `onSurface`, which on this near-black card comes out
@@ -119,11 +120,13 @@ fun PanelScreen(
     var account by remember { mutableStateOf(PanelStore.account(context)) }
     var session by remember { mutableStateOf(PanelStore.session(context)) }
     var phase by remember { mutableStateOf(if (account != null && session != null) Phase.PANEL else Phase.FORM) }
+    var panels by remember { mutableStateOf(PanelStore.list(context)) }
 
     var token by remember { mutableStateOf("") }
     var tokenVisible by remember { mutableStateOf(false) }
     var panelName by remember { mutableStateOf("mohammad") }
     var panelPassword by remember { mutableStateOf(PanelProvisioner.suggestPassword()) }
+    var domain by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(true) }
     var step by remember { mutableStateOf(0) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -201,6 +204,30 @@ fun PanelScreen(
                 passwordVisible = passwordVisible,
                 onPassword = { panelPassword = it; error = null },
                 onTogglePassword = { passwordVisible = !passwordVisible },
+                domain = domain,
+                onDomain = { domain = it; error = null },
+                panels = panels,
+                onOpenSaved = { entry ->
+                    if (PanelStore.select(context, entry.worker)) {
+                        account = entry.toAccount()
+                        session = entry.session
+                        users = emptyList()
+                        error = null
+                        notice = null
+                        phase = Phase.PANEL
+                        needPassword = entry.session == null
+                    }
+                },
+                onRemoveSaved = { entry ->
+                    PanelStore.remove(context, entry.worker)
+                    panels = PanelStore.list(context)
+                    if (account?.worker == entry.worker) {
+                        account = null
+                        session = null
+                        users = emptyList()
+                        phase = Phase.FORM
+                    }
+                },
                 onOpenCloudflare = { onOpenUrl(CLOUDFLARE_TOKEN_URL) },
                 onConnect = {
                     val trimmed = token.trim()
@@ -216,18 +243,27 @@ fun PanelScreen(
                             try {
                                 val created = withContext(Dispatchers.IO) {
                                     PanelProvisioner(context.applicationContext, trimmed)
-                                        .provision(panelName, panelPassword) { index -> step = index }
+                                        .provision(panelName, panelPassword, domain) { index -> step = index }
                                 }
+                                // A worker created seconds ago is not always answering yet. A first
+                                // failure here used to leave a real panel on Cloudflare that this
+                                // device had not saved — the retry then hit "worker already exists".
                                 val signed = withContext(Dispatchers.IO) {
-                                    PanelApi.login(created.account.baseUrl, created.account.password)
+                                    PanelApi.loginWhenReady(created.account.baseUrl, created.account.password)
                                 }
-                                PanelStore.save(context, created.account, signed)
+                                PanelStore.save(context, created.account, signed.orEmpty())
+                                panels = PanelStore.list(context)
                                 account = created.account
                                 session = signed
                                 token = ""
                                 phase = Phase.PANEL
-                                refresh()
-                                notice = "Panel ready on ${created.accountName}"
+                                if (signed != null) {
+                                    refresh()
+                                    notice = "Panel ready on ${created.accountName}"
+                                } else {
+                                    needPassword = true
+                                    notice = "Panel created — sign in with the password you chose"
+                                }
                             } catch (e: PanelApi.PanelException) {
                                 phase = Phase.FORM
                                 error = e.message ?: "Could not create the panel"
@@ -265,7 +301,8 @@ fun PanelScreen(
                     }
                 },
                 onForget = {
-                    PanelStore.clear(context)
+                    account?.let { PanelStore.remove(context, it.worker) }
+                    panels = PanelStore.list(context)
                     account = null
                     session = null
                     users = emptyList()
@@ -278,6 +315,7 @@ fun PanelScreen(
                 users = users,
                 loading = loading,
                 notice = notice,
+                onShowPanels = { panels = PanelStore.list(context); phase = Phase.FORM },
                 onRefresh = { scope.launch { refresh() } },
                 onCopy = { value ->
                     clipboard.setText(AnnotatedString(value))
@@ -359,7 +397,8 @@ fun PanelScreen(
                             val message = withContext(Dispatchers.IO) {
                                 PanelProvisioner(context.applicationContext, trimmed).delete(worker)
                             }
-                            PanelStore.clear(context)
+                            PanelStore.remove(context, worker)
+                            panels = PanelStore.list(context)
                             account = null
                             session = null
                             users = emptyList()
@@ -376,7 +415,8 @@ fun PanelScreen(
                 }
             },
             onForget = {
-                PanelStore.clear(context)
+                account?.let { PanelStore.remove(context, it.worker) }
+                panels = PanelStore.list(context)
                 account = null
                 session = null
                 users = emptyList()
@@ -415,6 +455,58 @@ private fun hostOf(url: String): String =
 
 /* ───────────────────────── stage 1 ───────────────────────── */
 
+/**
+ * Panels this phone already built, listed above the form.
+ *
+ * Before this existed, opening Mode 3 again only offered "create another": the saved panel was
+ * reachable only while it happened to be the last one and the session had not expired.
+ */
+@Composable
+private fun SavedPanels(
+    panels: List<PanelStore.Entry>,
+    onOpen: (PanelStore.Entry) -> Unit,
+    onRemove: (PanelStore.Entry) -> Unit,
+) {
+    SectionTitle("MY PANELS", "Saved on this phone. Tap one to manage it.")
+    Spacer(Modifier.height(10.dp))
+    panels.forEach { entry ->
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Palette.Card)
+                .border(1.dp, Palette.BorderSubtle, RoundedCornerShape(14.dp))
+                .clickable { onOpen(entry) }
+                .padding(12.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    entry.label,
+                    fontFamily = ChakraSemi, fontSize = 13.sp, color = Palette.TextPrimary,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    if (entry.session != null) "SIGNED IN" else "SIGN IN",
+                    fontFamily = Chakra, fontSize = 9.sp, letterSpacing = 1.sp,
+                    color = if (entry.session != null) Palette.Mint else Palette.Amber,
+                )
+            }
+            Spacer(Modifier.height(3.dp))
+            Text(
+                hostOf(entry.baseUrl),
+                fontFamily = Chakra, fontSize = 10.sp, color = Palette.TextMuted,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                SmallAction("MANAGE", Palette.Mint) { onOpen(entry) }
+                SmallAction("REMOVE", Palette.Rose) { onRemove(entry) }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SetupForm(
     token: String,
@@ -427,12 +519,21 @@ private fun SetupForm(
     passwordVisible: Boolean,
     onPassword: (String) -> Unit,
     onTogglePassword: () -> Unit,
+    domain: String,
+    onDomain: (String) -> Unit,
+    panels: List<PanelStore.Entry>,
+    onOpenSaved: (PanelStore.Entry) -> Unit,
+    onRemoveSaved: (PanelStore.Entry) -> Unit,
     onOpenCloudflare: () -> Unit,
     onConnect: () -> Unit,
     error: String?,
 ) {
     val clipboard = LocalClipboardManager.current
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        if (panels.isNotEmpty()) {
+            SavedPanels(panels = panels, onOpen = onOpenSaved, onRemove = onRemoveSaved)
+            Spacer(Modifier.height(20.dp))
+        }
         SectionTitle("YOUR OWN PANEL", "Run a VLESS/Trojan panel on your Cloudflare account — no server, no VPS.")
 
         Spacer(Modifier.height(16.dp))
@@ -444,7 +545,7 @@ private fun SetupForm(
             }
             Spacer(Modifier.height(8.dp))
             Text(
-                "The link below opens Cloudflare with the three permissions this needs already selected. " +
+                "The link below opens Cloudflare with the permissions this needs already selected. " +
                         "Sign in, press Continue, then Create token and copy it.",
                 fontSize = 12.sp, color = Palette.TextSecondary, lineHeight = 18.sp,
             )
@@ -452,8 +553,9 @@ private fun SetupForm(
             PanelButton(label = "Open Cloudflare", accent = Palette.Mint, onClick = onOpenCloudflare)
             Spacer(Modifier.height(6.dp))
             Text(
-                "Workers Scripts · Edit   +   D1 · Edit   +   Account Settings · Read",
-                fontFamily = Chakra, fontSize = 10.sp, color = Palette.TextMuted,
+                "Workers Scripts · Edit   +   D1 · Edit   +   Account Settings · Read   +   " +
+                    "Zone · Read   +   DNS · Edit   +   Workers Routes · Edit",
+                fontFamily = Chakra, fontSize = 10.sp, color = Palette.TextMuted, lineHeight = 15.sp,
             )
         }
 
@@ -541,6 +643,26 @@ private fun SetupForm(
                 },
             )
 
+            Spacer(Modifier.height(10.dp))
+            OutlinedTextField(
+                colors = panelFieldColors(),
+                value = domain,
+                onValueChange = onDomain,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Your domain (optional)") },
+                placeholder = { Text("yutei.ir") },
+                singleLine = true,
+                supportingText = {
+                    Text(
+                        "A site already on this account. The panel becomes <name>.yutei.ir and the node " +
+                            "<name>-node.yutei.ir. Leave empty for workers.dev — but that address is " +
+                            "filtered inside Iran, so configs made from it will not connect there.",
+                        fontFamily = Chakra, fontSize = 10.sp, color = Palette.TextMuted, lineHeight = 15.sp,
+                    )
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+            )
+
             Spacer(Modifier.height(14.dp))
             PanelButton(label = "CONNECT", accent = Palette.Mint, onClick = onConnect)
             error?.let {
@@ -618,6 +740,7 @@ private fun PanelDashboard(
     users: List<PanelApi.User>,
     loading: Boolean,
     notice: String?,
+    onShowPanels: () -> Unit,
     onRefresh: () -> Unit,
     onCopy: (String) -> Unit,
     onOpenPanel: () -> Unit,
@@ -643,6 +766,7 @@ private fun PanelDashboard(
                     maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
+            TextButton(onClick = onShowPanels) { Text("PANELS", fontFamily = Chakra, fontSize = 10.sp) }
             TextButton(onClick = onOpenPanel) { Text("OPEN", fontFamily = Chakra, fontSize = 10.sp) }
             TextButton(onClick = onDeletePanel) { Text("DELETE", fontFamily = Chakra, fontSize = 10.sp, color = Palette.Rose) }
         }

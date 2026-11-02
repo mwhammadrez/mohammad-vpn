@@ -25,9 +25,17 @@ class PanelProvisioner(private val context: Context, token: String) {
     /**
      * @param name     worker name; becomes `<name>` and `<name>-node`
      * @param password panel password, hashed into the database before the worker ever serves a request
+     * @param domain   a zone already on this Cloudflare account (for example `yutei.ir`). When given,
+     *                 the panel is published on `<name>.<domain>` and the node on `<name>-node.<domain>`
+     *                 instead of `*.workers.dev`, which is filtered inside Iran. Empty keeps workers.dev.
      * @param onStep   called with the index of each step as it starts; the list is [STEPS]
      */
-    fun provision(name: String, password: String, onStep: (Int) -> Unit = { }): Created {
+    fun provision(
+        name: String,
+        password: String,
+        domain: String? = null,
+        onStep: (Int) -> Unit = { },
+    ): Created {
         if (password.length < 6) throw CfException("The panel password needs at least 6 characters")
 
         onStep(0)
@@ -95,12 +103,42 @@ class PanelProvisioner(private val context: Context, token: String) {
             onStep(6)
             cf.enableSubdomain(account.id, script)
 
-            val base = "https://$script.$subdomain.workers.dev"
+            var base = "https://$script.$subdomain.workers.dev"
+            var nodeUrl = "https://$nodeName.$subdomain.workers.dev"
+
+            val custom = domain?.trim()?.trim('.')?.lowercase().orEmpty()
+            if (custom.isNotEmpty()) {
+                // A subdomain of a zone this token can already see. Anything else would need the user
+                // to add the site to the account first, and guessing a hostname would publish a panel
+                // on a domain they do not control.
+                val zone = cf.zones().firstOrNull { custom == it.name || custom.endsWith(".${it.name}") }
+                    ?: throw CfException(
+                        "\"$custom\" is not a site on this Cloudflare account. Add it under Web sites, " +
+                            "or leave the domain field empty and use the workers.dev address.",
+                    )
+
+                val panelHost = "$script.${zone.name}"
+                val nodeHost = "$nodeName.${zone.name}"
+                cf.attachWorkerHost(zone.id, panelHost, script)
+                cf.attachWorkerHost(zone.id, nodeHost, nodeName)
+
+                // The panel builds its subscription links from this setting, so it has to name the
+                // proxied host; PROXY_HOST still points at workers.dev as a fallback.
+                cf.query(
+                    account.id, database,
+                    "INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    listOf("node_host", nodeHost),
+                )
+
+                base = "https://$panelHost"
+                nodeUrl = "https://$nodeHost"
+            }
+
             return Created(
                 account = PanelApi.Account(
                     panelUrl = "$base/panel",
                     baseUrl = base,
-                    nodeUrl = "https://$nodeName.$subdomain.workers.dev",
+                    nodeUrl = nodeUrl,
                     password = password,
                     worker = script,
                 ),

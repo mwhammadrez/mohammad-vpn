@@ -330,6 +330,14 @@ async function handleRc(request, env) {
   });
 }
 
+/**
+ * Same rule the node applies in `lookup`: expired or over quota counts as blocked.
+ * `/api/overview` called this without ever defining it, so the stats call answered 500.
+ */
+function blocked(u) {
+  return (u.expires_at && u.expires_at < Date.now()) || (u.limit_bytes > 0 && u.used_bytes >= u.limit_bytes);
+}
+
 /* ───────────────────────── API ───────────────────────── */
 
 async function handleApi(request, env, url) {

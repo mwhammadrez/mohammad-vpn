@@ -493,3 +493,5 @@ boot();
 <\/script>
 </html>
 `;var ot={async fetch(n,t,r){try{return await at(n,t,r)}catch(e){return c({error:String(e&&e.stack||e).slice(0,800)},500)}}};async function at(n,t,r){const e=new URL(n.url),i=e.pathname;return await K(t),i==="/"||i===""?new Response(null,{status:302,headers:{location:"/panel"}}):i==="/favicon.ico"?new Response(null,{status:204}):i.startsWith("/sub/")?Q(n,t,i.slice(5)):i==="/rc"?tt(n,t):i==="/panel"||i==="/panel/"?J(et):i.startsWith("/api/")?nt(n,t,e):i==="/health"?c({ok:!0}):new Response("Not Found",{status:404})}export{ot as default};
+
+function blocked(u){return (u.expires_at && u.expires_at < Date.now()) || (u.limit_bytes > 0 && u.used_bytes >= u.limit_bytes);}

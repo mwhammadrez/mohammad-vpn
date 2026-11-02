@@ -137,6 +137,72 @@ class CloudflareApi(private val token: String) {
         call("DELETE", "/accounts/$accountId/workers/scripts/$name?force=true")
     }
 
+    /* ────────────────────── zones, DNS and routes ────────────────────── */
+
+    data class Zone(val id: String, val name: String)
+
+    fun zones(): List<Zone> {
+        val array = call("GET", "/zones?per_page=50").optJSONArray("result") ?: JSONArray()
+        return buildList {
+            for (i in 0 until array.length()) {
+                val item = array.optJSONObject(i) ?: continue
+                val id = item.optString("id").takeIf { it.isNotBlank() } ?: continue
+                add(Zone(id = id, name = item.optString("name")))
+            }
+        }
+    }
+
+    /**
+     * Points [host] at [script] inside [zoneId]: an AAAA `100::` record plus a worker route.
+     *
+     * Both are upserted rather than created blindly. A leftover record from an earlier attempt would
+     * otherwise make the second run fail with "record already exists" — and the panel that failed
+     * half-way is exactly the one the user is trying to replace.
+     */
+    fun attachWorkerHost(zoneId: String, host: String, script: String) {
+        val records = call("GET", "/zones/$zoneId/dns_records?type=AAAA&per_page=100")
+            .optJSONArray("result") ?: JSONArray()
+        var recordId: String? = null
+        for (i in 0 until records.length()) {
+            val item = records.optJSONObject(i) ?: continue
+            if (item.optString("name").equals(host, ignoreCase = true)) {
+                recordId = item.optString("id")
+                break
+            }
+        }
+        if (recordId == null) {
+            call(
+                "POST",
+                "/zones/$zoneId/dns_records",
+                JSONObject()
+                    .put("type", "AAAA")
+                    .put("name", host)
+                    .put("ttl", 1)
+                    .put("content", "100::")
+                    .put("proxied", true),
+            )
+        } else {
+            // Type and name are immutable on an existing record; only the target is rewritten.
+            call("PATCH", "/zones/$zoneId/dns_records/$recordId", JSONObject().put("content", "100::").put("proxied", true))
+        }
+
+        val pattern = "$host/*"
+        val routes = call("GET", "/zones/$zoneId/workers/routes").optJSONArray("result") ?: JSONArray()
+        for (i in 0 until routes.length()) {
+            val item = routes.optJSONObject(i) ?: continue
+            if (item.optString("pattern") != pattern) continue
+            if (item.optString("script") != script) {
+                call(
+                    "PUT",
+                    "/zones/$zoneId/workers/routes/${item.optString("id")}",
+                    JSONObject().put("pattern", pattern).put("script", script),
+                )
+            }
+            return
+        }
+        call("POST", "/zones/$zoneId/workers/routes", JSONObject().put("pattern", pattern).put("script", script))
+    }
+
     /* ─────────────────────────── transport ─────────────────────────── */
 
     private fun call(
@@ -196,10 +262,12 @@ class CloudflareApi(private val token: String) {
 
         return when {
             status == 401 || code == 10000 ->
-                "Cloudflare rejected the token. Create a new one with Workers Scripts: Edit, D1: Edit and Account Settings: Read."
+                "Cloudflare rejected the token. Create a new one with Workers Scripts: Edit, D1: Edit and " +
+                    "Account Settings: Read — plus Zone: Read, DNS: Edit and Workers Routes: Edit if you attach your own domain."
             code == 9109 || status == 403 ->
                 "This token is missing a permission Cloudflare needs (code ${if (code != 0) code else status}). " +
-                    "It must have Workers Scripts: Edit, D1: Edit and Account Settings: Read."
+                    "It must have Workers Scripts: Edit, D1: Edit and Account Settings: Read — plus Zone: Read, " +
+                    "DNS: Edit and Workers Routes: Edit if you attach your own domain."
             code == 10016 -> "A script with that name already exists. Pick another panel name."
             code == 10021 || code == 1001 ->
                 "Cloudflare refused the script: ${message.ifBlank { "syntax error" }}"
