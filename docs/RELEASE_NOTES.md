@@ -5,6 +5,19 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.16.2 — the health probe no longer tests Cloudflare from Cloudflare
+
+### Fixed
+- **The tunnel was declared dead about a minute after connecting.** The service's health probe did a
+  SOCKS CONNECT to `1.1.1.1:443`. A Workers node cannot reach Cloudflare addresses (`connect()` is
+  refused), so every probe failed and the reconnect loop tore down a working session — typically
+  after a few kilobytes. The probe now targets `8.8.8.8:443`.
+- **The delay test waited on `cp.cloudflare.com` first**, which the same restriction blocks. The
+  targets are now `www.gstatic.com` and `neverssl.com`, both reachable from a Worker.
+
+### Verified
+- 368 Android tests; the endpoint guard accepts the new probe hosts.
+
 ## 0.16.1 — DNS that ordinary clients can use
 
 ### Fixed

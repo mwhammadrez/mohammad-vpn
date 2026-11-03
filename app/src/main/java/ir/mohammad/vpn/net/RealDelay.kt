@@ -171,8 +171,8 @@ object RealDelay {
      * the server's side of the world, which is where the user's traffic actually goes.
      */
     private val TARGETS = listOf(
-        "cp.cloudflare.com" to 80,
         "www.gstatic.com" to 80,
+        "neverssl.com" to 80,
     )
 
     private fun withTemporaryCore(
