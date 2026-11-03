@@ -5,6 +5,18 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.16.3 — MTU is a per-config setting
+
+### Added
+- **`mtu=` in share links.** The panel can set 1200–1500 per user (0 keeps the app default) and the
+  app applies it to both the TUN and the Xray outbound. Mobile carriers whose path MTU is 1280 were
+  fragmenting or stalling a 1400-byte TUN; this is the lever for those networks.
+- Panel user form: an MTU field, carried into every link and read by `ConfigUri` with the same
+  `MtuPolicy` bounds the rest of the app uses.
+
+### Verified
+- 47 panel tests, 369 Android tests.
+
 ## 0.16.2 — the health probe no longer tests Cloudflare from Cloudflare
 
 ### Fixed

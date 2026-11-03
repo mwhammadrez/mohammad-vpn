@@ -349,6 +349,7 @@ dialog .dlg-foot{padding:12px 20px 18px;display:flex;gap:8px;justify-content:fle
             <div><label class="fld">فاصله (ms)</label><input id="u-frag-int" placeholder="1-1" dir="ltr"></div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px">
+            <div><label class="fld">MTU (0 = پیش‌فرض)</label><input id="u-mtu" type="number" min="0" max="1500" value="0"></div>
             <div><label class="fld">ریست حجم (روز)</label><input id="u-reset-vol" type="number" min="0" placeholder="۰"></div>
             <div><label class="fld">ریست درخواست (روز)</label><input id="u-reset-req" type="number" min="0" placeholder="۰"></div>
             <div style="grid-column:span 2"><label class="fld">یادداشت</label><input id="u-note" placeholder="اختیاری"></div>
@@ -535,6 +536,9 @@ trojan://..." style="margin-top:10px"></textarea>
       </select></div>
       <div><label class="fld">طول فرگمنت</label><input id="e-frag-len" placeholder="100-200" dir="ltr"></div>
       <div><label class="fld">فاصله (ms)</label><input id="e-frag-int" placeholder="1-1" dir="ltr"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:10px">
+      <div><label class="fld">MTU (0 = پیش‌فرض)</label><input id="e-mtu" type="number" min="0" max="1500"></div>
     </div>
     <div><label class="fld">یادداشت</label><input id="e-note" placeholder="اختیاری"></div>
     <p class="err" id="e-msg"></p>
@@ -748,6 +752,7 @@ async function addUser(btn){
     auto_reset_vol_days: Number(el('u-reset-vol').value || 0),
     auto_reset_req_days: Number(el('u-reset-req').value || 0),
     ip_count: Number(el('u-ip-count').value || 1),
+    mtu: Number(el('u-mtu').value || 0),
     frag_len: el('u-frag-len').value.trim(),
     frag_int: el('u-frag-int').value.trim(),
     note: el('u-note').value
@@ -757,6 +762,7 @@ async function addUser(btn){
   if (r.ok) {
     ['u-name','u-gb','u-days','u-req','u-ip-limit','u-reset-vol','u-reset-req','u-note','u-frag-len','u-frag-int'].forEach(function(id){ el(id).value = ''; });
     el('u-ip-count').value = '1';
+    el('u-mtu').value = '0';
     el('u-frag-preset').value = '';
     el('u-start').checked = false;
     toast('کاربر ساخته شد');
@@ -781,6 +787,7 @@ function openUser(id){
   el('e-proto').value = u.connection_type || 'both';
   el('e-pool').value = u.ip_pool_id ? String(u.ip_pool_id) : '';
   el('e-ip-count').value = u.ip_count || 1;
+  el('e-mtu').value = u.mtu || 0;
   el('e-frag-len').value = u.frag_len || '';
   el('e-frag-int').value = u.frag_int || '';
   el('e-frag-preset').value = fragPresetOf(u.frag_len, u.frag_int);
@@ -805,6 +812,7 @@ async function saveEdit(btn){
   body.protocol = el('e-proto').value;
   body.ip_pool_id = el('e-pool').value ? Number(el('e-pool').value) : null;
   body.ip_count = Number(el('e-ip-count').value || 1);
+  body.mtu = Number(el('e-mtu').value || 0);
   body.frag_len = el('e-frag-len').value.trim();
   body.frag_int = el('e-frag-int').value.trim();
   body.note = el('e-note').value;

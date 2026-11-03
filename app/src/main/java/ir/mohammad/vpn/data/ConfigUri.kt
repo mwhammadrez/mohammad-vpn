@@ -3,6 +3,7 @@ package ir.mohammad.vpn.data
 import android.net.Uri
 import ir.mohammad.vpn.core.DnsConfig
 import ir.mohammad.vpn.core.FinalMaskRules
+import ir.mohammad.vpn.core.MtuPolicy
 import ir.mohammad.vpn.core.RealityRules
 import ir.mohammad.vpn.core.TlsFingerprint
 import org.json.JSONArray
@@ -111,6 +112,7 @@ object ConfigUri {
             fingerprint = fingerprintFor(security, param(q, "fp"), warnings),
             flow = param(q, "flow"),
             finalMask = finalMask(param(q, "fm"), security, warnings),
+            mtu = mtuParam(q),
         )
         return Parsed(profile, warnings)
     }
@@ -156,6 +158,7 @@ object ConfigUri {
                 awg = null,
                 fingerprint = fingerprintFor(security, param(q, "fp"), warnings),
                 finalMask = finalMask(param(q, "fm"), security, warnings),
+                mtu = mtuParam(q),
             ),
             warnings,
         )
@@ -546,6 +549,10 @@ object ConfigUri {
         }
         return mask
     }
+
+    /** `mtu=` is our own link parameter; clients that do not know it ignore it. */
+    private fun mtuParam(q: Map<String, String>): Int? =
+        param(q, "mtu")?.toIntOrNull()?.takeIf { MtuPolicy.isValid(it) }
 
     private fun fingerprintFor(security: String, fp: String?, warnings: MutableList<String>): String? {
         if (security == "none") return null

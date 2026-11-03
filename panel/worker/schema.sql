@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS users (
   frag_len               TEXT,                 -- طول فرگمنت ضدDPI (مثلاً 100-200)
   frag_int               TEXT,                 -- فاصله فرگمنت (مثلاً 1-1)
   ip_count               INTEGER NOT NULL DEFAULT 1,  -- چند IP در لینک‌ها
+  mtu                    INTEGER NOT NULL DEFAULT 0,  -- 0 = پیش‌فرض اپ
   created_at             INTEGER NOT NULL,
   last_active            INTEGER
 );

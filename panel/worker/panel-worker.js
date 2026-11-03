@@ -122,8 +122,8 @@ const DB = {
     await env.DB.prepare(
       'INSERT INTO users (name, uuid, sub_token, trojan_password, trojan_hash, limit_bytes, limit_req, ' +
         'ip_limit, expires_at, expiry_days, start_on_first_connect, auto_reset_vol_days, ' +
-        'auto_reset_req_days, connection_type, ip_pool_id, note, frag_len, frag_int, ip_count, enabled, created_at) ' +
-        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)',
+        'auto_reset_req_days, connection_type, ip_pool_id, note, frag_len, frag_int, ip_count, mtu, enabled, created_at) ' +
+        'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)',
     )
       .bind(
         name, uuid, sub, password, sha224hex(password),
@@ -138,6 +138,7 @@ const DB = {
         String(opts.frag_len || '').trim().slice(0, 20) || null,
         String(opts.frag_int || '').trim().slice(0, 20) || null,
         Math.max(1, Math.min(8, Number(opts.ip_count) || 1)),
+        Math.max(0, Math.min(1500, Number(opts.mtu) || 0)),
         now,
       )
       .run();
@@ -208,6 +209,7 @@ function ensureSchema(env) {
         ['frag_len', 'TEXT'],
         ['frag_int', 'TEXT'],
         ['ip_count', 'INTEGER NOT NULL DEFAULT 1'],
+        ['mtu', 'INTEGER NOT NULL DEFAULT 0'],
       ];
       for (const [name, type] of additions) {
         if (!have.has(name)) {
@@ -571,6 +573,7 @@ async function handleApi(request, env, url) {
       frag_len: b.frag_len,
       frag_int: b.frag_int,
       ip_count: b.ip_count,
+      mtu: b.mtu,
     });
     return json({ ok: true });
   }
@@ -614,6 +617,7 @@ async function handleApi(request, env, url) {
       const fragLen = b.frag_len === undefined ? user.frag_len : String(b.frag_len || '').trim().slice(0, 20) || null;
       const fragInt = b.frag_int === undefined ? user.frag_int : String(b.frag_int || '').trim().slice(0, 20) || null;
       const ipCount = b.ip_count === undefined ? user.ip_count : Math.max(1, Math.min(8, Number(b.ip_count) || 1));
+      const mtu = b.mtu === undefined ? user.mtu : Math.max(0, Math.min(1500, Number(b.mtu) || 0));
       let name = user.name;
       if (b.name !== undefined) {
         name = String(b.name).trim();
@@ -625,11 +629,11 @@ async function handleApi(request, env, url) {
         'UPDATE users SET name = ?, enabled = ?, limit_bytes = ?, limit_req = ?, ip_limit = ?, ' +
           'expires_at = ?, expiry_days = ?, start_on_first_connect = ?, auto_reset_vol_days = ?, ' +
           'auto_reset_req_days = ?, connection_type = ?, ip_pool_id = ?, auto_rotate_ip = ?, note = ?, ' +
-          'frag_len = ?, frag_int = ?, ip_count = ? WHERE id = ?',
+          'frag_len = ?, frag_int = ?, ip_count = ?, mtu = ? WHERE id = ?',
       )
         .bind(
           name, enabled, limit, limitReq, ipLimit, expires, days, startOnFirst, resetVol, resetReq,
-          protocol, poolId, autoRotate, note, fragLen, fragInt, ipCount, id,
+          protocol, poolId, autoRotate, note, fragLen, fragInt, ipCount, mtu, id,
         )
         .run();
       return json({ ok: true });

@@ -94,12 +94,14 @@ export function vlessLink(user, host, ip, label = user.name) {
     sni: host,
     host,
   }), user);
+  if (Number(user.mtu) > 0) q.set('mtu', String(user.mtu));
   return `vless://${user.uuid}@${address}:443?${q.toString()}#${encodeURIComponent(label)}`;
 }
 
 export function trojanLink(user, host, ip, label = `${user.name}-trojan`) {
   const address = ip || host;
   const q = addFragment(new URLSearchParams({ ...WS_QUERY, sni: host, host }), user);
+  if (Number(user.mtu) > 0) q.set('mtu', String(user.mtu));
   return `trojan://${user.trojan_password}@${address}:443?${q.toString()}#${encodeURIComponent(label)}`;
 }
 

@@ -212,3 +212,10 @@ test('the status page renders usage without leaking anything else', () => {
   assert.match(html, /50%/);
   assert.match(html, new RegExp(ip.replace(/\./g, '\\.')));
 });
+
+test('a per-user MTU travels in the link', () => {
+  const link = vlessLink({ ...user, mtu: 1280 }, host, ip);
+  const query = new URLSearchParams(link.split('?')[1].split('#')[0]);
+  assert.equal(query.get('mtu'), '1280');
+  assert.equal(new URLSearchParams(vlessLink(user, host, ip).split('?')[1].split('#')[0]).get('mtu'), null);
+});

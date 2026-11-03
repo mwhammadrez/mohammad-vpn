@@ -51,6 +51,21 @@ class ConfigUriTest {
     }
 
     @Test
+    fun `mtu from the link is kept within the policy`() {
+        val ok = ConfigUri.parse(
+            "vless://11111111-2222-3333-4444-555555555555@edge.example.com:443" +
+                "?security=tls&type=ws&path=%2Fws&mtu=1280",
+        )
+        assertEquals(1280, ok.profile.mtu)
+
+        val bad = ConfigUri.parse(
+            "vless://11111111-2222-3333-4444-555555555555@edge.example.com:443" +
+                "?security=tls&type=ws&path=%2Fws&mtu=9000",
+        )
+        assertNull(bad.profile.mtu)
+    }
+
+    @Test
     fun `vless over tls keeps sni and alpn and defaults the fingerprint`() {
         val parsed = ConfigUri.parse(
             "vless://11111111-2222-3333-4444-555555555555@a.example.com:443" +
