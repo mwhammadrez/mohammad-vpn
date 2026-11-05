@@ -117,7 +117,7 @@ object PanelApi {
      * Returns null when the panel is still not answering; callers keep the account and ask for the
      * password later rather than losing it.
      */
-    fun loginWhenReady(baseUrl: String, password: String, attempts: Int = 6, pauseMs: Long = 2_500L): String? {
+    fun loginWhenReady(baseUrl: String, password: String, attempts: Int = 12, pauseMs: Long = 2_500L): String? {
         for (attempt in 0 until attempts) {
             try {
                 return login(baseUrl, password)

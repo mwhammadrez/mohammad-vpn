@@ -243,8 +243,8 @@ fun PanelScreen(
                     val trimmed = token.trim()
                     if (trimmed.length < 20) {
                         error = "That does not look like a Cloudflare token"
-                    } else if (panelPassword.length < 6) {
-                        error = "The panel password needs at least 6 characters"
+                    } else if (panelPassword.length < 8) {
+                        error = "The panel password needs at least 8 characters"
                     } else {
                         error = null
                         step = 0

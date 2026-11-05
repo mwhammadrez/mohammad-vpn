@@ -13,7 +13,7 @@ import { connect } from 'cloudflare:sockets';
 const dec = new TextDecoder();
 const enc = new TextEncoder();
 
-import { isBlocked, nextActiveIps, firstConnectExpiry } from './lib.js';
+import { isBlocked, nextActiveIps, firstConnectExpiry, VLESS_RESPONSE_HEADER } from './lib.js';
 
 const HEX56 = /^[0-9a-f]{56}$/i;
 
@@ -106,16 +106,20 @@ function headerLength(buf) {
   if (!HEX56.test(dec.decode(buf.slice(0, 56)))) return -1;
   let p = 56;
   while (p < buf.length && (buf[p] === 13 || buf[p] === 10)) p++;
-  if (buf.length < p + 4) return null;
-  const atyp = buf[p + 3];
+  // Trojan request layout is CMD | ATYP | ADDR | PORT | CRLF — not the VLESS order.
+  if (buf.length < p + 2) return null;
+  const atyp = buf[p + 1];
   let addrLen;
   if (atyp === 1) addrLen = 4;
   else if (atyp === 3) {
-    if (buf.length < p + 5) return null;
-    addrLen = 1 + buf[p + 4];
+    if (buf.length < p + 3) return null;
+    addrLen = 1 + buf[p + 2];
   } else if (atyp === 4) addrLen = 16;
   else return -1;
-  return p + 4 + addrLen;
+  const end = p + 2 + addrLen + 2 + 2; // cmd+atyp, addr, port, trailing CRLF
+  if (buf.length < end) return null;
+  if (buf[end - 2] !== 13 || buf[end - 1] !== 10) return -1;
+  return end;
 }
 
 function concat(a, b) {
@@ -158,12 +162,19 @@ export default {
     // here and exhaust the isolate's memory, taking every other connection on the node with it.
     let queuedBytes = 0;
     const MAX_QUEUED_BYTES = 1024 * 1024;
+    // D1 allows ~100k row writes a day on the free plan; flushing every 64 KB burned that budget
+    // after ~6 GB of traffic. 5 MB keeps a long download to a handful of writes.
+    const FLUSH_BYTES = 5 * 1024 * 1024;
 
     const flush = () => {
       if (!user || !(up + down)) return;
       const n = up + down;
       up = 0;
       down = 0;
+      // Keep the row in memory in step with D1. The data-path quota check adds `up + down` to
+      // `user.used_bytes`; leaving it stale after a flush let a 6 MB allowance carry ~11 MB before
+      // the next check noticed.
+      user.used_bytes += n;
       ctx.waitUntil(
         env.DB.prepare('UPDATE users SET used_bytes = used_bytes + ?, last_active = ? WHERE id = ?')
           .bind(n, Date.now(), user.id).run().catch(() => {}),
@@ -179,11 +190,19 @@ export default {
       flush();
     };
 
-    const dial = async (host, port, first) => {
+    const dial = async (host, port, first, isVless, dns = false) => {
       try {
-        remote = connect({ hostname: host, port });
-        writer = remote.writable.getWriter();
+        // VLESS can carry UDP. Workers cannot send UDP, but DNS over TCP uses the same 2-byte
+        // length framing, so a DNS association is bridged to 8.8.8.8:53 instead of being dropped.
+        // Cloudflare's own resolvers are mapped away because connect() to Cloudflare is refused.
+        const target = dns && (host === '1.1.1.1' || host === '1.0.0.1') ? '8.8.8.8' : host;
+        remote = connect({ hostname: target, port: dns ? 53 : port });
+        // Take the writer only after the socket is open. Locking the writable stream first makes
+        // workerd (and therefore production) wait for a writer that the connection is waiting on.
         await remote.opened;
+        writer = remote.writable.getWriter();
+        // The client's VLESS decoder reads this before any payload. Trojan has no response header.
+        if (isVless) server.send(VLESS_RESPONSE_HEADER);
         remote.readable.pipeTo(new WritableStream({
           write(chunk) {
             down += chunk.byteLength;
@@ -193,7 +212,7 @@ export default {
             if (user && user.limit_bytes > 0 && user.used_bytes + up + down >= user.limit_bytes) {
               return closeAll();
             }
-            if (down > 65536) flush();
+            if (down >= FLUSH_BYTES) flush();
           },
           close() { closeAll(); },
         })).catch(() => closeAll());
@@ -223,7 +242,8 @@ export default {
         if (!user) return closeAll();
 
         let p = 18 + body[17];
-        if (body[p] !== 1) return closeAll(); // only CONNECT; UDP is not proxied
+        const cmd = body[p];
+        if (cmd !== 1 && cmd !== 2) return closeAll(); // CONNECT or UDP (DNS only)
         p += 1;
         const port = (body[p] << 8) | body[p + 1];
         p += 2;
@@ -243,7 +263,12 @@ export default {
           p += 16;
         }
         if (!host || !port) return closeAll();
-        return dial(host, port, buf.slice(need));
+        if (cmd === 2) {
+          // Full UDP is impossible on Workers; DNS is the one association that matters in practice.
+          if (port !== 53) return closeAll();
+          return dial(host, port, buf.slice(need), true, true);
+        }
+        return dial(host, port, buf.slice(need), true);
       }
 
       // Trojan
@@ -251,10 +276,8 @@ export default {
       if (!user) return closeAll();
       let p = 56;
       while (body[p] === 13 || body[p] === 10) p++;
-      if (body[p] !== 1) return closeAll();
+      if (body[p] !== 1) return closeAll(); // CONNECT only
       p += 1;
-      const port = (body[p] << 8) | body[p + 1];
-      p += 2;
       const atyp = body[p];
       p += 1;
       let host;
@@ -266,16 +289,21 @@ export default {
         p += 1;
         host = dec.decode(body.slice(p, p + len));
         p += len;
-      } else {
+      } else if (atyp === 4) {
         const parts = [];
         for (let i = 0; i < 8; i++) {
           parts.push(((body[p] << 8) | body[p + 1]).toString(16));
           p += 2;
         }
         host = parts.join(':');
+      } else {
+        return closeAll();
       }
+      const port = (body[p] << 8) | body[p + 1];
+      p += 2;
+      if (body[p] === 13 && body[p + 1] === 10) p += 2; // trailing CRLF
       if (!host || !port) return closeAll();
-      return dial(host, port, buf.slice(need));
+      return dial(host, port, buf.slice(need), false);
     };
 
     /**
@@ -318,11 +346,19 @@ export default {
     server.addEventListener('message', async (event) => {
       try {
         const data = event.data;
-        const bytes = typeof data === 'string' ? enc.encode(data) : new Uint8Array(data);
+        // Production delivers an ArrayBuffer; wrangler's local bridge can deliver a Blob, and
+        // `new Uint8Array(blob)` is silently empty. Accept every shape a runtime may hand over.
+        const bytes = typeof data === 'string'
+          ? enc.encode(data)
+          : data instanceof ArrayBuffer
+            ? new Uint8Array(data)
+            : ArrayBuffer.isView(data)
+              ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+              : new Uint8Array(await data.arrayBuffer());
         if (!ready) return feedSerial(bytes);
         up += bytes.byteLength;
         await writer.write(bytes);
-        if (up > 65536) flush();
+        if (up >= FLUSH_BYTES) flush();
       } catch {
         closeAll();
       }

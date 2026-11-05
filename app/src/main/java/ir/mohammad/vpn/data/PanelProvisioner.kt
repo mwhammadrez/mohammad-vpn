@@ -39,7 +39,7 @@ class PanelProvisioner(private val context: Context, token: String) {
         nodeDomain: String? = null,
         onStep: (Int) -> Unit = { },
     ): Created {
-        if (password.length < 6) throw CfException("The panel password needs at least 6 characters")
+        if (password.length < 8) throw CfException("The panel password needs at least 8 characters")
 
         onStep(0)
         val script = normalizeName(name)
@@ -53,12 +53,9 @@ class PanelProvisioner(private val context: Context, token: String) {
             throw CfException("A worker named \"$script\" already exists in this account. Choose another panel name.")
         }
 
-        // Checked before anything is created: without it the workers have no address to live at.
-        val subdomain = cf.workersSubdomain(account.id)
-            ?: throw CfException(
-                "This account has no workers.dev subdomain yet. Open Workers & Pages in the Cloudflare dashboard " +
-                    "once and set a subdomain, then come back.",
-            )
+        // Without a workers.dev name the workers have no address to live at. Accounts that never
+        // opened the Workers dashboard have none, so register one instead of sending the user away.
+        val subdomain = cf.workersSubdomain(account.id) ?: ensureSubdomain(cf, account.id, script)
 
         var database: String? = null
         var node = false
@@ -72,6 +69,14 @@ class PanelProvisioner(private val context: Context, token: String) {
             for (statement in statements(readAsset("panel/schema.sql"))) {
                 cf.query(account.id, database, statement)
             }
+
+            // A fresh panel should work without the owner hunting for edge IPs: with an empty pool
+            // every config falls back to the domain, which is exactly what is blocked first in Iran.
+            cf.query(
+                account.id, database,
+                "INSERT INTO ip_pools (name, operator, ips, enabled, created_at) VALUES (?,?,?,?,?)",
+                listOf("Clean IPs", "any", readAsset("panel/clean_ips.txt").trim(), 1, System.currentTimeMillis()),
+            )
 
             onStep(3)
             cf.query(
@@ -198,6 +203,23 @@ class PanelProvisioner(private val context: Context, token: String) {
         return if (database != null) "$name + $name-node + database deleted" else "$name + $name-node deleted"
     }
 
+    /**
+     * Registers a workers.dev name. A taken candidate answers 4xx and is retried; auth errors are not
+     * retried, because every attempt would fail the same way.
+     */
+    private fun ensureSubdomain(cf: CloudflareApi, accountId: String, script: String): String {
+        repeat(4) {
+            val candidate = subdomainCandidate(script, randomHex(3))
+            try {
+                return cf.createSubdomain(accountId, candidate)
+            } catch (e: CfException) {
+                if (e.status in 400..499 && e.status != 401 && e.status != 403) return@repeat
+                throw e
+            }
+        }
+        throw CfException("Cloudflare did not accept a workers.dev subdomain for this account.")
+    }
+
     private fun bindings(database: String): JSONArray = JSONArray().put(
         JSONObject().put("type", "d1").put("name", "DB").put("id", database),
     )
@@ -219,6 +241,16 @@ class PanelProvisioner(private val context: Context, token: String) {
         )
 
         private val NAME_RE = Regex("^[a-z0-9]([a-z0-9-]{1,48})[a-z0-9]$")
+
+        /**
+         * A workers.dev subdomain: lowercase letters, digits and dashes, 3–32 characters, and it has
+         * to start and end with a letter or digit. The suffix keeps collisions from being fatal.
+         */
+        fun subdomainCandidate(script: String, suffix: String): String {
+            val base = script.lowercase().replace(Regex("[^a-z0-9-]"), "-").trim('-').ifBlank { "mohammad" }
+            val tail = "-$suffix"
+            return (base.take(32 - tail.length).trim('-') + tail).take(32).trim('-')
+        }
 
         /** Cloudflare accepts lowercase letters, digits and dashes, 3–50 characters. */
         fun normalizeName(raw: String): String {

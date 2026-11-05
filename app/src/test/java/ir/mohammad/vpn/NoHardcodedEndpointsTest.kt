@@ -44,7 +44,7 @@ class NoHardcodedEndpointsTest {
      * no-content endpoints the delay probe measures through the tunnel. Neither is a server the app
      * connects to for carrying traffic, and neither is secret.
      */
-    private val allowedHosts = setOf("github.com", "cp.cloudflare.com", "www.gstatic.com")
+    private val allowedHosts = setOf("github.com", "www.gstatic.com", "neverssl.com")
 
     private val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
     private val ipv4 = Regex("""\b(?:\d{1,3}\.){3}\d{1,3}\b""")

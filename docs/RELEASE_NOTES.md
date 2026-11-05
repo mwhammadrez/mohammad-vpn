@@ -5,6 +5,105 @@ workspace is marked `NOT VERIFIED`.
 
 ---
 
+## 0.16.3 — MTU is a per-config setting
+
+### Added
+- **`mtu=` in share links.** The panel can set 1200–1500 per user (0 keeps the app default) and the
+  app applies it to both the TUN and the Xray outbound. Mobile carriers whose path MTU is 1280 were
+  fragmenting or stalling a 1400-byte TUN; this is the lever for those networks.
+- Panel user form: an MTU field, carried into every link and read by `ConfigUri` with the same
+  `MtuPolicy` bounds the rest of the app uses.
+
+### Verified
+- 47 panel tests, 369 Android tests.
+
+## 0.16.2 — the health probe no longer tests Cloudflare from Cloudflare
+
+### Fixed
+- **The tunnel was declared dead about a minute after connecting.** The service's health probe did a
+  SOCKS CONNECT to `1.1.1.1:443`. A Workers node cannot reach Cloudflare addresses (`connect()` is
+  refused), so every probe failed and the reconnect loop tore down a working session — typically
+  after a few kilobytes. The probe now targets `8.8.8.8:443`.
+- **The delay test waited on `cp.cloudflare.com` first**, which the same restriction blocks. The
+  targets are now `www.gstatic.com` and `neverssl.com`, both reachable from a Worker.
+
+### Verified
+- 368 Android tests; the endpoint guard accepts the new probe hosts.
+
+## 0.16.1 — DNS that ordinary clients can use
+
+### Fixed
+- **A UDP DNS association now works.** Workers cannot send UDP, so a VLESS `cmd=2` request on port
+  53 is bridged to TCP DNS at 8.8.8.8:53. Both directions use the same two-byte length framing, so
+  the client sees normal DNS and the node stays within TCP. Cloudflare's own resolvers (1.1.1.1,
+  1.0.0.1) are mapped to 8.8.8.8 because `connect()` to Cloudflare is refused.
+- **`/xray` uses UDP DNS again** (`1.1.1.1`, `8.8.8.8`) instead of the TCP-only workaround. The
+  app's default resolver list is UDP, so this is the path its configs actually exercise.
+
+Other UDP (QUIC and friends) is still closed on purpose: the platform has no UDP socket.
+
+### Verified
+- Live edge with UDP DNS: httpbin 0.87 s, wikipedia 0.61 s, google 0.79 s; `/xray` 0.77–1.35 s.
+- 46 panel tests, 368 Android tests.
+
+## 0.16.0 — anti-DPI presets, several edge addresses, and a status page
+
+### Added
+- **Fragment presets per operator** (MCI, Irancell, Rightel, Mokhaberat, balanced). The panel writes
+  the mask into each link as the `fm=` parameter the app already understands and into the `/xray`
+  config as `streamSettings.finalmask`, so the handshake no longer matches a fixed DPI pattern.
+- **Several clean IPs per subscription** (`ip_count`, 1–8). One blocked edge no longer takes the
+  whole user down; the links and the Clash/Sing-box profiles carry every address.
+- **`/status/<token>`** — a public page with usage, quota, expiry and addresses, linked from the
+  subscription headers (`profile-web-page-url`).
+- **Login throttling** — five bad passwords from one address answer 429 with `retry_after` for ten
+  minutes.
+
+### Fixed
+- **Device limits counted the exact IP.** Carriers rotate inside a prefix, so one phone could look
+  like several devices. An IPv4 /24 or IPv6 /64 now counts as one device.
+
+### Verified
+- 45 panel tests, 368 Android tests.
+- Live edge: fragment links and a three-IP subscription carry HTTPS; the status page answers 200.
+- Real network connectivity from an Iranian ISP is **NOT VERIFIED** in this workspace.
+
+## 0.15.5 — a panel that works for someone else
+
+The panel is meant to be published, so a panel created by a stranger with their own Cloudflare token
+has to carry traffic without a manual setup step.
+
+### Fixed
+- **No client could carry a single VLESS connection.** The node never sent the two-byte VLESS response
+  header, so Xray aborted with `unexpected response version`. Trojan parsed the request in VLESS field
+  order and forwarded the trailing CRLF as payload; both are fixed and covered by a proxy test that
+  runs against a real TCP server.
+- **Quotas could overshoot by 5 MB.** After flushing traffic to D1 the in-memory row was left stale, so
+  the data-path check forgot everything already written. An 8 MB allowance carried about 13 MB; it now
+  cuts at 8,355,840 bytes.
+- **A new panel handed out `workers.dev`-only links.** Provisioning now seeds a clean-IP pool from
+  `assets/panel/clean_ips.txt`.
+- **Accounts without a `workers.dev` subdomain could not provision at all.** The app registers one
+  automatically.
+- **The first request after provisioning could land on 404.** The wait after creation is now 30 s.
+- Panel passwords must be at least 8 characters, matching what `/api/setup` already enforced.
+
+### Added
+- `GET /xray/<token>` returns a full, ready-to-import Xray config (VLESS/Trojan outbounds, SOCKS and
+  HTTP inbounds, private ranges direct). `address` is the clean edge IP while `serverName` and the
+  WebSocket `Host` stay the node domain.
+- A per-user button in the panel copies the `/xray` link.
+
+### Changed
+- Node traffic is flushed every 5 MB instead of 64 KB. D1 allows roughly 100k row writes a day on the
+  free plan, and the old threshold spent that after about 6 GB of traffic.
+
+### Verified
+- 368 Android unit tests, 35 panel tests, lint clean.
+- Fresh provisioning end to end (database → schema → password → pool → node → panel → login → user →
+  subscription → 10 MB transfer), and an 8 MB quota cutting a 20 MB download at 8.36 MB.
+- Real network connectivity from an Iranian ISP is **NOT VERIFIED** in this workspace.
+
 ## 0.15.4 — real DNS profiles import, and a key rule that was wrong
 
 ### Fixed

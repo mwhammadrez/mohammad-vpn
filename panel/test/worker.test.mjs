@@ -178,6 +178,23 @@ test('a pinned IP can be released and is re-picked later', async () => {
   assert.equal(h.db.get('SELECT pinned_ip FROM users WHERE id = ?', user.id).pinned_ip, null);
 });
 
+test('/xray returns a full config with the clean IP and the real hostname', async () => {
+  const h = await setupPanel();
+  await h.json('/api/ips', { name: 'MCI', ips: '104.16.0.1' }, h.token);
+  await h.json('/api/users', { name: 'ali', days: 30 }, h.token);
+  const user = (await (await h.json('/api/users', undefined, h.token, 'GET')).json()).users[0];
+
+  const res = await h.call('/xray/' + user.sub_token);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('content-type'), 'application/json; charset=utf-8');
+  const cfg = await res.json();
+  const vless = cfg.outbounds.find((o) => o.protocol === 'vless');
+  assert.equal(vless.settings.vnext[0].address, '104.16.0.1');
+  assert.equal(vless.streamSettings.tlsSettings.serverName, 'node.example.com');
+  assert.equal(vless.settings.vnext[0].users[0].id, user.uuid);
+  assert.ok(cfg.outbounds.some((o) => o.protocol === 'trojan'));
+});
+
 test('quota and expiry block the subscription', async () => {
   const h = await setupPanel();
   await h.json('/api/ips', { name: 'MCI', ips: '104.16.0.1' }, h.token);
@@ -187,6 +204,34 @@ test('quota and expiry block the subscription', async () => {
   assert.equal((await h.call('/sub/' + user.sub_token)).status, 200);
   h.db.run('UPDATE users SET used_req = 2 WHERE id = ?', user.id);
   assert.equal((await h.call('/sub/' + user.sub_token)).status, 404);
+});
+
+test('a disabled or expired user gets 404, not a working link', async () => {
+  const h = await setupPanel();
+  await h.json('/api/users', { name: 'ali', days: 30 }, h.token);
+  const user = (await (await h.json('/api/users', undefined, h.token, 'GET')).json()).users[0];
+
+  assert.equal((await h.call('/sub/' + user.sub_token)).status, 200);
+  h.db.run('UPDATE users SET enabled = 0 WHERE id = ?', user.id);
+  assert.equal((await h.call('/sub/' + user.sub_token)).status, 404);
+
+  h.db.run('UPDATE users SET enabled = 1, expires_at = ? WHERE id = ?', Date.now() - 1000, user.id);
+  assert.equal((await h.call('/sub/' + user.sub_token)).status, 404);
+  assert.equal((await h.call('/xray/' + user.sub_token)).status, 404);
+});
+
+test('disabling the last pool sends links back to the domain', async () => {
+  const h = await setupPanel();
+  await h.json('/api/ips', { name: 'MCI', ips: '104.16.0.1' }, h.token);
+  await h.json('/api/users', { name: 'ali', days: 30 }, h.token);
+  const user = (await (await h.json('/api/users', undefined, h.token, 'GET')).json()).users[0];
+
+  let text = Buffer.from(await (await h.call('/sub/' + user.sub_token)).text(), 'base64').toString('utf8');
+  assert.match(text, /@104\.16\.0\.1:443/);
+
+  await h.json('/api/ips/1', { enabled: false }, h.token, 'PATCH');
+  text = Buffer.from(await (await h.call('/sub/' + user.sub_token)).text(), 'base64').toString('utf8');
+  assert.match(text, /@node\.example\.com:443/);
 });
 
 test('a user with no pool still gets a domain-based link', async () => {
@@ -233,4 +278,50 @@ test.after(() => {
   try {
     fs.unlinkSync(modulePath);
   } catch {}
+});
+
+test('ip_count puts several addresses in one subscription', async () => {
+  const h = await setupPanel();
+  await h.json('/api/ips', { name: 'Multi', ips: '1.1.1.1\n2.2.2.2\n3.3.3.3' }, h.token);
+  await h.json('/api/users', { name: 'multi', days: 30, ip_count: 3 }, h.token);
+  const user = (await (await h.json('/api/users', undefined, h.token, 'GET')).json()).users[0];
+  const text = Buffer.from(await (await h.call('/sub/' + user.sub_token)).text(), 'base64').toString('utf8');
+  const addresses = new Set(text.split('\n').map((line) => line.match(/@([^:]+):/)[1]));
+  assert.equal(addresses.size, 3);
+  assert.ok(addresses.has('1.1.1.1'));
+  assert.ok(addresses.has('2.2.2.2'));
+  assert.ok(addresses.has('3.3.3.3'));
+});
+
+test('fragment settings reach the subscription links', async () => {
+  const h = await setupPanel();
+  await h.json('/api/users', { name: 'frag', days: 30, frag_len: '100-200', frag_int: '1-1' }, h.token);
+  const user = (await (await h.json('/api/users', undefined, h.token, 'GET')).json()).users[0];
+  const text = Buffer.from(await (await h.call('/sub/' + user.sub_token)).text(), 'base64').toString('utf8');
+  const first = new URLSearchParams(text.split('\n')[0].split('?')[1].split('#')[0]);
+  const mask = JSON.parse(first.get('fm'));
+  assert.equal(mask.tcp[0].settings.lengths[0], '100-200');
+});
+
+test('the status page answers for a token and 404s for an unknown one', async () => {
+  const h = await setupPanel();
+  await h.json('/api/users', { name: 'status-user', days: 30 }, h.token);
+  const user = (await (await h.json('/api/users', undefined, h.token, 'GET')).json()).users[0];
+  const ok = await h.call('/status/' + user.sub_token);
+  assert.equal(ok.status, 200);
+  assert.match(await ok.text(), /status-user/);
+  assert.equal((await h.call('/status/nope')).status, 404);
+});
+
+test('six bad logins from one address answer 429 with retry_after', async () => {
+  const h = await setupPanel();
+  const attempt = (password) => h.call('/api/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'CF-Connecting-IP': '9.9.9.9' },
+    body: JSON.stringify({ password }),
+  });
+  for (let i = 0; i < 5; i++) assert.equal((await attempt('wrong')).status, 401);
+  const blocked = await attempt('password123');
+  assert.equal(blocked.status, 429);
+  assert.ok(Number((await blocked.json()).retry_after) > 0);
 });

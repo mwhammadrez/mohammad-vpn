@@ -46,6 +46,16 @@ class CloudflareApi(private val token: String) {
             ?.optString("subdomain")
             ?.takeIf { it.isNotBlank() }
 
+    /** Registers a `*.workers.dev` name. Returns the name Cloudflare actually assigned. */
+    fun createSubdomain(accountId: String, wanted: String): String {
+        val result = call(
+            "PUT",
+            "/accounts/$accountId/workers/subdomain",
+            JSONObject().put("subdomain", wanted),
+        ).optJSONObject("result")
+        return result?.optString("subdomain")?.takeIf { it.isNotBlank() } ?: wanted
+    }
+
     /* ─────────────────────────── D1 ─────────────────────────── */
 
     fun createDatabase(accountId: String, name: String): String {

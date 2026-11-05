@@ -79,7 +79,7 @@ class MohammadVpnService : VpnService() {
         const val PROBE_EVERY_TICKS = 6
         const val PROBE_FAILURES_TO_RECONNECT = DataPathPolicy.FAILURES_TO_RECONNECT
         /** Literal address for the health probe: no DNS, no operator data in the config. */
-        const val HEALTH_TARGET = "1.1.1.1"
+        const val HEALTH_TARGET = "8.8.8.8"
         const val HEALTH_TARGET_PORT = 443
 
         const val TAG = "VPN"
